@@ -46,12 +46,9 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.s
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Create build directory
-$(BUILD_DIR): $(shell mkdir -p $(BUILD_DIR))
-
 .PHONY: clean
 
-all:	$(BUILD_DIR) $(TARGET_PRG)
+all:	$(TARGET_PRG)
 
 clean:
 	$(shell rm -r $(BUILD_DIR))
