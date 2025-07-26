@@ -1,0 +1,5 @@
+
+# Only include multilibs for 680x0
+M68K_MLIB_CPU += && (CPU ~ "^m680")
+M68K_ARCH := m68k
+
