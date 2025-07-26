@@ -1,7 +1,9 @@
 #!/bin/bash
 
 # The built toolchain will not support wide characters or multi-treading, and will be optimized for size.
-
+# A build folder will be created with individual "b-*" folders for separate parts.
+# Any "b-*" can be deleted to force a rebuild of that specific part.
+# The build folder can be deleted after build script have sucessfully finished.
 
 # LTO: enable/disable link time optimizing.
 # Remember that enabling lto requires the inclusion of -flto to CFLAGS for all your compilations or linking will fail. 
@@ -158,8 +160,11 @@ if [ ! -d b-gcc ]; then
 	make -j$BUILD_THREADS
 	make install-strip
 	
-	# For some reason the lto plugin is not installed in all the correct places...	
-	yes | cp -rf $PREFIX/libexec/gcc/$TARGET/$GCC_VERSION/liblto_plugin.$SHARED_EXT $PREFIX/lib/bfd-plugins/liblto_plugin.$SHARED_EXT
+	# Check if we have built for lto (check if lto plugin exists).
+	if [ -f $PREFIX/libexec/gcc/$TARGET/$GCC_VERSION/liblto_plugin.$SHARED_EXT ]; then
+		# For some reason the lto plugin is not installed in all the correct places, so we fix that.	
+		yes | cp -rf $PREFIX/libexec/gcc/$TARGET/$GCC_VERSION/liblto_plugin.$SHARED_EXT $PREFIX/lib/bfd-plugins/liblto_plugin.$SHARED_EXT
+	fi
 
 	cd ..
 fi

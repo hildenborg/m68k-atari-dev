@@ -7844,6 +7844,43 @@ index 7f67426a6..b6d1868bc 100644
  
  distclean maintainer-clean realclean: clean
  	rm -f Makefile
+diff --git a/libgloss/m68k/atari/README b/libgloss/m68k/atari/README
+new file mode 100644
+index 000000000..4ca076a37
+--- /dev/null
++++ b/libgloss/m68k/atari/README
+@@ -0,0 +1,31 @@
++Atari 16/32 bit TOS (not MINT) support written by Mikael Hildenborg.
++Target name: m68k-atari-elf.
++
++Stack size:
++The default stack size is set at 2000 bytes.
++To change stack size, add the following line to your C/C++ code:
++unsigned int _STACK_SIZE = *WANTED_STACK_SIZE*;
++Where "*WANTED_STACK_SIZE*" is the size in bytes you want to allocate for stack space.
++Do not use odd size!
++
++Heap size:
++The default heap size is to use all available memory.
++If you want to leave memory for other programs to use, then add the following line to your C/C++ code:
++unsigned int _HEAP_SIZE = *WANTED_HEAP_SIZE*;
++Where "*WANTED_HEAP_SIZE*" is the size in bytes you want to allocate for heap space.
++Do not use odd size!
++
++Program base page:
++A pointer to the program base page is stored at: _BasePage
++
++ELF output:
++The executable elf output have four interesting segments:
++".text", ".data", ".bss" and ".prgheader" as described in "atari-tos.ld".
++All relevant code and data have been properly sorted into those segments, and the ".prgheader"
++contains a valid atari prg header pointing to relevant segments.
++Relocation data from the link switch "--emit-relocs" (defaultted by "atari-tos.specs") is
++included in the elf output so additional fixup information can be added to the prg file.
++
++More information:
++Can be found at: https://github.com/hildenborg/m68k-atari-dev
++Where build scripts for complete toolchain, executables for converting elf to prg, and a remote debug server with full symbolic debugging are available.
 diff --git a/libgloss/m68k/atari/atari-chdir.c b/libgloss/m68k/atari/atari-chdir.c
 new file mode 100644
 index 000000000..c25730f8e
