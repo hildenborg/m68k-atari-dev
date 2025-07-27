@@ -2,12 +2,14 @@
 	This is not gdbserver.
 	It is something that partly works similarily to gdbserver.
 	The usage is similar enough to warrant the name gdbserver.
+
+	We do not use any standard libraries or c runtimes in this code.
+	Only pure atari code here to limit the effect this server has on the system.
+	And also limit the size. 
+	A smaller gdbserver allows us to debug larger programs.
 */
 
 #include "server.h"
-
-// We use _HeapSize to define that we do not need all of the memory (_HEAP_SIZE = 0 set by linker if we do not specify it ourselves).
-unsigned int _HEAP_SIZE = 1024;	// We really do not need much heap, better save it for the inferior.
 
 int main(int argc, char** argv)
 {
