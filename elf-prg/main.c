@@ -214,7 +214,7 @@ bool LoadSymbols(FILE* fs, Elf32_Shdr* sectionHeader, Elf32_Sym** pt_symbols)
 	return status;
 }
 
-bool LoadRelocs(FILE* fs, Elf32_Shdr* sectionHeader, Elf32_Sym* pt_symbols, const char* symbolTableStrings, Elf32_Rela** pt_relocs, size_t* relocnum)
+bool LoadRelocs(int verbose, FILE* fs, Elf32_Shdr* sectionHeader, Elf32_Sym* pt_symbols, const char* symbolTableStrings, Elf32_Rela** pt_relocs, size_t* relocnum)
 {
 	bool status = true;
 	// Section .rela.text and .rela.data contains relocation data that we want.
@@ -262,7 +262,7 @@ bool LoadRelocs(FILE* fs, Elf32_Shdr* sectionHeader, Elf32_Sym* pt_symbols, cons
 			    if (symbolTableStrings != NULL)
 			    {
 			        const char* name = symbolTableStrings + pt_sym->st_name;
-			        printf ("Skipped *UND* weak symbol: %s\n", name);
+			        if (verbose) {printf ("Skipped *UND* weak symbol: %s\n", name);}
 			    }
 			}
 			else
@@ -360,15 +360,27 @@ bool WriteFixup(FILE* fd, Elf32_Rela* relocs, size_t relocnum)
 
 int main(int argc, char *argv[])
 {
+	int verbose = 0;
 	printf("Elf to prg conversion...\n");
 	int result = -1;
-	if (argc != 3)
+	if (argc < 3 || argc > 4)
 	{
 		printf("Not correct number of arguments!\n");
 		return -1;
 	}
-	char* source = argv[1];
-	char* destination = argv[2];
+	int farg = 1;
+	if (argc == 4)
+	{
+		if (strncmp(argv[1], "-v", 2) != 0)
+		{
+			printf("Unknown argument: %s\n", argv[1]);
+			return -1;
+		}
+		verbose = 1;
+		++farg;
+	}
+	char* source = argv[farg];
+	char* destination = argv[farg + 1];
 	
 	FILE* fs = NULL;
 	FILE* fd = NULL;
@@ -437,7 +449,7 @@ int main(int argc, char *argv[])
 		int relaTextIndex = FindNamedSection(&header, sectionHeaders, sectionHeaderStrings, ".rela.text");
 		if (relaTextIndex < 0)
 		{
-			printf("Missing .rela.text section\n");
+			if (verbose) {printf("Missing .rela.text section\n");}
 			// Not an error, the section can be missing if nothing needs to be relocated.
 			//break;	
 		}
@@ -451,7 +463,7 @@ int main(int argc, char *argv[])
 		if (relaDataIndex < 0)
 		{
 			// Not an error, the section can be missing if nothing needs to be relocated.
-			printf("Missing .rela.data section\n");
+			if (verbose) {printf("Missing .rela.data section\n");}
 			//break;
 		}
 		int bssIndex = FindNamedSection(&header, sectionHeaders, sectionHeaderStrings, ".bss");
@@ -510,7 +522,7 @@ int main(int argc, char *argv[])
 		size_t relocnum = 0;
 		if (relaTextIndex >= 0)
 		{
-			if (!LoadRelocs(fs, sectionHeaders + relaTextIndex, symbols, symbolTableStrings, &relocs, &relocnum))
+			if (!LoadRelocs(verbose, fs, sectionHeaders + relaTextIndex, symbols, symbolTableStrings, &relocs, &relocnum))
 			{
 				printf("Could not load section .rela.text\n");
 				break;
@@ -518,7 +530,7 @@ int main(int argc, char *argv[])
 		}		
 		if (relaDataIndex >= 0)
 		{
-			if (!LoadRelocs(fs, sectionHeaders + relaDataIndex, symbols, symbolTableStrings, &relocs, &relocnum))
+			if (!LoadRelocs(verbose, fs, sectionHeaders + relaDataIndex, symbols, symbolTableStrings, &relocs, &relocnum))
 			{
 				printf("Could not load section .rela.data\n");
 				break;
@@ -534,7 +546,7 @@ int main(int argc, char *argv[])
 		}			
 
 		// And we are done!
-	        printf("Elf to prg conversion done.\n");
+	    printf("Elf to prg conversion done.\n");
 		result = 0;
 	} while (false);
 
