@@ -23,7 +23,7 @@ NEWLIB_PATH="$PWD/../newlib_omega"
 # Versions to download and build.
 BINUTIL_VERSION="2.44"
 GCC_VERSION="15.1.0"
-NEWLIB_HASH="f67a5cffe052b9e746f0baf64fb762e8b2de162d"
+NEWLIB_HASH="faac5b9fa147f0415357b947c86dbe2e98ab91ac"
 
 # Detect system
 unameOut="$(uname -s)"

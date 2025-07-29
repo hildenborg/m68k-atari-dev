@@ -11,10 +11,12 @@ _start:
 	move.l	4(a7),a0
 	move.l	a0, _BasePage
 
-	lea		__BSS_SEGMENT_END, a1
-    lea     DEFAULT_STACK(a1), a7
-    lea     DEFAULT_HEAP(a1), a1
-	sub.l	(a0), a1			| d0 is now the TPA size
+	/*
+		Set up memory to use just a minimum of stack and heap.
+	*/
+    lea     __BSS_SEGMENT_END + DEFAULT_STACK, a7
+    lea     DEFAULT_HEAP(a7), a1
+	sub.l	(a0), a1
 
 	move.l	a1, -(a7)
 	move.l	a0, -(a7)

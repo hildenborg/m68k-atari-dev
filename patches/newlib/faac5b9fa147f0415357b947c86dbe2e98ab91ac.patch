@@ -1,0 +1,2301 @@
+diff --git a/libgloss/configure b/libgloss/configure
+index 3eb4c2740..ba071824b 100755
+--- a/libgloss/configure
++++ b/libgloss/configure
+@@ -2857,6 +2857,11 @@ case "${target}" in
+ 	ac_config_files="$ac_config_files m68k/Makefile"
+ 
+ 	subdirs="$subdirs m68k"
++	case "${target}" in
++		m68k-atari-*)
++			config_libnosys=false
++		;;
++	esac
+ 	;;
+   hppa*-*-pro*)
+ 	ac_config_files="$ac_config_files pa/Makefile"
+diff --git a/libgloss/configure.ac b/libgloss/configure.ac
+index 628f173d6..0ab0cc248 100644
+--- a/libgloss/configure.ac
++++ b/libgloss/configure.ac
+@@ -79,6 +79,11 @@ case "${target}" in
+   fido-*-* | m68*-*-*)
+ 	AC_CONFIG_FILES([m68k/Makefile])
+ 	subdirs="$subdirs m68k"
++	case "${target}" in
++		m68k-atari-*)
++			config_libnosys=false
++		;;
++	esac
+ 	;;
+   hppa*-*-pro*)
+ 	AC_CONFIG_FILES([pa/Makefile])
+diff --git a/libgloss/m68k/Makefile.in b/libgloss/m68k/Makefile.in
+index 7f67426a6..b6d1868bc 100644
+--- a/libgloss/m68k/Makefile.in
++++ b/libgloss/m68k/Makefile.in
+@@ -31,6 +31,7 @@ program_transform_name = @program_transform_name@
+ bindir = @bindir@
+ libdir = @libdir@
+ tooldir = $(exec_prefix)/$(target_alias)
++specsdir = $(libdir)/gcc/$(target_alias)
+ 
+ # Multilib support variables.
+ # TOP is used instead of MULTI{BUILD,SRC}TOP.
+@@ -71,6 +72,14 @@ OBJS =  close.o fstat.o getpid.o isatty.o kill.o \
+ # What targets to build for.  This is a list of {m68k,cf}
+ TARGET = @M68K_TARGET@
+ 
++# Check if vendor is atari and if so, adjust the target
++target_vendor = @target_vendor@
++ifdef target_vendor
++	ifeq ($(target_vendor), atari)
++		TARGET := $(TARGET)_$(target_vendor)
++	endif
++endif
++
+ # Here is all of the simulator stuff
+ SIM_SCRIPTS	= sim.ld
+ SIM_LDFLAGS	= -Tsim.ld
+@@ -197,6 +206,29 @@ UNHOSTED_OBJS=	unhosted-close.o unhosted-fstat.o \
+ HOSTED_BSP=	libhosted.a
+ HOSTED_OBJS=	hosted-gdb.o hosted-exit.o $(patsubst un%,%,$(UNHOSTED_OBJS))
+ 
++#
++# here's all the atari stuff
++#
++
++ATARI_SRC_LIBGLOSS := atari-environ.c atari-execve.c atari-link.c atari-times.c \
++	atari-wait.c atari-traps.c atari-gem_errno.c atari-close.c atari-fstat.c \
++	atari-getpid.c atari-isatty.c atari-kill.c atari-lseek.c atari-open.c atari-read.c \
++	atari-sbrk.c atari-stat.c atari-unlink.c atari-write.c \
++	atari-chown.c atari-fork.c atari-getentropy.c atari-gettod.c atari-readlink.c \
++	atari-symlink.c atari-chdir.c atari-getcwd.c atari-mkdir.c atari-rmdir.c \
++	atari-rename.c
++
++ATARI_OBJS_LIBGLOSS := $(foreach source,$(ATARI_SRC_LIBGLOSS),$(basename $(source)).o)
++
++ATARI_CRTI := atari-crti.o
++ATARI_CRTN := atari-crtn.o
++ATARI_CRT0 := atari-crt0.o
++ATARI_NEWLIB := libatari-tos.a
++ATARI_LINK := atari-tos.ld
++ATARI_SPECS := atari-tos.specs
++
++ATARI_ASFLAGS := -Xassembler --register-prefix-optional
++
+ # Host specific makefile fragment comes in here.
+ @host_makefile_frag@
+ 
+@@ -206,9 +238,19 @@ all :: $(TARGET:%=all_%)
+ # here's where we build the board support packages for each target
+ #
+ 
++.PHONY: all_m68k_atari
++all_m68k_atari :: $(ATARI_CRTI) $(ATARI_CRTN) $(ATARI_CRT0) $(ATARI_NEWLIB)
++
++.PHONY: all_cf_atari
++all_cf_atari :: all_m68k_atari
++
++.PHONY: all_fido_atari
++all_fido_atari :: all_m68k_atari
++
+ .PHONY: all_m68k
+ all_m68k :: ${SIM_CRT0} ${SIM_BSP} ${CRT0} ${BCC_BSP} ${IDP_BSP} \
+ 	${IDPGDB_BSP} ${MVME135_BSP} ${MVME162_BSP}
++
+ .PHONY: all_cf
+ all_cf :: ${CF_CRT0S} ${CF_BSP} ${CF_SCRIPTS} ${HOSTED_BSP} ${UNHOSTED_BSP}
+ 
+@@ -240,6 +282,23 @@ ${MVME162_BSP}: $(OBJS) ${MVME162_OBJS}
+ 	${AR} ${ARFLAGS} $@ $(OBJS) ${MVME162_OBJS}
+ 	${RANLIB} $@
+ 
++# build atari library
++$(ATARI_CRT0): atari/atari-crt0.S
++	$(CC) $(CFLAGS_FOR_TARGET) $(CFLAGS) $(ATARI_ASFLAGS) -c $< -o $@
++
++$(ATARI_CRTI): atari/atari-crti.S
++	$(CC) $(CFLAGS_FOR_TARGET) $(CFLAGS) $(ATARI_ASFLAGS) -c $< -o $@
++
++$(ATARI_CRTN): atari/atari-crtn.S
++	$(CC) $(CFLAGS_FOR_TARGET) $(CFLAGS) $(ATARI_ASFLAGS) -c $< -o $@
++
++%.o: atari/%.c
++	$(CC) $(CFLAGS_FOR_TARGET) $(CFLAGS) $(INCLUDES) -c $< -o $@
++
++$(ATARI_NEWLIB): $(ATARI_OBJS_LIBGLOSS)
++	$(AR) $(ARFLAGS) $@ $^
++	$(RANLIB) $@
++
+ # build hosted library
+ $(HOSTED_OBJS): hosted%.o: io%.c io.h
+ 	$(CC) $(CFLAGS_FOR_TARGET) $(CFLAGS) -DHOSTED=1 $(INCLUDES) -c $< -o $@
+@@ -409,6 +468,22 @@ unlink.o: $(srcdir)/../unlink.c
+ install:: $(TARGET:%=install_%)
+ 
+ 
++.PHONY:install_m68k_atari
++install_m68k_atari::
++	${mkinstalldirs} ${DESTDIR}${tooldir}/lib${MULTISUBDIR}
++	$(INSTALL_PROGRAM) $(ATARI_CRTI) $(DESTDIR)$(tooldir)/lib${MULTISUBDIR}/crti.o
++	$(INSTALL_PROGRAM) $(ATARI_CRTN) $(DESTDIR)$(tooldir)/lib${MULTISUBDIR}/crtn.o
++	$(INSTALL_PROGRAM) $(ATARI_CRT0) $(DESTDIR)$(tooldir)/lib${MULTISUBDIR}/crt0.o
++	$(INSTALL_PROGRAM) $(ATARI_NEWLIB) $(DESTDIR)$(tooldir)/lib${MULTISUBDIR}/$(ATARI_NEWLIB)
++	$(INSTALL_DATA) ${srcdir}/atari/$(ATARI_LINK) $(DESTDIR)$(tooldir)/lib${MULTISUBDIR}/$(ATARI_LINK)
++	$(INSTALL_DATA) ${srcdir}/atari/$(ATARI_SPECS) $(DESTDIR)$(specsdir)/specs
++
++.PHONY:install_cf_atari
++install_cf_atari:: install_m68k_atari
++
++.PHONY:install_fido_atari
++install_fido_atari:: install_m68k_atari
++
+ .PHONY:install_m68k
+ install_m68k::
+ 	${mkinstalldirs} ${DESTDIR}${tooldir}/lib${MULTISUBDIR}
+@@ -473,7 +548,7 @@ install_io::
+ @target_makefile_frag@
+ 
+ clean mostlyclean:
+-	rm -f a.out core *.i *~ *.a *.o *-test *.srec *.dis *.x *.map
++	rm -f a.out core *.i *~ *.a *.o *-test *.srec *.dis *.x *.map *.ld
+ 
+ distclean maintainer-clean realclean: clean
+ 	rm -f Makefile
+diff --git a/libgloss/m68k/atari/README b/libgloss/m68k/atari/README
+new file mode 100644
+index 000000000..4ca076a37
+--- /dev/null
++++ b/libgloss/m68k/atari/README
+@@ -0,0 +1,31 @@
++Atari 16/32 bit TOS (not MINT) support written by Mikael Hildenborg.
++Target name: m68k-atari-elf.
++
++Stack size:
++The default stack size is set at 2000 bytes.
++To change stack size, add the following line to your C/C++ code:
++unsigned int _STACK_SIZE = *WANTED_STACK_SIZE*;
++Where "*WANTED_STACK_SIZE*" is the size in bytes you want to allocate for stack space.
++Do not use odd size!
++
++Heap size:
++The default heap size is to use all available memory.
++If you want to leave memory for other programs to use, then add the following line to your C/C++ code:
++unsigned int _HEAP_SIZE = *WANTED_HEAP_SIZE*;
++Where "*WANTED_HEAP_SIZE*" is the size in bytes you want to allocate for heap space.
++Do not use odd size!
++
++Program base page:
++A pointer to the program base page is stored at: _BasePage
++
++ELF output:
++The executable elf output have four interesting segments:
++".text", ".data", ".bss" and ".prgheader" as described in "atari-tos.ld".
++All relevant code and data have been properly sorted into those segments, and the ".prgheader"
++contains a valid atari prg header pointing to relevant segments.
++Relocation data from the link switch "--emit-relocs" (defaultted by "atari-tos.specs") is
++included in the elf output so additional fixup information can be added to the prg file.
++
++More information:
++Can be found at: https://github.com/hildenborg/m68k-atari-dev
++Where build scripts for complete toolchain, executables for converting elf to prg, and a remote debug server with full symbolic debugging are available.
+diff --git a/libgloss/m68k/atari/atari-chdir.c b/libgloss/m68k/atari/atari-chdir.c
+new file mode 100644
+index 000000000..c25730f8e
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-chdir.c
+@@ -0,0 +1,44 @@
++#include <_ansi.h>
++#include "atari-gem_errno.h"
++#include "atari-traps.h"
++
++int chdir(const char *path)
++{
++	int err = GEM_E_OK;
++	if (path != 0)
++	{
++		if (path[1] == ':')
++		{
++			unsigned int drives = 0;
++			unsigned short drive = 0;
++			if (path[0] >= 'A' && path[0] <= 'Z')
++			{
++				drive = (unsigned short)(path[0] - 'A');
++			}
++			else if (path[0] >= 'a' && path[0] <= 'z')
++			{
++				drive = (unsigned short)(path[0] - 'a');
++			}
++			drives = trap1_e(drive);
++			if ((drives & (1 << drive)) == 0)
++			{
++				err = GEM_EDRIVE;
++			}
++			path += 2;
++		}
++		if (err == GEM_E_OK)
++		{
++			err = trap1_3b(path);
++		}
++	}
++	else
++	{
++		err = GEM_EPTHNF;
++	}
++	if (err < 0)
++	{
++		gem_error_to_errno(err);
++		return -1;
++	}
++	return 0;
++}
+\ No newline at end of file
+diff --git a/libgloss/m68k/atari/atari-chown.c b/libgloss/m68k/atari/atari-chown.c
+new file mode 100644
+index 000000000..d15f9d5b1
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-chown.c
+@@ -0,0 +1,15 @@
++#include "config.h"
++#include <_ansi.h>
++#include <_syslist.h>
++#include <sys/types.h>
++#include <errno.h>
++#include "atari-gem_errno.h"
++#include "libnosys/warning.h"
++
++int chown(const char *path, uid_t owner, gid_t group)
++{
++    errno = ENOSYS;
++    return -1;
++}
++
++stub_warning(chown)
+diff --git a/libgloss/m68k/atari/atari-close.c b/libgloss/m68k/atari/atari-close.c
+new file mode 100644
+index 000000000..a11dadb13
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-close.c
+@@ -0,0 +1,18 @@
++#include <_ansi.h>
++#include "atari-gem_errno.h"
++#include "atari-traps.h"
++
++int close(int fd)
++{
++	int err = GEM_EIHNDL;
++	if (fd >= 0)
++	{
++		err = trap1_3e((unsigned short)fd);
++	}
++	if (err <  0)
++	{
++		gem_error_to_errno(err);
++		return -1;
++	}
++	return 0;
++}
+diff --git a/libgloss/m68k/atari/atari-crt0.S b/libgloss/m68k/atari/atari-crt0.S
+new file mode 100644
+index 000000000..e70967421
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-crt0.S
+@@ -0,0 +1,70 @@
++
++	.global exit
++
++	.section	".init"
++	.global	__call_main_with_argc_argv
++	.type	__call_main_with_argc_argv,#function
++__call_main_with_argc_argv:
++
++/*
++	Need to implement "The Atari Extended Argument Specification".
++	Also, there is no guarantee that the command line is zero terminated.
++*/
++    | this occurs after crtbegin.o have done all global constructors etc.
++
++	move.l	a7, a6
++	moveq	#0, d0
++	moveq	#0, d2
++	movea.l	_BasePage, a0
++	lea		128(a0), a0		| add offset to the cmdline
++	lea		_cmdline, a1
++	move.b	(a0)+, d2		| d2 contains number of bytes in command line (max 127)
++	beq.s	3f
++	clr.b	(a1, d2.w)		| end our decoded args with a zero.
++	bra.s	2f
++1:
++	move.b	(a0, d2.w), d1
++	cmp.b	#' ', d1
++	bne.s	4f
++	moveq	#0, d1
++	lea		1(a1, d2.w), a2
++	tst.b	(a2)
++	beq.s	4f
++	move.l	a2, -(a7)
++	addq.w	#1, d0
++4:
++	move.b	d1, (a1, d2.w)
++2:
++	subq.w	#1, d2
++	bcc.s	1b
++	move.l	a1, -(a7)
++	addq.w	#1, d0
++3:
++	pea		_procname		| first argument is always the proc name. That we do not know...
++	addq.w	#1, d0
++	move.l	a7, a5
++	move.l	a6, -(a7)		| To know where to move it back again.
++
++	move.l	a5, -(a7)		| argv
++	move.l	d0, -(a7)		| argc
++	jsr		main
++	move.l	8(a7), a7		| move it back.
++	move.l	d0, -(a7)
++	jsr		exit			| not expected to return
++	illegal
++
++	.global _exit
++	.type	_exit,#function
++_exit:
++	move.l 4(a7), d0
++	move.w	d0, _program_return_code
++    | crtend.o follows here with global destructors etc.
++
++	.data
++_procname:
++	.asciz	"yourapp.lol"
++	.even
++
++	.bss
++	.lcomm	_cmdline, 128
++	.even
+diff --git a/libgloss/m68k/atari/atari-crti.S b/libgloss/m68k/atari/atari-crti.S
+new file mode 100644
+index 000000000..17e272247
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-crti.S
+@@ -0,0 +1,86 @@
++
++#ifdef _HAVE_INITFINI_ARRAY
++#define _init	__libc_init_array
++#define _fini	__libc_fini_array
++#endif
++
++	.equ	DEFAULT_STACK, 2000
++
++	.global _BasePage
++	.weak 	_STACK_SIZE
++	.weak 	_HEAP_SIZE
++	.global _HeapPtr
++	.global _HeapBottom
++	.global _HeapTop
++	.global _atari_4ba_at_prg_start
++	.global __BSS_SEGMENT_END
++
++	.section	".init"
++	.global	_init
++	.type	_init,#function
++_init:
++	move.l	4(a7),a0
++	move.l	a0, _BasePage
++
++	| Init stack
++	lea		__BSS_SEGMENT_END, a2
++	lea		_STACK_SIZE, a1
++	cmpa.w	#0, a1
++	jeq		default_stack_size
++	add.l	(a1), a2
++	jra		stack_size_selected
++default_stack_size:
++	lea		DEFAULT_STACK(a2), a2
++stack_size_selected:
++	move.l	a2, a7
++
++	| Init heap
++	move.l	a7, d0
++	move.l	d0, _HeapBottom
++	move.l	d0, _HeapPtr
++	move.l	4(a0), _HeapTop
++
++	lea		_HEAP_SIZE, a1
++	cmpa.w	#0, a1
++	jeq		heap_setup_done
++	add.l	(a1), d0
++	sub.l	(a0), d0			| d0 is now the TPA size
++
++	| Program do not want all memory, so we shrink it.
++	move.l	d0, -(a7)
++	move.l	a0, -(a7)
++	clr.w	-(a7)
++	move.w	#0x4a, -(a7)	| Mshrink()
++	trap	#1
++	lea		12(a7), a7
++	tst.l	d0
++	jpl		heap_setup_done
++    | Error, just quit with d0 as return code.
++	move.w	d0,-(a7)
++	move.w	#0x4c,-(a7)
++	trap	#1
++super_init:
++	| Init stuff that needs supervisor mode set.
++	move.l	0x4ba, _atari_4ba_at_prg_start
++	rts
++heap_setup_done:
++	move.l	#super_init, -(a7)
++	move.w	#0x26, -(a7)
++	trap	#14
++	addq.l	#6, a7
++    | crtbegin.o follows here with global constructors etc. init.
++
++
++	.section	".fini"
++	/*
++		Empty.
++	*/
++
++
++	.bss
++	.lcomm 	_BasePage, 4
++	.lcomm 	_HeapPtr, 4
++	.lcomm 	_HeapBottom, 4
++	.lcomm 	_HeapTop, 4
++	.lcomm	_atari_4ba_at_prg_start, 4
++	.even
+\ No newline at end of file
+diff --git a/libgloss/m68k/atari/atari-crtn.S b/libgloss/m68k/atari/atari-crtn.S
+new file mode 100644
+index 000000000..4f0cc41ad
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-crtn.S
+@@ -0,0 +1,21 @@
++
++    .global _program_return_code
++
++
++	.section	".init"
++	/*
++		Empty.
++	*/
++
++
++	.section	".fini"
++	.global	_fini
++	.type	_fini,#function
++_fini:
++    | this occurs after crtend.o have done all global destructors etc.
++	move.w	_program_return_code,-(a7)
++	move.w	#0x4c,-(a7)
++	trap	#1
++
++	.bss
++    .lcomm  _program_return_code, 2
+diff --git a/libgloss/m68k/atari/atari-environ.c b/libgloss/m68k/atari/atari-environ.c
+new file mode 100644
+index 000000000..d33f75513
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-environ.c
+@@ -0,0 +1,4 @@
++
++// Should point to a list of global environment variables.
++char *__env[1] = { 0 };
++char **environ = __env;
+\ No newline at end of file
+diff --git a/libgloss/m68k/atari/atari-execve.c b/libgloss/m68k/atari/atari-execve.c
+new file mode 100644
+index 000000000..cdcb96184
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-execve.c
+@@ -0,0 +1,11 @@
++#include "config.h"
++#include <errno.h>
++#include "libnosys/warning.h"
++
++int execve(char *name, char **argv, char **env)
++{
++    errno = ENOSYS;
++	return -1;
++}
++
++stub_warning(execve)
+diff --git a/libgloss/m68k/atari/atari-fork.c b/libgloss/m68k/atari/atari-fork.c
+new file mode 100644
+index 000000000..eb687dfe9
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-fork.c
+@@ -0,0 +1,14 @@
++#include "config.h"
++#include <_ansi.h>
++#include <_syslist.h>
++#include <errno.h>
++#include "atari-gem_errno.h"
++#include "libnosys/warning.h"
++
++int fork(void)
++{
++    errno = ENOSYS;
++    return -1;
++}
++
++stub_warning(fork)
+diff --git a/libgloss/m68k/atari/atari-fstat.c b/libgloss/m68k/atari/atari-fstat.c
+new file mode 100644
+index 000000000..4fed36a49
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-fstat.c
+@@ -0,0 +1,46 @@
++#include <sys/stat.h>
++#include <_ansi.h>
++#include "atari-gem_errno.h"
++#include "atari-traps.h"
++#include "atari-gem_basepage.h"
++
++/*
++	From man page:
++	"only the st_uid, st_gid, st_size, and st_mode fields,
++	and only the S_IRUSR, S_IWUSR, S_IRGRP, S_IWGRP, S_IROTH, and S_IWOTH file permission bits need be valid."
++*/
++
++int fstat(int fd, struct stat *buf)
++{
++	struct DTA *dta = (struct DTA *)GEM_EIHNDL;
++	// For now, we just support files.
++	if (fd >= 6)
++	{
++		buf->st_mode = S_IRUSR | S_IRGRP | S_IROTH;
++		// files
++		dta = trap1_2f((unsigned int)fd);
++		if ((int)dta >= 0)
++		{
++			// Attribs
++			buf->st_mode |= (dta->d_attrib & FA_DIR) ? S_IFDIR : S_IFREG;
++			if ((dta->d_attrib & FA_READONLY) != 0)
++			{
++				buf->st_mode |= S_IWUSR | S_IWGRP | S_IWOTH;
++			}
++			buf->st_size = dta->d_length;
++			// st_uid, st_gid have no meaning for the st, so we ignore them.
++		}
++	}
++	else
++	{
++		// unsupported, fake something.
++		buf->st_mode = S_IFCHR;
++		buf->st_blksize = 0;
++	}
++	if ((int)dta < 0)
++	{
++		gem_error_to_errno((int)dta);
++		return -1;
++	}
++	return 0;
++}
+diff --git a/libgloss/m68k/atari/atari-gem_basepage.h b/libgloss/m68k/atari/atari-gem_basepage.h
+new file mode 100644
+index 000000000..ac0695c3d
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-gem_basepage.h
+@@ -0,0 +1,55 @@
++#ifndef GEM_BASEPAGE_H
++#define GEM_BASEPAGE_H
++
++//#include <stddef.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/*
++	This is the process base page data, containing information about the executable.
++*/
++
++#define FA_READONLY	0x01	// Read-only flag
++#define FA_HIDDEN 0x02		// Hidden file flag
++#define FA_SYSTEM 0x04		// System file flag
++#define FA_VOLUME 0x08		// Volume label flag
++#define FA_DIR 0x10			// Subdirectory
++#define FA_ARCHIVE 0x20		// Archive flag
++
++struct DTA
++{
++	unsigned char d_reserved[21];
++	unsigned char d_attrib;
++	unsigned short d_time;
++	unsigned short d_date;
++	unsigned int d_length;
++	char d_fname[14];
++};
++
++struct BasePage
++{
++	unsigned char* p_lowtpa;	// This LONG contains a pointer to the Transient Program Area (TPA).
++	unsigned char* p_hitpa;		// This LONG contains a pointer to the top of the TPA + 1.
++	unsigned char* p_tbase;		// This LONG contains a pointer to the base of the text segment
++	unsigned int p_tlen;		// This LONG contains the length of the text segment.
++	unsigned char* p_dbase;		// This LONG contains a pointer to the base of the data segment.
++	unsigned int p_dlen;		// This LONG contains the length of the data segment.
++	unsigned char* p_bbase;		// This LONG contains a pointer to the base of the BSS segment.
++	unsigned int p_blen;		// This LONG contains the length of the BSS segment.
++	struct DTA* p_dta;					// This LONG contains a pointer to the processes’ DTA.
++	struct BasePage* p_parent;			// This LONG contains a pointer to the processes’ parent’s basepage.
++	unsigned int p_reserved;	// This LONG is currently unused and is reserved.
++	char* p_env;				// This LONG contains a pointer to the processes’ environment string.
++	unsigned char p_undef[80];	// This area contains 80 unused, reserved bytes.
++	char p_cmdlin[128];			// This area contains a copy of the 128 byte command line string.
++};
++
++extern struct BasePage* _BasePage;
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif // GEM_BASEPAGE_H
+diff --git a/libgloss/m68k/atari/atari-gem_errno.c b/libgloss/m68k/atari/atari-gem_errno.c
+new file mode 100644
+index 000000000..d4c704707
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-gem_errno.c
+@@ -0,0 +1,90 @@
++#include <errno.h>
++#include "atari-gem_errno.h"
++#include <_ansi.h>
++
++/*
++	The conversion between gem errors and errno is not a one to one match,
++	so the goal has been to try and report errors to errno in such way that
++	code depending on this will run as expected.
++	This remains to be proven correct.
++*/
++void gem_error_to_errno(int gem_error)
++{
++	errno = ENOSYS; // Use this as default error code.
++	switch (gem_error)
++	{
++	case GEM_EDRVNR:
++	case GEM_EMEDIA:
++	case GEM_EPAPER:
++		errno = EIO;
++		break;
++	case GEM_EBADRQ:
++		errno = EINVAL;
++		break;
++	case GEM_E_SEEK:
++		errno = ESPIPE;
++		break;
++	case GEM_ESECNF:
++	case GEM_EWRITF:
++	case GEM_EREADF:
++		errno = EIO;
++		break;
++	case GEM_EWRPRO:
++		errno = EROFS;
++		break;
++	case GEM_EUNDEV:
++	case GEM_EDRIVE:
++		errno = ENODEV;
++		break;
++	case GEM_EFILNF:
++	case GEM_EPTHNF:
++	case GEM_EMOUNT:
++		errno = ENOENT;
++		break;
++	case GEM_ENHNDL:
++	case GEM_ENMFIL:
++		errno = EMFILE;
++		break;
++	case GEM_EACCDN:
++		errno = EACCES;
++		break;
++	case GEM_EIHNDL:
++		errno = EBADF;
++		break;
++	case GEM_ENSMEM:
++	case GEM_EGSBF:
++		errno = ENOMEM;
++		break;
++	case GEM_EIMBA:
++		errno = EADDRNOTAVAIL;
++		break;
++	case GEM_ENSAME:
++		errno = EXDEV;
++		break;
++	case GEM_ELOCKED:
++	case GEM_ENSLOCK:
++		errno = ENOLCK;
++		break;
++	case GEM_ENAMETOOLONG:
++		errno = ENAMETOOLONG;
++		break;
++	case GEM_EPLFMT:
++		errno = ENOEXEC;
++		break;
++	case GEM_ELOOP:
++		errno = EMLINK;
++		break;
++	case GEM_E_OK:
++	case GEM_ERROR:
++	case GEM_EUNCMD:
++	case GEM_E_CRC:
++	case GEM_E_CHNG:
++	case GEM_EBADSF:
++	case GEM_EOTHER:
++	case GEM_EINVFN:
++	case GEM_EINTRN:
++	default:
++		errno = -gem_error;
++		break;
++	}
++}
+diff --git a/libgloss/m68k/atari/atari-gem_errno.h b/libgloss/m68k/atari/atari-gem_errno.h
+new file mode 100644
+index 000000000..c2c346e5f
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-gem_errno.h
+@@ -0,0 +1,52 @@
++#ifndef GEM_ERRNO_DEFINED
++#define GEM_ERRNO_DEFINED
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#define GEM_E_OK 			0		// No error
++#define GEM_ERROR 			-1		// Generic error
++#define GEM_EDRVNR 			-2		// Drive not ready
++#define GEM_EUNCMD 			-3		// Unknown command
++#define GEM_E_CRC 			-4		// CRC error
++#define GEM_EBADRQ			-5		// Bad request
++#define GEM_E_SEEK			-6		// Seek error
++#define GEM_EMEDIA			-7		// Unknown media
++#define GEM_ESECNF			-8		// Sector not found
++#define GEM_EPAPER			-9		// Out of paper
++#define GEM_EWRITF			-10		// Write fault
++#define GEM_EREADF			-11		// Read fault
++#define GEM_EWRPRO			-12		// Device is write protected
++#define GEM_E_CHNG			-14		// Media change detected
++#define GEM_EUNDEV			-15		// Unknown device
++#define GEM_EBADSF			-16		// Bad sectors on format
++#define GEM_EOTHER			-17		// Insert other disk (request)
++#define GEM_EINVFN			-32		// Invalid function
++#define GEM_EFILNF			-33		// File not found
++#define GEM_EPTHNF			-34		// Path not found
++#define GEM_ENHNDL			-35		// No more handles
++#define GEM_EACCDN			-36		// Access denied
++#define GEM_EIHNDL			-37		// Invalid handle
++#define GEM_ENSMEM			-39		// Insufficient memory
++#define GEM_EIMBA 			-40		// Invalid memory block address
++#define GEM_EDRIVE			-46		// Invalid drive specification
++#define GEM_ENSAME			-48		// Cross device rename
++#define GEM_ENMFIL			-49		// No more files
++#define GEM_ELOCKED			-58		// Record is already locked
++#define GEM_ENSLOCK			-59		// Invalid lock removal request
++#define GEM_ERANGE			-64		// Range error
++#define GEM_ENAMETOOLONG	-64		// Range error
++#define GEM_EINTRN			-65		// Internal error
++#define GEM_EPLFMT			-66		// Invalid program load format
++#define GEM_EGSBF			-67		// Memory block growth failure
++#define GEM_ELOOP			-80		// Too many symbolic links
++#define GEM_EMOUNT			-200	// Mount point crossed (indicator)
++
++void gem_error_to_errno(int gem_error);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif // GEM_ERRNO_DEFINED
+diff --git a/libgloss/m68k/atari/atari-getcwd.c b/libgloss/m68k/atari/atari-getcwd.c
+new file mode 100644
+index 000000000..6cdabf9d0
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-getcwd.c
+@@ -0,0 +1,86 @@
++#include <unistd.h>
++#include <errno.h>
++
++#include <_ansi.h>
++#include "atari-gem_errno.h"
++#include "atari-traps.h"
++
++// std functions that will be there when we link later on.
++void *malloc(size_t);
++void free(void *);
++
++char *getcwd(char *buf, size_t size)
++{
++	char *retbuf = buf;
++	if (retbuf == 0)
++	{
++		if (size <= 0)
++		{
++			size = 128;
++		}
++		// allocate memory
++		retbuf = (char *)malloc(size);
++		if (retbuf == 0)
++		{
++			errno = EIO;
++			return 0;
++		}
++	}
++
++	unsigned short drive = trap1_19();
++	int result = trap1_47(retbuf + 2, drive + 1);
++	if (result < 0)
++	{
++		gem_error_to_errno(result);
++		if (retbuf != buf)
++		{
++			// free memory
++			free(retbuf);
++		}
++		return 0;
++	}
++	retbuf[0] = (char)('A' + drive);
++	retbuf[1] = ':';
++	return retbuf;
++}
++
++// Code below is not supported by the newlib posix version.
++/*
++
++char *getwd(char *buf)
++{
++	return getcwd(buf, 128);	// Max path of atari st.
++}
++
++char *get_current_dir_name(void)
++{
++	char buf[129];
++	if (getcwd(buf, 128) == 0)
++	{
++		// errno already set by getcwd
++		return 0;
++	}
++
++	int str_len = 0;
++	while (buf[str_len] != 0) {++str_len;}
++	if (buf[str_len - 1] == '\\') {buf[--str_len] = 0;}
++	int last_divider = str_len;
++	while (buf[last_divider] != '\\') {--last_divider;}
++
++	// allocate memory
++	int namesize = str_len - last_divider; // includes last divider
++	char* retbuf = (char*)malloc(namesize);
++	if (retbuf == 0)
++	{
++		// errno is already set in malloc
++		return 0;
++	}
++	for (int i = 0; i < namesize - 1; ++i)
++	{
++		retbuf[i] = buf[last_divider + 1 + i];
++	}
++	retbuf[namesize] = 0;
++
++	return retbuf;
++}
++*/
+\ No newline at end of file
+diff --git a/libgloss/m68k/atari/atari-getentropy.c b/libgloss/m68k/atari/atari-getentropy.c
+new file mode 100644
+index 000000000..cf99c714d
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-getentropy.c
+@@ -0,0 +1,55 @@
++#include <_ansi.h>
++#include <_syslist.h>
++#include <errno.h>
++#include "atari-gem_errno.h"
++#include "atari-traps.h"
++
++/*
++    Pseudo random generator taken from:
++    https://stackoverflow.com/questions/70960826/efficient-32-bit-random-number-generator-in-c
++*/
++
++static unsigned int
++    x = 123456789,
++    y = 362436069,
++    z = 521288629,
++    w = 88675123,
++    v = 886756453;
++
++unsigned int xorshift(void)
++{
++    unsigned int t = x ^ (x >> 7);
++    x = y;
++    y = z;
++    z = w;
++    w = v;
++    v = (v ^ (v << 6)) ^ (t ^ (t << 13));
++    return (y + y + 1) * v;
++}
++
++unsigned int xorshift32(void)
++{
++    x ^= (x << 13);
++    x ^= (x >> 17);
++    return x ^= (x << 5);
++}
++
++void seed()
++{
++    x = trap14_11();    // Atari Random func.
++    v = xorshift32();
++    w = xorshift32();
++    z = xorshift32();
++    y = xorshift32();
++}
++
++int getentropy(void *buf, size_t buflen)
++{
++    seed();
++    for (size_t i = 0; i < buflen; ++i)
++    {
++        ((unsigned char*)buf)[i] = (unsigned char)xorshift();
++    }
++
++    return 0;
++}
+diff --git a/libgloss/m68k/atari/atari-getpid.c b/libgloss/m68k/atari/atari-getpid.c
+new file mode 100644
+index 000000000..57ee174b8
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-getpid.c
+@@ -0,0 +1,9 @@
++#include <_ansi.h>
++
++/*
++ * getpid -- only one process, so just return 1.
++ */
++int getpid(void)
++{
++	return 1;
++}
+diff --git a/libgloss/m68k/atari/atari-gettod.c b/libgloss/m68k/atari/atari-gettod.c
+new file mode 100644
+index 000000000..e8b76a969
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-gettod.c
+@@ -0,0 +1,163 @@
++#include <sys/time.h>
++#include "atari-gem_errno.h"
++#include "atari-traps.h"
++
++/*
++ * Formula taken from mktime.c
++ * Original Author:	G. Haley
++ */
++#define _SEC_IN_MINUTE 60L
++#define _SEC_IN_HOUR 3600L
++#define _SEC_IN_DAY 86400L
++
++static const int _DAYS_BEFORE_MONTH[12] =
++	{0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
++
++#define _ISLEAP(y) (((y) % 4) == 0 && (((y) % 100) != 0 || (((y) + 1900) % 400) == 0))
++#define _DAYS_IN_YEAR(year) (_ISLEAP(year) ? 366 : 365)
++
++int gettimeofday(struct timeval *tv, void *__tz)
++{
++	struct timezone *tz = __tz;
++	long days = 0;
++	int year;
++	if (tz != 0)
++	{
++		// Support for timezone have been removed from linux glibc, so we just fill in a zero timezone.
++		tz->tz_minuteswest = 0;
++		tz->tz_dsttime = 0;
++	}
++	if (tv != 0)
++	{
++		tv->tv_sec = 0;
++		unsigned short date = trap1_2a();
++		unsigned short time = trap1_2c();
++
++		int tm_year = ((date >> 9) & 0x7f) + 80; // Years since 1900
++		int tm_mon = ((date >> 5) & 0xf) - 1;
++		int tm_mday = date & 0x1f;
++		int tm_hour = ((time >> 11) & 0x1f);
++		int tm_min = ((time >> 5) & 0x3f);
++		int tm_sec = (time & 0x1f) * 2;
++
++		/* compute hours, minutes, seconds */
++		tv->tv_sec += tm_sec + (tm_min * _SEC_IN_MINUTE) + (tm_hour * _SEC_IN_HOUR);
++
++		/* compute days in year */
++		days += tm_mday - 1;
++		days += _DAYS_BEFORE_MONTH[tm_mon];
++		if (tm_mon > 1 && _DAYS_IN_YEAR(tm_year) == 366)
++		{
++			days++;
++		}
++
++		/* compute days in other years */
++		for (year = 70; year < tm_year; year++)
++		{
++			days += _DAYS_IN_YEAR(year);
++		}
++
++		/* compute total seconds */
++		tv->tv_sec += (time_t)days * _SEC_IN_DAY;
++
++		tv->tv_usec = 0;
++	}
++	return 0;
++}
++
++/*
++ * Formula taken from gmtime_r.c
++ * Original Author: Adapted from tzcode maintained by Arthur David Olson.
++ */
++
++#define EPOCH_ADJUSTMENT_DAYS 719468L
++/* year to which the adjustment was made */
++#define ADJUSTED_EPOCH_YEAR 0
++/* 1st March of year 0 is Wednesday */
++#define ADJUSTED_EPOCH_WDAY 3
++/* there are 97 leap years in 400-year periods. ((400 - 97) * 365 + 97 * 366) */
++#define DAYS_PER_ERA 146097L
++/* there are 24 leap years in 100-year periods. ((100 - 24) * 365 + 24 * 366) */
++#define DAYS_PER_CENTURY 36524L
++/* there is one leap year every 4 years */
++#define DAYS_PER_4_YEARS (3 * 365 + 366)
++/* number of days in a non-leap year */
++#define DAYS_PER_YEAR 365
++/* number of days in January */
++#define DAYS_IN_JANUARY 31
++/* number of days in non-leap February */
++#define DAYS_IN_FEBRUARY 28
++/* number of years per era */
++#define YEARS_PER_ERA 400
++#define YEAR_BASE 1900
++
++int settimeofday(const struct timeval *tv, const struct timezone *tz)
++{
++	// Support for timezone have been removed from linux glibc, so we just ignore it.
++	if (tv != 0)
++	{
++		long days, rem;
++		const time_t lcltime = tv->tv_sec;
++		int era, weekday, year;
++		unsigned erayear, yearday, month, day;
++		unsigned long eraday;
++
++		days = lcltime / _SEC_IN_DAY + EPOCH_ADJUSTMENT_DAYS;
++		rem = lcltime % _SEC_IN_DAY;
++		if (rem < 0)
++		{
++			rem += _SEC_IN_DAY;
++			--days;
++		}
++
++		/* compute hour, min, and sec */
++		int tm_hour = (int)(rem / _SEC_IN_HOUR);
++		rem %= _SEC_IN_HOUR;
++		int tm_min = (int)(rem / _SEC_IN_MINUTE);
++		int tm_sec = (int)(rem % _SEC_IN_MINUTE);
++
++		/* compute year, month, day & day of year */
++		/* for description of this algorithm see
++		 * http://howardhinnant.github.io/date_algorithms.html#civil_from_days */
++		era = (days >= 0 ? days : days - (DAYS_PER_ERA - 1)) / DAYS_PER_ERA;
++		eraday = days - era * DAYS_PER_ERA; /* [0, 146096] */
++		erayear = (eraday - eraday / (DAYS_PER_4_YEARS - 1) + eraday / DAYS_PER_CENTURY -
++				   eraday / (DAYS_PER_ERA - 1)) /
++				  365;																/* [0, 399] */
++		yearday = eraday - (DAYS_PER_YEAR * erayear + erayear / 4 - erayear / 100); /* [0, 365] */
++		month = (5 * yearday + 2) / 153;											/* [0, 11] */
++		day = yearday - (153 * month + 2) / 5 + 1;									/* [1, 31] */
++		month += month < 10 ? 2 : -10;
++		year = ADJUSTED_EPOCH_YEAR + erayear + era * YEARS_PER_ERA + (month <= 1);
++
++		int tm_year = year - YEAR_BASE;
++		int tm_mon = month;
++		int tm_mday = day;
++
++		if (tm_year < 80 || tm_year > (80 + 0x7f))
++		{
++			// TOS cannot handle years before 1980 or after 2107
++			gem_error_to_errno(GEM_EBADRQ);
++			return -1;
++		}
++		unsigned short date = (unsigned short)(((tm_year - 80) & 0x7f) << 9);
++		date |= (unsigned short)(((tm_mon + 1) & 0xf) << 5);
++		date |= (unsigned short)(tm_mday & 0x1f);
++		unsigned short time = (unsigned short)((tm_hour & 0x1f) << 11);
++		time |= (unsigned short)((tm_min & 0x3f) << 5);
++		time |= (unsigned short)((tm_sec & 0x3e) >> 1);
++
++		int err;
++		if ((err = trap1_2b(date)) < 0)
++		{
++			gem_error_to_errno(err);
++			return -1;
++		}
++		if ((err = trap1_2d(time)) < 0)
++		{
++			gem_error_to_errno(err);
++			return -1;
++		}
++	}
++	return 0;
++}
+diff --git a/libgloss/m68k/atari/atari-isatty.c b/libgloss/m68k/atari/atari-isatty.c
+new file mode 100644
+index 000000000..94ecc7598
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-isatty.c
+@@ -0,0 +1,6 @@
++#include <_ansi.h>
++
++int isatty(int fd)
++{
++	return fd == 2 ? 1 : 0;
++}
+diff --git a/libgloss/m68k/atari/atari-kill.c b/libgloss/m68k/atari/atari-kill.c
+new file mode 100644
+index 000000000..c532d41a1
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-kill.c
+@@ -0,0 +1,11 @@
++#include <unistd.h>
++#include <_ansi.h>
++
++/*
++ * kill -- go out via exit...
++ */
++int kill(int pid, int sig)
++{
++	_exit(sig);
++	return 0;
++}
+diff --git a/libgloss/m68k/atari/atari-link.c b/libgloss/m68k/atari/atari-link.c
+new file mode 100644
+index 000000000..4e800437e
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-link.c
+@@ -0,0 +1,14 @@
++#include "config.h"
++#include <_ansi.h>
++#include <_syslist.h>
++#include <errno.h>
++#include "atari-gem_errno.h"
++#include "libnosys/warning.h"
++
++int link(char *old, char *new)
++{
++    errno = ENOSYS;
++    return -1;
++}
++
++stub_warning(link)
+diff --git a/libgloss/m68k/atari/atari-lseek.c b/libgloss/m68k/atari/atari-lseek.c
+new file mode 100644
+index 000000000..85dbe075a
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-lseek.c
+@@ -0,0 +1,38 @@
++#include <unistd.h>
++#include <_ansi.h>
++#include "atari-gem_errno.h"
++#include "atari-traps.h"
++
++off_t lseek(int fd, off_t offset, int whence)
++{
++	int newoff = GEM_EIHNDL;
++	if (fd >= 0 && fd <= 2)
++	{
++		// stdin, stdout and stderr just returns OK without doing anything.
++		return 0;
++	}
++	else if (fd >= 3)
++	{
++		// Any file descriptor
++		unsigned short bios_mode = 3; // invalid mode
++		switch (whence)
++		{
++		case SEEK_SET:
++			bios_mode = 0;
++			break;
++		case SEEK_CUR:
++			bios_mode = 1;
++			break;
++		case SEEK_END:
++			bios_mode = 2;
++			break;
++		}
++		newoff = trap1_42((unsigned int)offset, (unsigned short)fd, bios_mode);
++	}
++	if (newoff < 0)
++	{
++		gem_error_to_errno(newoff);
++		return (off_t)-1;
++	}
++	return (off_t)newoff;
++}
+diff --git a/libgloss/m68k/atari/atari-mkdir.c b/libgloss/m68k/atari/atari-mkdir.c
+new file mode 100644
+index 000000000..f8f280511
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-mkdir.c
+@@ -0,0 +1,16 @@
++#include <unistd.h>
++#include <_ansi.h>
++#include "atari-gem_errno.h"
++#include "atari-traps.h"
++
++int mkdir(const char *pathname, mode_t mode)
++{
++	// Ignore mode, it is not supported by the st.
++	int result = trap1_39(pathname);
++	if (result < 0)
++	{
++		gem_error_to_errno(result);
++		return -1;
++	}
++	return 0;
++}
+\ No newline at end of file
+diff --git a/libgloss/m68k/atari/atari-open.c b/libgloss/m68k/atari/atari-open.c
+new file mode 100644
+index 000000000..da6f5c2ab
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-open.c
+@@ -0,0 +1,79 @@
++#include <unistd.h>
++#include <_ansi.h>
++#include "atari-gem_errno.h"
++#include "atari-traps.h"
++
++// I really don't like having these defines here,
++// fcntl.h where they are, also defines a function for "open",
++// that is different from the one libgloss is supposed to provide...
++#ifndef O_CREAT
++#define O_CREAT 0x0200
++#endif // O_CREAT
++#ifndef O_APPEND
++#define O_APPEND 0x0008
++#endif // O_APPEND
++#ifndef O_EXCL
++#define O_EXCL 0x0800
++#endif // O_EXCL
++#ifndef O_TRUNC
++#define O_TRUNC 0x0400
++#endif // O_TRUNC
++
++// mode is ignored. Those kind of settings is not supported by the st.
++int open(const char *buf, int flags, int mode)
++{
++	/*
++	#define MAX_PATH 128
++
++	char bios_path[MAX_PATH + 1];
++	char* bios_max_path = bios_path + MAX_PATH;
++	*/
++	int bios_handle = -1;
++	unsigned short bios_mode = (unsigned short)(flags & 0x3); // bits 0-1 the same for st and linux.
++	int create = flags & O_CREAT;
++	int append = flags & O_APPEND; // open doc says that seek end should be done before each write call. We assume that newlib handles that.
++	int excl = flags & O_EXCL;	   // File must be created by this call.
++	int trunc = flags & O_TRUNC;   // File is forced to be created and thus truncated.
++
++	const char *bios_path = buf;
++	if (!trunc)
++	{
++		bios_handle = trap1_3d(bios_path, bios_mode);
++	}
++	if (bios_handle < 0 && (create || trunc))
++	{
++		unsigned short bios_attrib = 0;
++		bios_handle = trap1_3c(bios_path, bios_attrib);
++	}
++	else if (create && excl)
++	{
++		// We explicitly specified that file must be created, and it already existed, so error!
++		gem_error_to_errno(GEM_EACCDN);
++		// Close file.
++		trap1_3e((unsigned short)bios_handle);
++		return -1;
++	}
++
++	if (bios_handle >= 0 && append)
++	{
++		// Seek to end.
++		int new_file_pos = trap1_42(0, (unsigned short)bios_handle, 2);
++		if (new_file_pos < 0)
++		{
++			gem_error_to_errno(new_file_pos);
++			// Close file.
++			trap1_3e((unsigned short)bios_handle);
++			return -1;
++		}
++	}
++
++	if (bios_handle < 0)
++	{
++		gem_error_to_errno(bios_handle);
++		bios_handle = -1;
++	}
++	/*
++		If bios_handle is positive, then the low word is the gemdos handle, and the high word is zero.
++	*/
++	return bios_handle;
++}
+diff --git a/libgloss/m68k/atari/atari-read.c b/libgloss/m68k/atari/atari-read.c
+new file mode 100644
+index 000000000..c27173a8b
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-read.c
+@@ -0,0 +1,39 @@
++#include <unistd.h>
++#include <_ansi.h>
++#include "atari-gem_errno.h"
++#include "atari-traps.h"
++
++_READ_WRITE_RETURN_TYPE read(int fd, void *buf, size_t nbytes)
++{
++	int numRead = GEM_EIHNDL;
++	if (fd >= 0)
++	{
++		numRead = trap1_3f((unsigned short)fd, nbytes, buf);
++		if (numRead >= 0 && numRead < nbytes && fd == GSH_CONIN)
++		{
++			/*
++				When reading from console, the EOF character is "\n".
++				Atari tos do not return the EOF character, but posix read do.
++				So we assume that when the trap call have not reached the nbytes limit,
++				then it must have gotten an EOF.
++				So in that case we insert "\n" to the end of the buffer and increase lenth by 1.
++			*/
++			((char*)buf)[numRead] = '\n';
++			++numRead;
++			/*
++				This is not enough however...
++				Atari tos requires a line feed to be "\r\n", and apparently, the "\r" is executed by tos
++				but not returned when reading. This is not a problem for us, but the "\n" as it is an EOF
++				is simply discarded and not executed. So we also need to send a "\n" to stdout to fully comply
++				with standard C behaviour.
++			*/
++			trap1_40(GSH_CONOUT, 1, "\n");
++		}
++	}
++	if (numRead < 0)
++	{
++		gem_error_to_errno(numRead);
++		return -1;
++	}
++	return numRead;
++}
+diff --git a/libgloss/m68k/atari/atari-readlink.c b/libgloss/m68k/atari/atari-readlink.c
+new file mode 100644
+index 000000000..23933a983
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-readlink.c
+@@ -0,0 +1,15 @@
++#include "config.h"
++#include <_ansi.h>
++#include <_syslist.h>
++#include <sys/types.h>
++#include <errno.h>
++#include "atari-gem_errno.h"
++#include "libnosys/warning.h"
++
++int readlink(const char *path, char *buf, size_t bufsize)
++{
++    errno = ENOSYS;
++    return -1;
++}
++
++stub_warning(readlink)
+diff --git a/libgloss/m68k/atari/atari-rename.c b/libgloss/m68k/atari/atari-rename.c
+new file mode 100644
+index 000000000..a590b68b7
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-rename.c
+@@ -0,0 +1,15 @@
++#include <unistd.h>
++#include <_ansi.h>
++#include "atari-gem_errno.h"
++#include "atari-traps.h"
++
++int _rename(const char *old_filename, const char *new_filename)
++{
++	int err = trap1_56(old_filename, new_filename);
++	if (err < 0)
++	{
++		gem_error_to_errno(err);
++		return -1;
++	}
++	return 0;
++}
+\ No newline at end of file
+diff --git a/libgloss/m68k/atari/atari-rmdir.c b/libgloss/m68k/atari/atari-rmdir.c
+new file mode 100644
+index 000000000..2a56804ea
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-rmdir.c
+@@ -0,0 +1,15 @@
++#include <unistd.h>
++#include <_ansi.h>
++#include "atari-gem_errno.h"
++#include "atari-traps.h"
++
++int rmdir(const char *pathname)
++{
++	int result = trap1_3a(pathname);
++	if (result < 0)
++	{
++		gem_error_to_errno(result);
++		return -1;
++	}
++	return 0;
++}
+\ No newline at end of file
+diff --git a/libgloss/m68k/atari/atari-sbrk.c b/libgloss/m68k/atari/atari-sbrk.c
+new file mode 100644
+index 000000000..a01573e2a
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-sbrk.c
+@@ -0,0 +1,19 @@
++#include <errno.h>
++#include <_ansi.h>
++
++extern char *_HeapPtr;
++extern char *_HeapBottom;
++extern char *_HeapTop;
++
++char *sbrk(int nbytes)
++{
++	char *newheap = _HeapPtr + nbytes;
++	if (newheap > _HeapTop)
++	{
++		errno = ENOMEM;
++		return ((char *)-1);
++	}
++	char *retptr = _HeapPtr;
++	_HeapPtr = newheap;
++	return retptr;
++}
+diff --git a/libgloss/m68k/atari/atari-stat.c b/libgloss/m68k/atari/atari-stat.c
+new file mode 100644
+index 000000000..4c60178a8
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-stat.c
+@@ -0,0 +1,24 @@
++#include <sys/stat.h>
++#include <unistd.h>
++#include <_ansi.h>
++#include "atari-gem_errno.h"
++
++// I don't like this extern declaration here...
++extern int open(const char *buf, int flags, int mode);
++
++int stat(const char *path, struct stat *buf)
++{
++	int handle = open(path, 0, 0); // read only
++	if (handle >= 0)
++	{
++		int err = fstat(handle, buf);
++		close(handle);
++		handle = err;
++	}
++	if (handle < 0)
++	{
++		gem_error_to_errno(handle);
++		return -1;
++	}
++	return 0;
++}
+diff --git a/libgloss/m68k/atari/atari-symlink.c b/libgloss/m68k/atari/atari-symlink.c
+new file mode 100644
+index 000000000..7dfffb5c2
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-symlink.c
+@@ -0,0 +1,14 @@
++#include "config.h"
++#include <_ansi.h>
++#include <_syslist.h>
++#include <errno.h>
++#include "atari-gem_errno.h"
++#include "libnosys/warning.h"
++
++int symlink(const char *path1, const char *path2)
++{
++    errno = ENOSYS;
++    return -1;
++}
++
++stub_warning(symlink)
+diff --git a/libgloss/m68k/atari/atari-times.c b/libgloss/m68k/atari/atari-times.c
+new file mode 100644
+index 000000000..dc54eb5f6
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-times.c
+@@ -0,0 +1,32 @@
++#include <time.h>
++#include <sys/times.h>
++#include "atari-traps.h"
++#include "atari-gem_errno.h"
++
++// Defined and initialized in atari-crti.S
++extern unsigned int _atari_4ba_at_prg_start;
++
++
++// The memory location read is actually unsigned, so we cast that in the caller func.
++int read200hzMem(void)
++{
++	// 0x4ba is a privileged address only readable in supervisor mode.
++	return *((int*)0x4ba);
++}
++
++clock_t times(struct tms *buf)
++{
++	// Call callback in supervisor mode.
++	unsigned long long int ticks200hz = (unsigned long long int)trap14_26(read200hzMem);
++	unsigned long long int libcticks = (ticks200hz * CLK_TCK) / 200;
++
++	unsigned long long int processticks = ((unsigned long long int)_atari_4ba_at_prg_start * CLK_TCK) / 200;
++	processticks = libcticks - processticks;
++
++	// For a single threaded system like the atari, only tms_utime is meaningful.
++	buf->tms_utime = (clock_t)processticks;
++	buf->tms_stime = 0;
++	buf->tms_cutime = 0;
++	buf->tms_cstime = 0;
++	return (clock_t)libcticks;
++}
+diff --git a/libgloss/m68k/atari/atari-tos.ld b/libgloss/m68k/atari/atari-tos.ld
+new file mode 100644
+index 000000000..60d5783c6
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-tos.ld
+@@ -0,0 +1,171 @@
++OUTPUT_FORMAT("elf32-m68k", "elf32-m68k", "elf32-m68k")
++OUTPUT_ARCH(m68k)
++INPUT (crti.o crtn.o crt0.o)
++
++SECTIONS
++{
++	/*
++	Start all addresses at 0.
++	That way, the relocation is a bit easier when converting to prg.
++	*/
++	. = 0x0;
++	.text : {
++		*crti.o(.init)
++		*crtbegin.o(.init)
++		*crtend.o(.init)
++		*crtn.o(.init)
++		*crt0.o(.init)
++		*crti.o(.fini)
++		*crtbegin.o(.fini)
++		*crtend.o(.fini)
++		*crtn.o(.fini)
++		*(.text*)
++		*(.gnu.warning)
++		FILL(0x0000);
++		. = ALIGN(0x4);
++	}
++	/*
++		There is no rodata in a prg file, so we store all data in .data section.
++	*/
++	.data BLOCK(0x4) : {
++		__DATA_SEGMENT__ = .;
++		*(.data*);
++		. = ALIGN(0x4);
++		*(.rodata*);
++		. = ALIGN(0x4);
++
++		*(.eh_frame_hdr) *(.eh_frame_entry .eh_frame_entry.*)
++		*(.eh_frame) *(.eh_frame.*)
++		*(.sframe) *(.sframe.*)
++		*(.gcc_except_table .gcc_except_table.*)
++		*(.gnu_extab*)
++
++/*
++		PROVIDE_HIDDEN (__preinit_array_start = .);
++		KEEP (*(.preinit_array))
++		PROVIDE_HIDDEN (__preinit_array_end = .);
++
++		PROVIDE_HIDDEN (__init_array_start = .);
++		KEEP (*(SORT_BY_INIT_PRIORITY(.init_array.*) SORT_BY_INIT_PRIORITY(.ctors.*)))
++		KEEP (*(.init_array EXCLUDE_FILE (*crtbegin.o *crtbegin?.o *crtend.o *crtend?.o ) .ctors))
++		PROVIDE_HIDDEN (__init_array_end = .);
++
++		PROVIDE_HIDDEN (__fini_array_start = .);
++		KEEP (*(SORT_BY_INIT_PRIORITY(.fini_array.*) SORT_BY_INIT_PRIORITY(.dtors.*)))
++		KEEP (*(.fini_array EXCLUDE_FILE (*crtbegin.o *crtbegin?.o *crtend.o *crtend?.o ) .dtors))
++		PROVIDE_HIDDEN (__fini_array_end = .);
++*/
++
++		/*
++			All constructors
++		*/
++		KEEP (*crtbegin.o(.ctors))
++		KEEP (*crtbegin?.o(.ctors))
++		KEEP (*(EXCLUDE_FILE (*crtend.o *crtend?.o ) .ctors))
++		KEEP (*(SORT(.ctors.*)))
++		KEEP (*(.ctors))
++
++		/*
++			All destructors
++		*/
++		KEEP (*crtbegin.o(.dtors))
++		KEEP (*crtbegin?.o(.dtors))
++		KEEP (*(EXCLUDE_FILE (*crtend.o *crtend?.o ) .dtors))
++		KEEP (*(SORT(.dtors.*)))
++		KEEP (*(.dtors))
++
++		FILL(0x0000);
++		. = ALIGN(0x4);
++	}
++	.bss BLOCK(0x4) : {
++		__BSS_SEGMENT__ = .;
++		*(.bss);
++		. = ALIGN(0x4);
++		*(COMMON);
++		. = ALIGN(0x4);
++	}
++	__BSS_SEGMENT_END = .;
++
++	/*
++	Atari Prg header.
++	We don't care what the address is for this.
++	*/
++	.prgheader : {
++		SHORT(0x601a); 								/* Branch to start of the program  (must be 0x601a, used as magic number!) */
++		LONG(__DATA_SEGMENT__);						/* Length of the TEXT segment */
++		LONG(__BSS_SEGMENT__ - __DATA_SEGMENT__);	/* Length of the DATA segment */
++		LONG(__BSS_SEGMENT_END - __BSS_SEGMENT__);	/* Length of the BSS segment */
++		LONG(0);									/* Length of the symbol table */
++		LONG(0);									/* Reserved, should be 0 */
++		LONG(0);									/* Program flags */
++		SHORT(0);									/*  0 = Relocation info present */
++	}
++
++	.note.gnu.build-id  : { *(.note.gnu.build-id) }
++	.interp         : { *(.interp) }
++	.hash           : { *(.hash) }
++	.gnu.hash       : { *(.gnu.hash) }
++	.dynsym         : { *(.dynsym) }
++	.dynstr         : { *(.dynstr) }
++	.gnu.version    : { *(.gnu.version) }
++	.gnu.version_d  : { *(.gnu.version_d) }
++	.gnu.version_r  : { *(.gnu.version_r) }
++
++	/* Stabs debugging sections.  */
++	.stab          0 : { *(.stab) }
++	.stabstr       0 : { *(.stabstr) }
++	.stab.excl     0 : { *(.stab.excl) }
++	.stab.exclstr  0 : { *(.stab.exclstr) }
++	.stab.index    0 : { *(.stab.index) }
++	.stab.indexstr 0 : { *(.stab.indexstr) }
++	.comment 0 (INFO) : { *(.comment); LINKER_VERSION; }
++	.gnu.build.attributes : { *(.gnu.build.attributes .gnu.build.attributes.*) }
++
++	/* DWARF debug sections.
++		Symbols in the DWARF debugging sections are relative to the beginning
++		of the section so we begin them at 0.
++	*/
++	/* DWARF 1.  */
++	.debug          0 : { *(.debug) }
++	.line           0 : { *(.line) }
++
++	/* GNU DWARF 1 extensions.  */
++	.debug_srcinfo  0 : { *(.debug_srcinfo) }
++	.debug_sfnames  0 : { *(.debug_sfnames) }
++
++	/* DWARF 1.1 and DWARF 2.  */
++	.debug_aranges  0 : { *(.debug_aranges) }
++	.debug_pubnames 0 : { *(.debug_pubnames) }
++
++	/* DWARF 2.  */
++	.debug_info     0 : { *(.debug_info .gnu.linkonce.wi.*) }
++	.debug_abbrev   0 : { *(.debug_abbrev) }
++	.debug_line     0 : { *(.debug_line .debug_line.* .debug_line_end) }
++	.debug_frame    0 : { *(.debug_frame) }
++	.debug_str      0 : { *(.debug_str) }
++	.debug_loc      0 : { *(.debug_loc) }
++	.debug_macinfo  0 : { *(.debug_macinfo) }
++
++	/* SGI/MIPS DWARF 2 extensions.  */
++	.debug_weaknames 0 : { *(.debug_weaknames) }
++	.debug_funcnames 0 : { *(.debug_funcnames) }
++	.debug_typenames 0 : { *(.debug_typenames) }
++	.debug_varnames  0 : { *(.debug_varnames) }
++
++	/* DWARF 3.  */
++	.debug_pubtypes 0 : { *(.debug_pubtypes) }
++	.debug_ranges   0 : { *(.debug_ranges) }
++
++	/* DWARF 5.  */
++	.debug_addr     0 : { *(.debug_addr) }
++	.debug_line_str 0 : { *(.debug_line_str) }
++	.debug_loclists 0 : { *(.debug_loclists) }
++	.debug_macro    0 : { *(.debug_macro) }
++	.debug_names    0 : { *(.debug_names) }
++	.debug_rnglists 0 : { *(.debug_rnglists) }
++	.debug_str_offsets 0 : { *(.debug_str_offsets) }
++	.debug_sup      0 : { *(.debug_sup) }
++	.gnu.attributes 0 : { KEEP (*(.gnu.attributes)) }
++	/DISCARD/ : { *(.note.GNU-stack) *(.gnu_debuglink) *(.gnu.lto_*) *(.gnu_object_only) }
++
++}
+\ No newline at end of file
+diff --git a/libgloss/m68k/atari/atari-tos.specs b/libgloss/m68k/atari/atari-tos.specs
+new file mode 100644
+index 000000000..b46c823b0
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-tos.specs
+@@ -0,0 +1,8 @@
++# Atari gcc specs
++
++# --emit-relocs is used by external software to relocate elf binary to tos executable format.
++*link:
+++ --emit-relocs --no-warn-rwx-segments -static --no-warn-execstack -T atari-tos.ld
++
++*lib:
+++ -latari-tos
+diff --git a/libgloss/m68k/atari/atari-traps.c b/libgloss/m68k/atari/atari-traps.c
+new file mode 100644
+index 000000000..2afd73af0
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-traps.c
+@@ -0,0 +1,307 @@
++// See trap1_9 for detailed information about trap calls in this file.
++#include "atari-traps.h"
++
++// Store stack pointer in a3, that by Atari documentation will be left untouched by the trap call.
++#define TRAP_BEGIN "move.l		%%a7, %%a3\n\t"
++// Make trap call and then restore the stack pointer from the stored value in a3
++#define TRAP_FUNC(num, func) "move.w		#" #func ", %%a7@-\n\ttrap		#" #num "\n\tmove.l		%%a3, %%a7\n\t"
++// Registers d1,d2 and a0, a1, a2 may be affected by trap #1 calls. Register a3 is used to store/restore a7
++#define CLOBBER_REG "d1", "d2", "a0", "a1", "a2", "a3"
++
++unsigned int trap1_e(unsigned short bios_drive)
++{
++	register unsigned int bios_mounted_drives asm ("d0") = 0;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.w		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0xe)
++		: "=r" (bios_mounted_drives)
++		: "r" (bios_drive)
++		: CLOBBER_REG);
++	return bios_mounted_drives;
++}
++
++unsigned short trap1_19(void)
++{
++	register unsigned short bios_drive asm ("d0") = 0;
++	__asm__ volatile (
++		TRAP_BEGIN
++		TRAP_FUNC(1, 0x19)
++		: "=r" (bios_drive)
++		:
++		: CLOBBER_REG);
++	return bios_drive;
++}
++
++unsigned short trap1_2a(void)
++{
++	register unsigned short date asm ("d0") = 0;
++	__asm__ volatile (
++		TRAP_BEGIN
++		TRAP_FUNC(1, 0x2a)
++		: "=r" (date)
++		:
++		: CLOBBER_REG);
++	return date;
++}
++
++int trap1_2b(unsigned short date)
++{
++	register int result asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.w		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x2b)
++		: "=r" (result)
++		:"r" (date)
++		: CLOBBER_REG);
++	return result;
++}
++
++unsigned short trap1_2c(void)
++{
++	register unsigned short time asm ("d0") = 0;
++	__asm__ volatile (
++		TRAP_BEGIN
++		TRAP_FUNC(1, 0x2c)
++		: "=r" (time)
++		:
++		: CLOBBER_REG);
++	return time;
++}
++
++int trap1_2d(unsigned short time)
++{
++	register int result asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.w		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x2d)
++		: "=r" (result)
++		:"r" (time)
++		: CLOBBER_REG);
++	return result;
++}
++
++
++struct DTA* trap1_2f(unsigned short bios_handle)
++{
++	register struct DTA* result asm ("d0") = (struct DTA*)-1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.w		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x2f)
++		: "=r" (result)
++		: "r" (bios_handle)
++		: CLOBBER_REG);
++	return result;
++}
++
++
++int trap1_39(const char* bios_path)
++{
++	register int result asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.l		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x39)
++		: "=r" (result)
++		: "r" (bios_path)
++		: CLOBBER_REG);
++	return result;
++}
++
++int trap1_3a(const char* bios_path)
++{
++	register int result asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.l		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x3a)
++		: "=r" (result)
++		: "r" (bios_path)
++		: CLOBBER_REG);
++	return result;
++}
++
++int trap1_3b(const char* bios_path)
++{
++	register int result asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.l		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x3b)
++		: "=r" (result)
++		: "r" (bios_path)
++		: CLOBBER_REG);
++	return result;
++}
++
++int trap1_3c(const char* bios_path, unsigned short bios_attrib)
++{
++	register int bios_handle asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.w		%2, %%a7@-\n\t"
++		"move.l		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x3c)
++		: "=r" (bios_handle)
++		: "r" (bios_path), "r" (bios_attrib)
++		: CLOBBER_REG);
++	return bios_handle;
++}
++
++int trap1_3d(const char* bios_path, unsigned short bios_mode)
++{
++	register int bios_handle asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.w		%2, %%a7@-\n\t"
++		"move.l		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x3d)
++		: "=r" (bios_handle)
++		: "r" (bios_path), "r" (bios_mode)
++		: CLOBBER_REG);
++	return bios_handle;
++}
++
++int trap1_3e(unsigned short bios_handle)
++{
++	register int result asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.w		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x3e)
++		: "=r" (result)
++		: "r" (bios_handle)
++		: CLOBBER_REG);
++	return result;
++}
++
++int trap1_3f(unsigned short bios_handle, int length, void* buf)
++{
++	register int result asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.l		%3, %%a7@-\n\t"
++		"move.l		%2, %%a7@-\n\t"
++		"move.w		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x3f)
++		: "=r" (result)
++		: "r" (bios_handle), "r" (length), "r" (buf)
++		: CLOBBER_REG);
++	return result;
++}
++
++int trap1_40(unsigned short bios_handle, int length, const void* buf)
++{
++	register int result asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.l		%3, %%a7@-\n\t"
++		"move.l		%2, %%a7@-\n\t"
++		"move.w		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x40)
++		: "=r" (result)
++		: "r" (bios_handle), "r" (length), "r" (buf)
++		: CLOBBER_REG);
++	return result;
++}
++
++int trap1_41(const char* bios_path)
++{
++	register int result asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.l		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x41)
++		: "=r" (result)
++		: "r" (bios_path)
++		: CLOBBER_REG);
++	return result;
++}
++
++int trap1_42(unsigned int file_position, unsigned short bios_handle, unsigned short bios_mode)
++{
++	register int new_position asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.w		%3, %%a7@-\n\t"
++		"move.w		%2, %%a7@-\n\t"
++		"move.l		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x42)
++		: "=r" (new_position)
++		: "r" (file_position), "r" (bios_handle), "r" (bios_mode)
++		: CLOBBER_REG);
++	return new_position;
++}
++
++int trap1_47(char* buf, unsigned short bios_drive)
++{
++	register int result asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.w		%2, %%a7@-\n\t"
++		"move.l		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x47)
++		: "=r" (result)
++		: "r" (buf), "r" (bios_drive)
++		: CLOBBER_REG);
++	return result;
++}
++
++int trap1_4b(unsigned short mode, const char* file_name, const char* cmdline, const char* envstring)
++{
++	register int result asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.l		%4, %%a7@-\n\t"
++		"move.l		%3, %%a7@-\n\t"
++		"move.l		%2, %%a7@-\n\t"
++		"move.w		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x4b)
++		: "=r" (result)
++		: "r" (mode), "r" (file_name), "r" (cmdline), "r" (envstring)
++		: CLOBBER_REG);
++	return result;
++}
++
++int trap1_56(const char* oldname, const char* newname)
++{
++	register int result asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.l		%2, %%a7@-\n\t"
++		"move.l		%1, %%a7@-\n\t"
++		"move.w		#0, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x56)
++		: "=r" (result)
++		: "r" (oldname), "r" (newname)
++		: CLOBBER_REG);
++	return result;
++}
++
++unsigned int trap14_11(void)
++{
++	register unsigned int result asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		TRAP_FUNC(14, 0x11)
++		: "=r" (result)
++		:
++		: CLOBBER_REG);
++	return result;
++}
++
++int trap14_26(int (*callback)(void))
++{
++	register int callback_return asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.l		%1, %%a7@-\n\t"
++		TRAP_FUNC(14, 0x26)
++		: "=r" (callback_return)
++		: "r" (callback)
++		: CLOBBER_REG);
++	return callback_return;
++}
+diff --git a/libgloss/m68k/atari/atari-traps.h b/libgloss/m68k/atari/atari-traps.h
+new file mode 100644
+index 000000000..5102ff0a9
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-traps.h
+@@ -0,0 +1,79 @@
++#ifndef TRAPS_DEFINED
++#define TRAPS_DEFINED
++
++#include "atari-gem_basepage.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/*
++	Only trap calls used by atari libgloss is included here.
++*/
++
++unsigned int trap1_e(unsigned short bios_drive);
++
++// Returned drive starts at 0 for A
++unsigned short trap1_19(void);
++
++unsigned short trap1_2a(void);
++
++int trap1_2b(unsigned short date);
++
++unsigned short trap1_2c(void);
++
++int trap1_2d(unsigned short time);
++
++struct DTA* trap1_2f(unsigned short bios_handle);
++
++int trap1_39(const char* bios_path);
++
++int trap1_3a(const char* bios_path);
++
++int trap1_3b(const char* bios_path);
++
++int trap1_3c(const char* bios_path, unsigned short bios_attrib);
++
++int trap1_3d(const char* bios_path, unsigned short bios_mode);
++
++#define GSH_BIOSCON		0xFFFF
++#define GSH_BIOSAUX		0xFFFE
++#define GSH_BIOSPRN		0xFFFD
++#define GSH_BIOSMIDIIN	0xFFFC
++#define GSH_BIOSMIDIOUT	0xFFFB
++#define GSH_CONIN		0x00
++#define GSH_CONOUT		0x01
++#define GSH_AUX			0x02
++#define GSH_PRN			0x03
++
++int trap1_3e(unsigned short bios_handle);
++
++int trap1_3f(unsigned short bios_handle, int length, void* buf);
++
++int trap1_40(unsigned short bios_handle, int length, const void* buf);
++
++int trap1_41(const char* bios_path);
++
++int trap1_42(unsigned int file_position, unsigned short bios_handle, unsigned short bios_mode);
++
++// bios_drive 0 is default drive, and 1 and upwards is A...
++int trap1_47(char* buf, unsigned short bios_drive);
++
++#define PE_LOADGO		0
++#define PE_LOAD			3
++#define PE_GO			4
++#define PE_BASEPAGE		5
++#define PE_GOTHENFREE	6
++int trap1_4b(unsigned short mode, const char* file_name, const char* cmdline, const char* envstring);
++
++int trap1_56(const char* oldname, const char* newname);
++
++unsigned int trap14_11(void);
++
++int trap14_26(int (*callback)(void));
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif // TRAPS_DEFINED
+diff --git a/libgloss/m68k/atari/atari-unlink.c b/libgloss/m68k/atari/atari-unlink.c
+new file mode 100644
+index 000000000..72fea378b
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-unlink.c
+@@ -0,0 +1,14 @@
++#include <_ansi.h>
++#include "atari-gem_errno.h"
++#include "atari-traps.h"
++
++int unlink(char *path)
++{
++	int err = trap1_41(path);
++	if (err < 0)
++	{
++		gem_error_to_errno(err);
++		return -1;
++	}
++	return 0;
++}
+diff --git a/libgloss/m68k/atari/atari-wait.c b/libgloss/m68k/atari/atari-wait.c
+new file mode 100644
+index 000000000..59e5032f4
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-wait.c
+@@ -0,0 +1,11 @@
++#include "config.h"
++#include <errno.h>
++#include "libnosys/warning.h"
++
++int wait(int *status)
++{
++    errno = ENOSYS;
++    return -1;
++}
++
++stub_warning(wait)
+diff --git a/libgloss/m68k/atari/atari-write.c b/libgloss/m68k/atari/atari-write.c
+new file mode 100644
+index 000000000..a542a7f23
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-write.c
+@@ -0,0 +1,82 @@
++#include <unistd.h>
++#include <_ansi.h>
++#include "atari-gem_errno.h"
++#include "atari-traps.h"
++
++const char* lineEnding = "\r\n";
++
++int writeUntilDoneOrError(int fd, size_t len, const char* buf)
++{
++	size_t written = 0;
++	if (len == 0)
++	{
++		return 0;
++	}
++	do
++	{
++		int n = trap1_40((unsigned short)fd, len, buf);
++		if (n < 0)
++		{
++			gem_error_to_errno(n);
++			return -1;
++		}
++		written += n;
++		buf += n;
++	} while (written < len);
++	return 0;
++}
++
++
++_READ_WRITE_RETURN_TYPE write(int fd, const void *buf, size_t nbytes)
++{
++	int numWritten = GEM_EIHNDL;
++	if (fd >= 0)
++	{
++		if (fd == 2)
++		{
++			fd = GSH_CONOUT; // Use console out for stderr.
++		}
++		if (fd == GSH_CONOUT)
++		{
++			// When we write to stdout on Atari, we must add a \r after \n to
++			// get the correct C output behaviour.
++			const char* stream = (const char*)buf;
++			size_t lastWrite = 0;
++			for (size_t i = 0; i < nbytes; ++i)
++			{
++				if (stream[i] == '\n')
++				{
++					int len = i - lastWrite; // length up to but not including \n
++					if (writeUntilDoneOrError(fd, len, stream + lastWrite) < 0)
++					{
++						return -1;
++					}
++					if (writeUntilDoneOrError(fd, 2, lineEnding) < 0)
++					{
++						return -1;
++					}
++					lastWrite = i + 1;	// Include the \n
++				}
++			}
++			if (lastWrite < nbytes)
++			{
++				int len = nbytes - lastWrite;
++				if (writeUntilDoneOrError(fd, len, stream + lastWrite) < 0)
++				{
++					return -1;
++				}
++			}
++			numWritten = nbytes;
++		}
++		else
++		{
++			numWritten = trap1_40((unsigned short)fd, nbytes, buf);
++		}
++	}
++	if (numWritten < 0)
++	{
++		gem_error_to_errno(numWritten);
++		return -1;
++	}
++	return numWritten;
++}
+diff --git a/newlib/configure.host b/newlib/configure.host
+index 89564c0b6..caac420ab 100644
+--- a/newlib/configure.host
++++ b/newlib/configure.host
+@@ -769,6 +769,10 @@ newlib_cflags="${newlib_cflags} -DCLOCK_PROVIDED -DMALLOC_PROVIDED -DEXIT_PROVID
+ 	newlib_cflags="${newlib_cflags} -DHAVE_RENAME -DHAVE_SYSTEM -DMISSING_SYSCALL_NAMES"
+ 	syscall_dir=
+ 	;;
++  m68k-atari-elf)
++	newlib_cflags="${newlib_cflags} -DHAVE_RENAME -DMISSING_SYSCALL_NAMES"
++	syscall_dir=
++	;;
+   mcore-*-*)
+ 	syscall_dir=syscalls
+ 	;;
