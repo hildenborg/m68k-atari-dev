@@ -18,12 +18,12 @@ TARGET=m68k-atari-elf
 PREFIX="$CONF_INSTALL/$TARGET"
 PATH=$PATH:$PREFIX/bin
 PATCHES="$PWD/patches"
-NEWLIB_PATH="$PWD/../newlib_omega"
+NEWLIB_PATH="$PWD/build/newlib-cygwin"
 
 # Versions to download and build.
 BINUTIL_VERSION="2.44"
 GCC_VERSION="15.1.0"
-NEWLIB_HASH="faac5b9fa147f0415357b947c86dbe2e98ab91ac"
+NEWLIB_HASH="d61692cbd03baf863b91d23bb3816ce2e891dcc2"
 
 # Detect system
 unameOut="$(uname -s)"

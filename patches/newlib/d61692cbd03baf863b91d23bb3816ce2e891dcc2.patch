@@ -1,5 +1,29 @@
+diff --git a/COPYING.LIBGLOSS b/COPYING.LIBGLOSS
+index 7eed3ab29..7dbcbfec1 100644
+--- a/COPYING.LIBGLOSS
++++ b/COPYING.LIBGLOSS
+@@ -497,3 +497,7 @@ and need not follow the licensing terms described here, provided that
+ the new terms are clearly indicated on the first page of each file where
+ they apply.
+ 
++(26) - Atari 16/32 bit TOS (m68k-atari-elf target)
++
++Copyright (C) 2025 Mikael Hildenborg
++SPDX-License-Identifier: BSD-2-Clause
+diff --git a/COPYING.NEWLIB b/COPYING.NEWLIB
+index 9a2680d09..2bf6f0bed 100644
+--- a/COPYING.NEWLIB
++++ b/COPYING.NEWLIB
+@@ -1570,3 +1570,7 @@ Software.
+  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  */
+ 
++(58) - Atari 16/32 bit TOS (m68k-atari-elf target)
++
++Copyright (C) 2025 Mikael Hildenborg
++SPDX-License-Identifier: BSD-2-Clause
 diff --git a/libgloss/configure b/libgloss/configure
-index 3eb4c2740..ba071824b 100755
+index 3eb4c2740..369780c64 100755
 --- a/libgloss/configure
 +++ b/libgloss/configure
 @@ -2857,6 +2857,11 @@ case "${target}" in
@@ -14,6 +38,44 @@ index 3eb4c2740..ba071824b 100755
  	;;
    hppa*-*-pro*)
  	ac_config_files="$ac_config_files pa/Makefile"
+@@ -5461,16 +5466,18 @@ case "${target}" in
+     MIPS_SCRIPT_LIST="dve idt jmr3904app jmr3904dram jmr3904dram-java jmr3904app-java sde32 sde64 mti32 mti64 mti64_n32 mti64_64"
+     MIPS_BSP_LIST="libdve.a libidt.a libjmr3904.a"
+     ;;
++  mipsisa32-*-* | mipsisa32el-*-* | \
++  mipsisa32r2-*-* | mipsisa32r2el-*-* | \
++  mipsisa64*-*-*)
++    MIPS_CRT0="crt0_cfe.o crt0_cygmon.o crt0.o"
++    MIPS_SCRIPT_LIST="idt32 idt64 cfe"
++    MIPS_BSP_LIST="libcygmon.a libidt.a libcfe.a"
++    ;;
+   mips*-lsi*-*)
+     MIPS_PART_SPECIFIC_OBJ="entry.o"
+     MIPS_SCRIPT_LIST="lsi"
+     MIPS_BSP_LIST=liblsi.a
+     ;;
+-  mips*-mti*-* | mips*-img*-*)
+-    MIPS_CRT0="crt0.o"
+-    MIPS_SCRIPT_LIST="idt nullmon mti32 mti64_n32 mti64_64 uhi32 uhi64_64 uhi64_n32 malta32-yamon bootcode"
+-    MIPS_BSP_LIST="libidt.a libnullmon.a libuhi.a libyamon.a libhal.a libcm3_impl.a"
+-    ;;
+   mips64vr5*-*-*)
+     MIPS_PART_SPECIFIC_OBJ="vr5xxx.o cma101.o"
+     MIPS_PART_SPECIFIC_DEFINES=-DR5000
+@@ -5482,13 +5489,6 @@ case "${target}" in
+     MIPS_SCRIPT_LIST="ddb ddb-kseg0 nullmon"
+     MIPS_BSP_LIST="libpmon.a libnullmon.a"
+     ;;
+-  mipsisa32-*-* | mipsisa32el-*-* | \
+-  mipsisa32r2-*-* | mipsisa32r2el-*-* | \
+-  mipsisa64*-*-*)
+-    MIPS_CRT0="crt0_cfe.o crt0_cygmon.o crt0.o"
+-    MIPS_SCRIPT_LIST="idt32 idt64 cfe"
+-    MIPS_BSP_LIST="libcygmon.a libidt.a libcfe.a"
+-    ;;
+   mips*)
+     MIPS_CRT0="crt0_cfe.o crt0.o"
+     MIPS_PART_SPECIFIC_OBJ="vr4300.o cma101.o"
 diff --git a/libgloss/configure.ac b/libgloss/configure.ac
 index 628f173d6..0ab0cc248 100644
 --- a/libgloss/configure.ac
@@ -165,11 +227,14 @@ index 7f67426a6..b6d1868bc 100644
  	rm -f Makefile
 diff --git a/libgloss/m68k/atari/README b/libgloss/m68k/atari/README
 new file mode 100644
-index 000000000..4ca076a37
+index 000000000..24d2a6ea6
 --- /dev/null
 +++ b/libgloss/m68k/atari/README
-@@ -0,0 +1,31 @@
-+Atari 16/32 bit TOS (not MINT) support written by Mikael Hildenborg.
+@@ -0,0 +1,35 @@
++Copyright (C) 2025 Mikael Hildenborg
++SPDX-License-Identifier: BSD-2-Clause
++
++Atari 16/32 bit TOS (not MINT) target.
 +Target name: m68k-atari-elf.
 +
 +Stack size:
@@ -196,16 +261,22 @@ index 000000000..4ca076a37
 +contains a valid atari prg header pointing to relevant segments.
 +Relocation data from the link switch "--emit-relocs" (defaultted by "atari-tos.specs") is
 +included in the elf output so additional fixup information can be added to the prg file.
++Addresses in elf and prg files are the same and thus compatible for interchangeable symbol lookup.
 +
 +More information:
 +Can be found at: https://github.com/hildenborg/m68k-atari-dev
 +Where build scripts for complete toolchain, executables for converting elf to prg, and a remote debug server with full symbolic debugging are available.
 diff --git a/libgloss/m68k/atari/atari-chdir.c b/libgloss/m68k/atari/atari-chdir.c
 new file mode 100644
-index 000000000..c25730f8e
+index 000000000..edb7a70d8
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-chdir.c
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,49 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <_ansi.h>
 +#include "atari-gem_errno.h"
 +#include "atari-traps.h"
@@ -253,10 +324,15 @@ index 000000000..c25730f8e
 \ No newline at end of file
 diff --git a/libgloss/m68k/atari/atari-chown.c b/libgloss/m68k/atari/atari-chown.c
 new file mode 100644
-index 000000000..d15f9d5b1
+index 000000000..62f830002
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-chown.c
-@@ -0,0 +1,15 @@
+@@ -0,0 +1,20 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include "config.h"
 +#include <_ansi.h>
 +#include <_syslist.h>
@@ -274,10 +350,15 @@ index 000000000..d15f9d5b1
 +stub_warning(chown)
 diff --git a/libgloss/m68k/atari/atari-close.c b/libgloss/m68k/atari/atari-close.c
 new file mode 100644
-index 000000000..a11dadb13
+index 000000000..a52049c1d
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-close.c
-@@ -0,0 +1,18 @@
+@@ -0,0 +1,23 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <_ansi.h>
 +#include "atari-gem_errno.h"
 +#include "atari-traps.h"
@@ -298,10 +379,14 @@ index 000000000..a11dadb13
 +}
 diff --git a/libgloss/m68k/atari/atari-crt0.S b/libgloss/m68k/atari/atari-crt0.S
 new file mode 100644
-index 000000000..e70967421
+index 000000000..6d1bbd1d9
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-crt0.S
-@@ -0,0 +1,70 @@
+@@ -0,0 +1,74 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
 +
 +	.global exit
 +
@@ -374,10 +459,14 @@ index 000000000..e70967421
 +	.even
 diff --git a/libgloss/m68k/atari/atari-crti.S b/libgloss/m68k/atari/atari-crti.S
 new file mode 100644
-index 000000000..17e272247
+index 000000000..5e4c13b0e
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-crti.S
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,90 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
 +
 +#ifdef _HAVE_INITFINI_ARRAY
 +#define _init	__libc_init_array
@@ -467,13 +556,16 @@ index 000000000..17e272247
 \ No newline at end of file
 diff --git a/libgloss/m68k/atari/atari-crtn.S b/libgloss/m68k/atari/atari-crtn.S
 new file mode 100644
-index 000000000..4f0cc41ad
+index 000000000..6482a9c9f
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-crtn.S
-@@ -0,0 +1,21 @@
+@@ -0,0 +1,24 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
 +
 +    .global _program_return_code
-+
 +
 +	.section	".init"
 +	/*
@@ -494,10 +586,14 @@ index 000000000..4f0cc41ad
 +    .lcomm  _program_return_code, 2
 diff --git a/libgloss/m68k/atari/atari-environ.c b/libgloss/m68k/atari/atari-environ.c
 new file mode 100644
-index 000000000..d33f75513
+index 000000000..3f4970733
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-environ.c
-@@ -0,0 +1,4 @@
+@@ -0,0 +1,8 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
 +
 +// Should point to a list of global environment variables.
 +char *__env[1] = { 0 };
@@ -505,10 +601,15 @@ index 000000000..d33f75513
 \ No newline at end of file
 diff --git a/libgloss/m68k/atari/atari-execve.c b/libgloss/m68k/atari/atari-execve.c
 new file mode 100644
-index 000000000..cdcb96184
+index 000000000..c7a572154
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-execve.c
-@@ -0,0 +1,11 @@
+@@ -0,0 +1,16 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include "config.h"
 +#include <errno.h>
 +#include "libnosys/warning.h"
@@ -522,10 +623,15 @@ index 000000000..cdcb96184
 +stub_warning(execve)
 diff --git a/libgloss/m68k/atari/atari-fork.c b/libgloss/m68k/atari/atari-fork.c
 new file mode 100644
-index 000000000..eb687dfe9
+index 000000000..e16436fbf
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-fork.c
-@@ -0,0 +1,14 @@
+@@ -0,0 +1,19 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include "config.h"
 +#include <_ansi.h>
 +#include <_syslist.h>
@@ -542,10 +648,15 @@ index 000000000..eb687dfe9
 +stub_warning(fork)
 diff --git a/libgloss/m68k/atari/atari-fstat.c b/libgloss/m68k/atari/atari-fstat.c
 new file mode 100644
-index 000000000..4fed36a49
+index 000000000..a48a00930
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-fstat.c
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,51 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <sys/stat.h>
 +#include <_ansi.h>
 +#include "atari-gem_errno.h"
@@ -594,14 +705,17 @@ index 000000000..4fed36a49
 +}
 diff --git a/libgloss/m68k/atari/atari-gem_basepage.h b/libgloss/m68k/atari/atari-gem_basepage.h
 new file mode 100644
-index 000000000..ac0695c3d
+index 000000000..461c3ce9b
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-gem_basepage.h
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,58 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#ifndef GEM_BASEPAGE_H
 +#define GEM_BASEPAGE_H
-+
-+//#include <stddef.h>
 +
 +#ifdef __cplusplus
 +extern "C" {
@@ -638,8 +752,8 @@ index 000000000..ac0695c3d
 +	unsigned int p_dlen;		// This LONG contains the length of the data segment.
 +	unsigned char* p_bbase;		// This LONG contains a pointer to the base of the BSS segment.
 +	unsigned int p_blen;		// This LONG contains the length of the BSS segment.
-+	struct DTA* p_dta;					// This LONG contains a pointer to the processes’ DTA.
-+	struct BasePage* p_parent;			// This LONG contains a pointer to the processes’ parent’s basepage.
++	struct DTA* p_dta;			// This LONG contains a pointer to the processes’ DTA.
++	struct BasePage* p_parent;	// This LONG contains a pointer to the processes’ parent’s basepage.
 +	unsigned int p_reserved;	// This LONG is currently unused and is reserved.
 +	char* p_env;				// This LONG contains a pointer to the processes’ environment string.
 +	unsigned char p_undef[80];	// This area contains 80 unused, reserved bytes.
@@ -655,10 +769,15 @@ index 000000000..ac0695c3d
 +#endif // GEM_BASEPAGE_H
 diff --git a/libgloss/m68k/atari/atari-gem_errno.c b/libgloss/m68k/atari/atari-gem_errno.c
 new file mode 100644
-index 000000000..d4c704707
+index 000000000..641a0b212
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-gem_errno.c
-@@ -0,0 +1,90 @@
+@@ -0,0 +1,95 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <errno.h>
 +#include "atari-gem_errno.h"
 +#include <_ansi.h>
@@ -751,10 +870,15 @@ index 000000000..d4c704707
 +}
 diff --git a/libgloss/m68k/atari/atari-gem_errno.h b/libgloss/m68k/atari/atari-gem_errno.h
 new file mode 100644
-index 000000000..c2c346e5f
+index 000000000..c61478dba
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-gem_errno.h
-@@ -0,0 +1,52 @@
+@@ -0,0 +1,57 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#ifndef GEM_ERRNO_DEFINED
 +#define GEM_ERRNO_DEFINED
 +
@@ -809,10 +933,15 @@ index 000000000..c2c346e5f
 +#endif // GEM_ERRNO_DEFINED
 diff --git a/libgloss/m68k/atari/atari-getcwd.c b/libgloss/m68k/atari/atari-getcwd.c
 new file mode 100644
-index 000000000..6cdabf9d0
+index 000000000..37d778e42
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-getcwd.c
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,32 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <unistd.h>
 +#include <errno.h>
 +
@@ -820,26 +949,13 @@ index 000000000..6cdabf9d0
 +#include "atari-gem_errno.h"
 +#include "atari-traps.h"
 +
-+// std functions that will be there when we link later on.
-+void *malloc(size_t);
-+void free(void *);
-+
 +char *getcwd(char *buf, size_t size)
 +{
 +	char *retbuf = buf;
 +	if (retbuf == 0)
 +	{
-+		if (size <= 0)
-+		{
-+			size = 128;
-+		}
-+		// allocate memory
-+		retbuf = (char *)malloc(size);
-+		if (retbuf == 0)
-+		{
-+			errno = EIO;
-+			return 0;
-+		}
++		errno = EIO;
++		return 0;
 +	}
 +
 +	unsigned short drive = trap1_19();
@@ -847,65 +963,23 @@ index 000000000..6cdabf9d0
 +	if (result < 0)
 +	{
 +		gem_error_to_errno(result);
-+		if (retbuf != buf)
-+		{
-+			// free memory
-+			free(retbuf);
-+		}
 +		return 0;
 +	}
 +	retbuf[0] = (char)('A' + drive);
 +	retbuf[1] = ':';
 +	return retbuf;
 +}
-+
-+// Code below is not supported by the newlib posix version.
-+/*
-+
-+char *getwd(char *buf)
-+{
-+	return getcwd(buf, 128);	// Max path of atari st.
-+}
-+
-+char *get_current_dir_name(void)
-+{
-+	char buf[129];
-+	if (getcwd(buf, 128) == 0)
-+	{
-+		// errno already set by getcwd
-+		return 0;
-+	}
-+
-+	int str_len = 0;
-+	while (buf[str_len] != 0) {++str_len;}
-+	if (buf[str_len - 1] == '\\') {buf[--str_len] = 0;}
-+	int last_divider = str_len;
-+	while (buf[last_divider] != '\\') {--last_divider;}
-+
-+	// allocate memory
-+	int namesize = str_len - last_divider; // includes last divider
-+	char* retbuf = (char*)malloc(namesize);
-+	if (retbuf == 0)
-+	{
-+		// errno is already set in malloc
-+		return 0;
-+	}
-+	for (int i = 0; i < namesize - 1; ++i)
-+	{
-+		retbuf[i] = buf[last_divider + 1 + i];
-+	}
-+	retbuf[namesize] = 0;
-+
-+	return retbuf;
-+}
-+*/
-\ No newline at end of file
 diff --git a/libgloss/m68k/atari/atari-getentropy.c b/libgloss/m68k/atari/atari-getentropy.c
 new file mode 100644
-index 000000000..cf99c714d
+index 000000000..0b5b461b9
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-getentropy.c
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,52 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <_ansi.h>
 +#include <_syslist.h>
 +#include <errno.h>
@@ -913,98 +987,96 @@ index 000000000..cf99c714d
 +#include "atari-traps.h"
 +
 +/*
-+    Pseudo random generator taken from:
-+    https://stackoverflow.com/questions/70960826/efficient-32-bit-random-number-generator-in-c
++    Xorshift pseudorandom number generator.
++    https://en.wikipedia.org/wiki/Xorshift
++    Inited with random seed.
 +*/
-+
-+static unsigned int
-+    x = 123456789,
-+    y = 362436069,
-+    z = 521288629,
-+    w = 88675123,
-+    v = 886756453;
-+
-+unsigned int xorshift(void)
-+{
-+    unsigned int t = x ^ (x >> 7);
-+    x = y;
-+    y = z;
-+    z = w;
-+    w = v;
-+    v = (v ^ (v << 6)) ^ (t ^ (t << 13));
-+    return (y + y + 1) * v;
-+}
-+
-+unsigned int xorshift32(void)
-+{
-+    x ^= (x << 13);
-+    x ^= (x >> 17);
-+    return x ^= (x << 5);
-+}
-+
-+void seed()
-+{
-+    x = trap14_11();    // Atari Random func.
-+    v = xorshift32();
-+    w = xorshift32();
-+    z = xorshift32();
-+    y = xorshift32();
-+}
 +
 +int getentropy(void *buf, size_t buflen)
 +{
-+    seed();
++    unsigned int a;
++    unsigned int state[4];
++
++    // Init state
++    a = trap14_11();     // Atari Random func.
++    for (int i = 0; i < 4; ++i)
++    {
++        // xorshift32
++        a ^= (a << 13);
++        a ^= (a >> 17);
++        a ^= (a << 5);
++        state[i] = a;
++    }
++
 +    for (size_t i = 0; i < buflen; ++i)
 +    {
-+        ((unsigned char*)buf)[i] = (unsigned char)xorshift();
++        // xorshift128
++        unsigned int t = state[3];
++        unsigned int s = state[0];
++        state[3] = state[2];
++        state[2] = state[1];
++        state[1] = s;
++
++        t ^= t << 11;
++        t ^= t >> 7;
++        state[0] = t ^ s ^ (s >> 19);
++
++        // use lowest byte (could be optimized to adapt to buf len and output whole 32 bits when possible.)
++        ((unsigned char*)buf)[i] = (unsigned char)state[0];
 +    }
 +
 +    return 0;
 +}
 diff --git a/libgloss/m68k/atari/atari-getpid.c b/libgloss/m68k/atari/atari-getpid.c
 new file mode 100644
-index 000000000..57ee174b8
+index 000000000..98e001eb9
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-getpid.c
-@@ -0,0 +1,9 @@
+@@ -0,0 +1,11 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <_ansi.h>
 +
-+/*
-+ * getpid -- only one process, so just return 1.
-+ */
 +int getpid(void)
 +{
 +	return 1;
 +}
 diff --git a/libgloss/m68k/atari/atari-gettod.c b/libgloss/m68k/atari/atari-gettod.c
 new file mode 100644
-index 000000000..e8b76a969
+index 000000000..5477916a2
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-gettod.c
-@@ -0,0 +1,163 @@
+@@ -0,0 +1,135 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <sys/time.h>
++#include <time.h>
 +#include "atari-gem_errno.h"
 +#include "atari-traps.h"
 +
 +/*
-+ * Formula taken from mktime.c
-+ * Original Author:	G. Haley
-+ */
-+#define _SEC_IN_MINUTE 60L
-+#define _SEC_IN_HOUR 3600L
-+#define _SEC_IN_DAY 86400L
++	Atari can only handle dates from 1980 to 2107.
++	time_t on m68k is 32bit signed, so that gives us an upper limit of 2038.
++	The code below uses that limitation to simplify the code.
++*/
 +
-+static const int _DAYS_BEFORE_MONTH[12] =
-+	{0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
++#define SEC_1900_TO_1980 2524521600
++#define SEC_1900_TO_MAX 0x7fffffff
++#define SECONDS_IN_A_DAY (24 * 60 * 60)
++#define SEC_JAN_AND_FEB ((31 + 29) * SECONDS_IN_A_DAY)	// In a leap year
++#define SECONDS_IN_A_YEAR (365 * SECONDS_IN_A_DAY)
 +
-+#define _ISLEAP(y) (((y) % 4) == 0 && (((y) % 100) != 0 || (((y) + 1900) % 400) == 0))
-+#define _DAYS_IN_YEAR(year) (_ISLEAP(year) ? 366 : 365)
++static const short month_to_day[] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365};
 +
-+int gettimeofday(struct timeval *tv, void *__tz)
++int gettimeofday(struct timeval* tv, void* __tz)
 +{
-+	struct timezone *tz = __tz;
-+	long days = 0;
-+	int year;
++	struct timezone* tz = __tz;
 +	if (tz != 0)
 +	{
 +		// Support for timezone have been removed from linux glibc, so we just fill in a zero timezone.
@@ -1013,123 +1085,91 @@ index 000000000..e8b76a969
 +	}
 +	if (tv != 0)
 +	{
-+		tv->tv_sec = 0;
 +		unsigned short date = trap1_2a();
 +		unsigned short time = trap1_2c();
 +
-+		int tm_year = ((date >> 9) & 0x7f) + 80; // Years since 1900
-+		int tm_mon = ((date >> 5) & 0xf) - 1;
-+		int tm_mday = date & 0x1f;
-+		int tm_hour = ((time >> 11) & 0x1f);
-+		int tm_min = ((time >> 5) & 0x3f);
-+		int tm_sec = (time & 0x1f) * 2;
++		int year = ((date >> 9) & 0x7f);	// from 1980
++		int month = ((date >> 5) & 0xf) - 1;
++		int day = date & 0x1f;
++		int hour = ((time >> 11) & 0x1f);
++		int min = ((time >> 5) & 0x3f);
++		int sec = (time & 0x1f) * 2;
 +
-+		/* compute hours, minutes, seconds */
-+		tv->tv_sec += tm_sec + (tm_min * _SEC_IN_MINUTE) + (tm_hour * _SEC_IN_HOUR);
++		// Days passed in current year
++		time_t days = day + month_to_day[month];
++		// Add days for every passed year
++		days += year * 365;
 +
-+		/* compute days in year */
-+		days += tm_mday - 1;
-+		days += _DAYS_BEFORE_MONTH[tm_mon];
-+		if (tm_mon > 1 && _DAYS_IN_YEAR(tm_year) == 366)
++		// Add days for every passed leap year
++		int months = year * 12 + month;	// total months
++		months -= 2;	// remove januari and februari
++		if (months > 0)
 +		{
-+			days++;
++			// We must have passed at least one leap day.
++			int leap_days = (months / (12*4)) + 1;
++			days += leap_days;
 +		}
 +
-+		/* compute days in other years */
-+		for (year = 70; year < tm_year; year++)
-+		{
-+			days += _DAYS_IN_YEAR(year);
-+		}
-+
-+		/* compute total seconds */
-+		tv->tv_sec += (time_t)days * _SEC_IN_DAY;
-+
++		// Add it all together
++		tv->tv_sec = (((((days * 24) + hour) * 60) + min) * 60) + sec + SEC_1900_TO_1980;
 +		tv->tv_usec = 0;
 +	}
 +	return 0;
 +}
 +
-+/*
-+ * Formula taken from gmtime_r.c
-+ * Original Author: Adapted from tzcode maintained by Arthur David Olson.
-+ */
-+
-+#define EPOCH_ADJUSTMENT_DAYS 719468L
-+/* year to which the adjustment was made */
-+#define ADJUSTED_EPOCH_YEAR 0
-+/* 1st March of year 0 is Wednesday */
-+#define ADJUSTED_EPOCH_WDAY 3
-+/* there are 97 leap years in 400-year periods. ((400 - 97) * 365 + 97 * 366) */
-+#define DAYS_PER_ERA 146097L
-+/* there are 24 leap years in 100-year periods. ((100 - 24) * 365 + 24 * 366) */
-+#define DAYS_PER_CENTURY 36524L
-+/* there is one leap year every 4 years */
-+#define DAYS_PER_4_YEARS (3 * 365 + 366)
-+/* number of days in a non-leap year */
-+#define DAYS_PER_YEAR 365
-+/* number of days in January */
-+#define DAYS_IN_JANUARY 31
-+/* number of days in non-leap February */
-+#define DAYS_IN_FEBRUARY 28
-+/* number of years per era */
-+#define YEARS_PER_ERA 400
-+#define YEAR_BASE 1900
-+
-+int settimeofday(const struct timeval *tv, const struct timezone *tz)
++int settimeofday(const struct timeval* tv, const struct timezone* tz)
 +{
 +	// Support for timezone have been removed from linux glibc, so we just ignore it.
 +	if (tv != 0)
 +	{
-+		long days, rem;
-+		const time_t lcltime = tv->tv_sec;
-+		int era, weekday, year;
-+		unsigned erayear, yearday, month, day;
-+		unsigned long eraday;
-+
-+		days = lcltime / _SEC_IN_DAY + EPOCH_ADJUSTMENT_DAYS;
-+		rem = lcltime % _SEC_IN_DAY;
-+		if (rem < 0)
++		if (tv->tv_sec < SEC_1900_TO_1980 || tv->tv_sec >= SEC_1900_TO_MAX)
 +		{
-+			rem += _SEC_IN_DAY;
-+			--days;
-+		}
-+
-+		/* compute hour, min, and sec */
-+		int tm_hour = (int)(rem / _SEC_IN_HOUR);
-+		rem %= _SEC_IN_HOUR;
-+		int tm_min = (int)(rem / _SEC_IN_MINUTE);
-+		int tm_sec = (int)(rem % _SEC_IN_MINUTE);
-+
-+		/* compute year, month, day & day of year */
-+		/* for description of this algorithm see
-+		 * http://howardhinnant.github.io/date_algorithms.html#civil_from_days */
-+		era = (days >= 0 ? days : days - (DAYS_PER_ERA - 1)) / DAYS_PER_ERA;
-+		eraday = days - era * DAYS_PER_ERA; /* [0, 146096] */
-+		erayear = (eraday - eraday / (DAYS_PER_4_YEARS - 1) + eraday / DAYS_PER_CENTURY -
-+				   eraday / (DAYS_PER_ERA - 1)) /
-+				  365;																/* [0, 399] */
-+		yearday = eraday - (DAYS_PER_YEAR * erayear + erayear / 4 - erayear / 100); /* [0, 365] */
-+		month = (5 * yearday + 2) / 153;											/* [0, 11] */
-+		day = yearday - (153 * month + 2) / 5 + 1;									/* [1, 31] */
-+		month += month < 10 ? 2 : -10;
-+		year = ADJUSTED_EPOCH_YEAR + erayear + era * YEARS_PER_ERA + (month <= 1);
-+
-+		int tm_year = year - YEAR_BASE;
-+		int tm_mon = month;
-+		int tm_mday = day;
-+
-+		if (tm_year < 80 || tm_year > (80 + 0x7f))
-+		{
-+			// TOS cannot handle years before 1980 or after 2107
++			// Outside the ranges we can handle.
 +			gem_error_to_errno(GEM_EBADRQ);
 +			return -1;
 +		}
-+		unsigned short date = (unsigned short)(((tm_year - 80) & 0x7f) << 9);
-+		date |= (unsigned short)(((tm_mon + 1) & 0xf) << 5);
-+		date |= (unsigned short)(tm_mday & 0x1f);
-+		unsigned short time = (unsigned short)((tm_hour & 0x1f) << 11);
-+		time |= (unsigned short)((tm_min & 0x3f) << 5);
-+		time |= (unsigned short)((tm_sec & 0x3e) >> 1);
++
++		time_t seconds = tv->tv_sec - SEC_1900_TO_1980;
++		int year = 0;
++		time_t ysec = SECONDS_IN_A_YEAR;
++		do
++		{
++			ysec = SECONDS_IN_A_YEAR;
++			if ((year % 4) == 0)
++			{
++				ysec += SECONDS_IN_A_DAY;
++			}
++			++year;
++			seconds -= ysec;
++		} while (seconds >= 0);
++		--year;
++		seconds += ysec;
++
++		int minutes = seconds / 60;
++		int hours = minutes / 60;
++		int days = hours / 24;
++		int month = 0;
++		int leap = year % 4;
++		short ld = month_to_day[0];
++		for (int m = 0; m < 12; ++m)
++		{
++			short d = month_to_day[m + 1];
++			if (leap == 0 && m > 0) {d += 1;}
++			if (d > days)
++			{
++				month = m;
++				days -= ld;
++				break;
++			}
++			ld = d;
++		}
++
++		unsigned short date = (unsigned short)(year << 9);
++		date |= (unsigned short)((month + 1) << 5);
++		date |= (unsigned short)days;
++		unsigned short time = (unsigned short)((hours % 24) << 11);
++		time |= (unsigned short)((minutes % 60) << 5);
++		time |= (unsigned short)((seconds % 60) >> 1);
 +
 +		int err;
 +		if ((err = trap1_2b(date)) < 0)
@@ -1147,22 +1187,33 @@ index 000000000..e8b76a969
 +}
 diff --git a/libgloss/m68k/atari/atari-isatty.c b/libgloss/m68k/atari/atari-isatty.c
 new file mode 100644
-index 000000000..94ecc7598
+index 000000000..5ab8b9aff
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-isatty.c
-@@ -0,0 +1,6 @@
+@@ -0,0 +1,12 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <_ansi.h>
++#include "atari-traps.h"
 +
 +int isatty(int fd)
 +{
-+	return fd == 2 ? 1 : 0;
++	return fd == GSH_AUX ? 1 : 0;
 +}
 diff --git a/libgloss/m68k/atari/atari-kill.c b/libgloss/m68k/atari/atari-kill.c
 new file mode 100644
-index 000000000..c532d41a1
+index 000000000..cd1d16065
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-kill.c
-@@ -0,0 +1,11 @@
+@@ -0,0 +1,16 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <unistd.h>
 +#include <_ansi.h>
 +
@@ -1176,10 +1227,15 @@ index 000000000..c532d41a1
 +}
 diff --git a/libgloss/m68k/atari/atari-link.c b/libgloss/m68k/atari/atari-link.c
 new file mode 100644
-index 000000000..4e800437e
+index 000000000..e5a1485e5
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-link.c
-@@ -0,0 +1,14 @@
+@@ -0,0 +1,19 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include "config.h"
 +#include <_ansi.h>
 +#include <_syslist.h>
@@ -1196,10 +1252,15 @@ index 000000000..4e800437e
 +stub_warning(link)
 diff --git a/libgloss/m68k/atari/atari-lseek.c b/libgloss/m68k/atari/atari-lseek.c
 new file mode 100644
-index 000000000..85dbe075a
+index 000000000..fa703253d
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-lseek.c
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,43 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <unistd.h>
 +#include <_ansi.h>
 +#include "atari-gem_errno.h"
@@ -1240,10 +1301,15 @@ index 000000000..85dbe075a
 +}
 diff --git a/libgloss/m68k/atari/atari-mkdir.c b/libgloss/m68k/atari/atari-mkdir.c
 new file mode 100644
-index 000000000..f8f280511
+index 000000000..fdff26b4c
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-mkdir.c
-@@ -0,0 +1,16 @@
+@@ -0,0 +1,21 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <unistd.h>
 +#include <_ansi.h>
 +#include "atari-gem_errno.h"
@@ -1263,10 +1329,15 @@ index 000000000..f8f280511
 \ No newline at end of file
 diff --git a/libgloss/m68k/atari/atari-open.c b/libgloss/m68k/atari/atari-open.c
 new file mode 100644
-index 000000000..da6f5c2ab
+index 000000000..c61071881
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-open.c
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,78 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <unistd.h>
 +#include <_ansi.h>
 +#include "atari-gem_errno.h"
@@ -1291,12 +1362,6 @@ index 000000000..da6f5c2ab
 +// mode is ignored. Those kind of settings is not supported by the st.
 +int open(const char *buf, int flags, int mode)
 +{
-+	/*
-+	#define MAX_PATH 128
-+
-+	char bios_path[MAX_PATH + 1];
-+	char* bios_max_path = bios_path + MAX_PATH;
-+	*/
 +	int bios_handle = -1;
 +	unsigned short bios_mode = (unsigned short)(flags & 0x3); // bits 0-1 the same for st and linux.
 +	int create = flags & O_CREAT;
@@ -1348,10 +1413,15 @@ index 000000000..da6f5c2ab
 +}
 diff --git a/libgloss/m68k/atari/atari-read.c b/libgloss/m68k/atari/atari-read.c
 new file mode 100644
-index 000000000..c27173a8b
+index 000000000..cdff256e7
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-read.c
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,44 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <unistd.h>
 +#include <_ansi.h>
 +#include "atari-gem_errno.h"
@@ -1393,10 +1463,15 @@ index 000000000..c27173a8b
 +}
 diff --git a/libgloss/m68k/atari/atari-readlink.c b/libgloss/m68k/atari/atari-readlink.c
 new file mode 100644
-index 000000000..23933a983
+index 000000000..23514a151
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-readlink.c
-@@ -0,0 +1,15 @@
+@@ -0,0 +1,20 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include "config.h"
 +#include <_ansi.h>
 +#include <_syslist.h>
@@ -1414,10 +1489,15 @@ index 000000000..23933a983
 +stub_warning(readlink)
 diff --git a/libgloss/m68k/atari/atari-rename.c b/libgloss/m68k/atari/atari-rename.c
 new file mode 100644
-index 000000000..a590b68b7
+index 000000000..2d7e62da2
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-rename.c
-@@ -0,0 +1,15 @@
+@@ -0,0 +1,20 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <unistd.h>
 +#include <_ansi.h>
 +#include "atari-gem_errno.h"
@@ -1436,10 +1516,15 @@ index 000000000..a590b68b7
 \ No newline at end of file
 diff --git a/libgloss/m68k/atari/atari-rmdir.c b/libgloss/m68k/atari/atari-rmdir.c
 new file mode 100644
-index 000000000..2a56804ea
+index 000000000..647a5b68f
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-rmdir.c
-@@ -0,0 +1,15 @@
+@@ -0,0 +1,20 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <unistd.h>
 +#include <_ansi.h>
 +#include "atari-gem_errno.h"
@@ -1458,10 +1543,15 @@ index 000000000..2a56804ea
 \ No newline at end of file
 diff --git a/libgloss/m68k/atari/atari-sbrk.c b/libgloss/m68k/atari/atari-sbrk.c
 new file mode 100644
-index 000000000..a01573e2a
+index 000000000..8839cc742
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-sbrk.c
-@@ -0,0 +1,19 @@
+@@ -0,0 +1,24 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <errno.h>
 +#include <_ansi.h>
 +
@@ -1483,10 +1573,15 @@ index 000000000..a01573e2a
 +}
 diff --git a/libgloss/m68k/atari/atari-stat.c b/libgloss/m68k/atari/atari-stat.c
 new file mode 100644
-index 000000000..4c60178a8
+index 000000000..a08273204
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-stat.c
-@@ -0,0 +1,24 @@
+@@ -0,0 +1,29 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <sys/stat.h>
 +#include <unistd.h>
 +#include <_ansi.h>
@@ -1513,10 +1608,15 @@ index 000000000..4c60178a8
 +}
 diff --git a/libgloss/m68k/atari/atari-symlink.c b/libgloss/m68k/atari/atari-symlink.c
 new file mode 100644
-index 000000000..7dfffb5c2
+index 000000000..49bc31886
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-symlink.c
-@@ -0,0 +1,14 @@
+@@ -0,0 +1,19 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include "config.h"
 +#include <_ansi.h>
 +#include <_syslist.h>
@@ -1533,10 +1633,15 @@ index 000000000..7dfffb5c2
 +stub_warning(symlink)
 diff --git a/libgloss/m68k/atari/atari-times.c b/libgloss/m68k/atari/atari-times.c
 new file mode 100644
-index 000000000..dc54eb5f6
+index 000000000..5c825c6ff
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-times.c
-@@ -0,0 +1,32 @@
+@@ -0,0 +1,37 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <time.h>
 +#include <sys/times.h>
 +#include "atari-traps.h"
@@ -1571,10 +1676,15 @@ index 000000000..dc54eb5f6
 +}
 diff --git a/libgloss/m68k/atari/atari-tos.ld b/libgloss/m68k/atari/atari-tos.ld
 new file mode 100644
-index 000000000..60d5783c6
+index 000000000..6bbecc261
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-tos.ld
-@@ -0,0 +1,171 @@
+@@ -0,0 +1,160 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +OUTPUT_FORMAT("elf32-m68k", "elf32-m68k", "elf32-m68k")
 +OUTPUT_ARCH(m68k)
 +INPUT (crti.o crtn.o crt0.o)
@@ -1616,22 +1726,6 @@ index 000000000..60d5783c6
 +		*(.sframe) *(.sframe.*)
 +		*(.gcc_except_table .gcc_except_table.*)
 +		*(.gnu_extab*)
-+
-+/*
-+		PROVIDE_HIDDEN (__preinit_array_start = .);
-+		KEEP (*(.preinit_array))
-+		PROVIDE_HIDDEN (__preinit_array_end = .);
-+
-+		PROVIDE_HIDDEN (__init_array_start = .);
-+		KEEP (*(SORT_BY_INIT_PRIORITY(.init_array.*) SORT_BY_INIT_PRIORITY(.ctors.*)))
-+		KEEP (*(.init_array EXCLUDE_FILE (*crtbegin.o *crtbegin?.o *crtend.o *crtend?.o ) .ctors))
-+		PROVIDE_HIDDEN (__init_array_end = .);
-+
-+		PROVIDE_HIDDEN (__fini_array_start = .);
-+		KEEP (*(SORT_BY_INIT_PRIORITY(.fini_array.*) SORT_BY_INIT_PRIORITY(.dtors.*)))
-+		KEEP (*(.fini_array EXCLUDE_FILE (*crtbegin.o *crtbegin?.o *crtend.o *crtend?.o ) .dtors))
-+		PROVIDE_HIDDEN (__fini_array_end = .);
-+*/
 +
 +		/*
 +			All constructors
@@ -1749,13 +1843,15 @@ index 000000000..60d5783c6
 \ No newline at end of file
 diff --git a/libgloss/m68k/atari/atari-tos.specs b/libgloss/m68k/atari/atari-tos.specs
 new file mode 100644
-index 000000000..b46c823b0
+index 000000000..389146632
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-tos.specs
-@@ -0,0 +1,8 @@
+@@ -0,0 +1,10 @@
++#	Copyright (C) 2025 Mikael Hildenborg
++#	SPDX-License-Identifier: BSD-2-Clause
++
 +# Atari gcc specs
 +
-+# --emit-relocs is used by external software to relocate elf binary to tos executable format.
 +*link:
 ++ --emit-relocs --no-warn-rwx-segments -static --no-warn-execstack -T atari-tos.ld
 +
@@ -1763,11 +1859,15 @@ index 000000000..b46c823b0
 ++ -latari-tos
 diff --git a/libgloss/m68k/atari/atari-traps.c b/libgloss/m68k/atari/atari-traps.c
 new file mode 100644
-index 000000000..2afd73af0
+index 000000000..c387ff144
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-traps.c
-@@ -0,0 +1,307 @@
-+// See trap1_9 for detailed information about trap calls in this file.
+@@ -0,0 +1,311 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include "atari-traps.h"
 +
 +// Store stack pointer in a3, that by Atari documentation will be left untouched by the trap call.
@@ -2076,10 +2176,15 @@ index 000000000..2afd73af0
 +}
 diff --git a/libgloss/m68k/atari/atari-traps.h b/libgloss/m68k/atari/atari-traps.h
 new file mode 100644
-index 000000000..5102ff0a9
+index 000000000..01edb7062
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-traps.h
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,84 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#ifndef TRAPS_DEFINED
 +#define TRAPS_DEFINED
 +
@@ -2161,10 +2266,15 @@ index 000000000..5102ff0a9
 +#endif // TRAPS_DEFINED
 diff --git a/libgloss/m68k/atari/atari-unlink.c b/libgloss/m68k/atari/atari-unlink.c
 new file mode 100644
-index 000000000..72fea378b
+index 000000000..cacafcf5e
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-unlink.c
-@@ -0,0 +1,14 @@
+@@ -0,0 +1,19 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <_ansi.h>
 +#include "atari-gem_errno.h"
 +#include "atari-traps.h"
@@ -2181,10 +2291,15 @@ index 000000000..72fea378b
 +}
 diff --git a/libgloss/m68k/atari/atari-wait.c b/libgloss/m68k/atari/atari-wait.c
 new file mode 100644
-index 000000000..59e5032f4
+index 000000000..946419305
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-wait.c
-@@ -0,0 +1,11 @@
+@@ -0,0 +1,16 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include "config.h"
 +#include <errno.h>
 +#include "libnosys/warning.h"
@@ -2198,10 +2313,15 @@ index 000000000..59e5032f4
 +stub_warning(wait)
 diff --git a/libgloss/m68k/atari/atari-write.c b/libgloss/m68k/atari/atari-write.c
 new file mode 100644
-index 000000000..a542a7f23
+index 000000000..9d6e59ed8
 --- /dev/null
 +++ b/libgloss/m68k/atari/atari-write.c
-@@ -0,0 +1,82 @@
+@@ -0,0 +1,87 @@
++/*
++	Copyright (C) 2025 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
 +#include <unistd.h>
 +#include <_ansi.h>
 +#include "atari-gem_errno.h"
@@ -2285,10 +2405,18 @@ index 000000000..a542a7f23
 +	return numWritten;
 +}
 diff --git a/newlib/configure.host b/newlib/configure.host
-index 89564c0b6..caac420ab 100644
+index 89564c0b6..960cca215 100644
 --- a/newlib/configure.host
 +++ b/newlib/configure.host
-@@ -769,6 +769,10 @@ newlib_cflags="${newlib_cflags} -DCLOCK_PROVIDED -DMALLOC_PROVIDED -DEXIT_PROVID
+@@ -252,7 +252,6 @@ case "${host_cpu}" in
+   mips*)
+ 	machine_dir=mips
+ 	libm_machine_dir=mips
+-	newlib_cflags="${newlib_cflags}"
+ 	;;
+   mmix)
+ 	;;
+@@ -769,6 +768,10 @@ newlib_cflags="${newlib_cflags} -DCLOCK_PROVIDED -DMALLOC_PROVIDED -DEXIT_PROVID
  	newlib_cflags="${newlib_cflags} -DHAVE_RENAME -DHAVE_SYSTEM -DMISSING_SYSCALL_NAMES"
  	syscall_dir=
  	;;
