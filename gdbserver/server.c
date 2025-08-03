@@ -1332,6 +1332,10 @@ void ServerCommandLoop(int si_signo, int si_code)
 	DbgOut("ServerCommandLoop: exiting\r\n");
 }
 
+#pragma GCC diagnostic push
+// Remove out of bounds warning, as the cookie code will trigger false warnings.
+#pragma GCC diagnostic ignored "-Warray-bounds="
+
 // Find out what kind of system we are running on.
 int GetCookies(void)
 {
@@ -1373,6 +1377,7 @@ int GetCookies(void)
 	#undef COOKIE_NAME
 	return 0;
 }
+#pragma GCC diagnostic pop
 
 /*
 	Option handling for this server is made to follow the real gdbserver documentation.

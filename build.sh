@@ -6,7 +6,6 @@
 # The build folder can be deleted after build script have sucessfully finished.
 
 # LTO: enable/disable link time optimizing.
-# Remember that enabling lto requires the inclusion of -flto to CFLAGS for all your compilations or linking will fail. 
 CONF_LTO=--enable-lto
 # Multilib: enable/disable building of libraries for single or multiple motorola cpus.
 CONF_MULTILIB=--enable-multilib
@@ -21,9 +20,12 @@ PATCHES="$PWD/patches"
 NEWLIB_PATH="$PWD/build/newlib-cygwin"
 
 # Versions to download and build.
+# Socat and zlib is only for mac.
 BINUTIL_VERSION="2.44"
 GCC_VERSION="15.1.0"
 NEWLIB_HASH="d61692cbd03baf863b91d23bb3816ce2e891dcc2"
+SOCAT_VERSION="1.7.3.3"
+ZLIB_VERSION="1.3.1"
 
 # Detect system
 unameOut="$(uname -s)"
@@ -49,6 +51,11 @@ elif [ "$machine" == "MinGw" ]; then
 else
 	BUILD_THREADS=$(nproc)
 	SHARED_EXT="so"
+fi
+
+SPECS_FILE=specs
+if [ "$CONF_LTO" == "--enable-lto" ]; then
+SPECS_FILE=specs_lto
 fi
 
 # Make gcc toolchain build dir and enter
@@ -88,6 +95,8 @@ if [ ! -d newlib-cygwin ]; then
 	git checkout $NEWLIB_HASH
 	echo "Patching: newlib"
 	git apply $PATCHES/newlib/$NEWLIB_HASH.patch
+	# Fixing specs will hopefully be integrated in newlib in future.
+	yes | cp -rf $PATCHES/newlib/$SPECS_FILE libgloss/m68k/atari/atari-tos.specs
 	cd ..
 fi
 
@@ -126,6 +135,7 @@ fi
 
 # build binutils
 if [ ! -d b-binutils ]; then
+	echo "Building: binutils"
 	mkdir -p b-binutils
 	cd b-binutils
 	../binutils-$BINUTIL_VERSION/configure --prefix=$PREFIX --target=$TARGET \
@@ -140,6 +150,7 @@ fi
 
 # build gcc
 if [ ! -d b-gcc ]; then
+	echo "Building: gcc"
 	mkdir -p b-gcc
 	cd b-gcc
 	../gcc-$GCC_VERSION/configure --prefix=$PREFIX --target=$TARGET \
@@ -171,6 +182,7 @@ fi
 
 # build newlib
 if [ ! -d b-newlib ]; then
+	echo "Building: newlib"
 	mkdir -p b-newlib
 	cd b-newlib
 	../newlib-cygwin/configure --prefix=$PREFIX --target=$TARGET \
@@ -185,6 +197,7 @@ if [ ! -d b-newlib ]; then
 	make -j$BUILD_THREADS
 	make install
 	cd ..
+
 fi
 
 # Build m68k-atari-elf-prg (elf to prg converter)

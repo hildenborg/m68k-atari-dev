@@ -18,7 +18,7 @@ AS := $(TOOLKIT_BIN)/m68k-atari-elf-as
 LD := $(TOOLKIT_BIN)/m68k-atari-elf-gcc
 ELFTOPRG := $(TOOLKIT_BIN)/m68k-atari-elf-prg
 
-CFLAGS := -Wall -Os -g -m$(CPU) -flto
+CFLAGS := -Wall -Os -g -m$(CPU)
 ASFLAGS := -g --register-prefix-optional -mcpu=$(CPU)
 LDFLAGS := -specs=$(SRC_DIR)/specs.spec
 

@@ -2,6 +2,10 @@
 #include "exceptions.h"
 #include "server.h"
 
+#pragma GCC diagnostic push
+// Remove out of bounds warning, as we do some memory direct stuff here that will trigger false warnings.
+#pragma GCC diagnostic ignored "-Warray-bounds="
+
 #define BREAKPOINT	0x4e40		// Trap #0
 #define NUM_MEMPOINTS 128		// Max number of breakpoints handled by this code.
 
@@ -371,3 +375,5 @@ unsigned char* GetInferiorMemoryAddress(unsigned char* address)
 	// Any address not covered by above if's
 	return address;
 }
+#pragma GCC diagnostic pop
+

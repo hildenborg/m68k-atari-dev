@@ -1,8 +1,4 @@
 *.pyc
 *.Ds_store
 build/
-examples/clibtest/copy.sh
-toolchain/gdbserver/copy.sh
-toolchain/gdbserver/run.sh
-hardware/firmware/.vscode/.cortex-debug.peripherals.state.json
-hardware/firmware/.vscode/.cortex-debug.registers.state.json
+
