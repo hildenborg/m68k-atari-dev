@@ -24,7 +24,7 @@ NEWLIB_PATH="$PWD/build/newlib-cygwin"
 BINUTIL_VERSION="2.44"
 GCC_VERSION="15.1.0"
 NEWLIB_HASH="d61692cbd03baf863b91d23bb3816ce2e891dcc2"
-SOCAT_VERSION="1.7.3.3"
+SOCAT_VERSION="1.7.4.4"
 ZLIB_VERSION="1.3.1"
 
 # Detect system
@@ -120,7 +120,7 @@ if [ "$machine" == "Mac" ]; then
 	# So we check for its existance and if non existing, downloads and builds it.
 	if [ -z $(which socat) ]; then 
 		if [ ! -d socat-$SOCAT_VERSION ]; then
-			curl --output socat-$SOCAT_VERSION.tar.gz "https://github.com/3ndG4me/socat/archive/refs/tags/v$SOCAT_VERSION.tar.gz"
+			curl --output socat-$SOCAT_VERSION.tar.gz "http://www.dest-unreach.org/socat/download/socat-$SOCAT_VERSION.tar.gz"
 			tar -xmf socat-$SOCAT_VERSION.tar.gz
 		fi
 		# Build socat
