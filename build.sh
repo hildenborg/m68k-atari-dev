@@ -8,7 +8,7 @@
 # LTO: enable/disable link time optimizing.
 CONF_LTO=--enable-lto
 # Multilib: enable/disable building of libraries for single or multiple motorola cpus.
-CONF_MULTILIB=--enable-multilib
+CONF_MULTILIB=--disable-multilib
 # Toolchain install dir.
 CONF_INSTALL=$HOME/toolchain
 
@@ -26,6 +26,7 @@ GCC_VERSION="15.1.0"
 NEWLIB_HASH="d61692cbd03baf863b91d23bb3816ce2e891dcc2"
 SOCAT_VERSION="1.7.4.4"
 ZLIB_VERSION="1.3.1"
+TEXINFO_VERSION="7.2"
 
 # Detect system
 unameOut="$(uname -s)"
@@ -104,32 +105,58 @@ if [ "$machine" == "Mac" ]; then
 	# Mac os needs zlib to be able to build binutils correct
 	if [[ ! "$(( gcc -lz) 2>&1)" =~ "_main" ]]; then 
 		if [ ! -d zlib-$ZLIB_VERSION ]; then
+			echo "Downloading: zlib"
 			curl --output zlib-$ZLIB_VERSION.tar.gz https://zlib.net/zlib-$ZLIB_VERSION.tar.gz
+			echo "Extracting: zlib"
 			tar -xmf zlib-$ZLIB_VERSION.tar.gz
 		fi
-		# Build zlib
-		mkdir -p b-zlib
-		cd b-zlib
-		../zlib-$ZLIB_VERSION/configure
-		make -j$BUILD_THREADS
-		make install
-		cd ..
+		if [ ! -d b-zlib ]; then
+			echo "Building: zlib"
+			mkdir -p b-zlib
+			cd b-zlib
+			../zlib-$ZLIB_VERSION/configure
+			make -j$BUILD_THREADS
+			make install
+			cd ..
+		fi
 	fi
 
+	if [ -z $(which makeinfo) ]; then 
+		if [ ! -d texinfo-$TEXINFO_VERSION ]; then
+			echo "Downloading: texinfo"
+			curl --output texinfo-$TEXINFO_VERSION.tar.xz https://ftp.gnu.org/gnu/texinfo/texinfo-$TEXINFO_VERSION.tar.xz
+			echo "Extracting: texinfo"
+			tar -xmf texinfo-$TEXINFO_VERSION.tar.xz
+		fi
+		if [ ! -d b-texinfo ]; then
+			echo "Building: texinfo"
+			mkdir -p b-texinfo
+			cd b-texinfo
+			../texinfo-$TEXINFO_VERSION/configure
+			make -j$BUILD_THREADS
+			make install
+		cd ..
+		fi
+	fi
+	
 	# Mac os does not have socat that we use for connecting hatari and gdb.
 	# So we check for its existance and if non existing, downloads and builds it.
 	if [ -z $(which socat) ]; then 
 		if [ ! -d socat-$SOCAT_VERSION ]; then
+			echo "Downloading: socat"
 			curl --output socat-$SOCAT_VERSION.tar.gz "http://www.dest-unreach.org/socat/download/socat-$SOCAT_VERSION.tar.gz"
+			echo "Extracting: socat"
 			tar -xmf socat-$SOCAT_VERSION.tar.gz
 		fi
-		# Build socat
-		mkdir -p b-socat
-		cd b-socat
-		../socat-$SOCAT_VERSION/configure
-		make -j$BUILD_THREADS
-		make install
-		cd ..
+		if [ ! -d b-socat ]; then
+			echo "Building: socat"
+			mkdir -p b-socat
+			cd b-socat
+			../socat-$SOCAT_VERSION/configure
+			make -j$BUILD_THREADS
+			make install
+			cd ..
+		fi
 	fi
 fi
 
