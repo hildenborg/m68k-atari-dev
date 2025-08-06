@@ -121,24 +121,6 @@ if [ "$machine" == "Mac" ]; then
 		fi
 	fi
 
-	if [ -z $(which makeinfo) ]; then 
-		if [ ! -d texinfo-$TEXINFO_VERSION ]; then
-			echo "Downloading: texinfo"
-			curl --output texinfo-$TEXINFO_VERSION.tar.xz https://ftp.gnu.org/gnu/texinfo/texinfo-$TEXINFO_VERSION.tar.xz
-			echo "Extracting: texinfo"
-			tar -xmf texinfo-$TEXINFO_VERSION.tar.xz
-		fi
-		if [ ! -d b-texinfo ]; then
-			echo "Building: texinfo"
-			mkdir -p b-texinfo
-			cd b-texinfo
-			../texinfo-$TEXINFO_VERSION/configure
-			make -j$BUILD_THREADS
-			make install
-		cd ..
-		fi
-	fi
-	
 	# Mac os does not have socat that we use for connecting hatari and gdb.
 	# So we check for its existance and if non existing, downloads and builds it.
 	if [ -z $(which socat) ]; then 
@@ -170,8 +152,8 @@ if [ ! -d b-binutils ]; then
 	$CONF_LTO \
 	--disable-nls \
 	--disable-werror
-	make -j$BUILD_THREADS
-	make install-strip
+	make MAKEINFO=true
+	make install-strip MAKEINFO=true
 	cd ..
 fi
 
