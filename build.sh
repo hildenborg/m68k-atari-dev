@@ -23,7 +23,7 @@ NEWLIB_PATH="$PWD/build/newlib-cygwin"
 # Socat and zlib is only for mac.
 BINUTIL_VERSION="2.44"
 GCC_VERSION="15.1.0"
-NEWLIB_HASH="d61692cbd03baf863b91d23bb3816ce2e891dcc2"
+NEWLIB_HASH="933d5beec5c5199ec9108bf626e0091897cd1618"
 SOCAT_VERSION="1.7.4.4"
 ZLIB_VERSION="1.3.1"
 TEXINFO_VERSION="7.2"
@@ -94,8 +94,8 @@ if [ ! -d newlib-cygwin ]; then
 	cd newlib-cygwin
 	echo "Checking out: newlib hash $NEWLIB_HASH"
 	git checkout $NEWLIB_HASH
-	echo "Patching: newlib"
-	git apply $PATCHES/newlib/$NEWLIB_HASH.patch
+	#echo "Patching: newlib"
+	#git apply $PATCHES/newlib/$NEWLIB_HASH.patch
 	# Fixing specs will hopefully be integrated in newlib in future.
 	yes | cp -rf $PATCHES/newlib/$SPECS_FILE libgloss/m68k/atari/atari-tos.specs
 	cd ..
