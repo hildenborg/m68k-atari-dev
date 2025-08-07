@@ -25,7 +25,7 @@ $(TARGET): $(OBJS)
 
 # c source
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
-	gcc $(CFLAGS) -I $(M68K_TOOLKIT) -I $(M68K_TOOLKIT)/m68k-elf/include -c $< -o $@
+	gcc $(CFLAGS) -I $(M68K_TOOLKIT) -I $(M68K_TOOLKIT)/m68k-atari-elf/include -c $< -o $@
 
 .PHONY: all
 all: $(TARGET)

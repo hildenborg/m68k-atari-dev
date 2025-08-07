@@ -150,6 +150,7 @@ if [ ! -d b-binutils ]; then
 	../binutils-$BINUTIL_VERSION/configure --prefix=$PREFIX --target=$TARGET \
 	$SYSTEM_SPECIFIC_FLAGS \
 	$CONF_LTO \
+	$CONF_MULTILIB \
 	--disable-nls \
 	--disable-werror
 	make MAKEINFO=true
