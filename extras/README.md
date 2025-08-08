@@ -12,6 +12,7 @@ This example will set up a hello world project with VsCode connected to Hatari.
 This currently do not work on windows and Macos.  
 ### Requirements:
 It assumes that you have Visual Studio Code and Hatari installed.  
+VsCode needs a native gdb debugger. In a terminal, enter: `code --install-extension webfreak.debug` to install.  
 It also needs "socat" which on Ubuntu/Debian can be installed with `sudo apt install socat`.  
 Hatari also needs a "sthd" folder in your home directory.  
 "gdbsrv.ttp" should be copied to "sthd".  
