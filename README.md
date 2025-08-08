@@ -43,10 +43,10 @@ All binaries will be installed in (UserHome)/toolchain/m68k-atari-elf.
 There are a few examples in the [Extras](extras/README.md) folder.
 
 ## TOS specific C/C++ features:
-The stack is defaulted to 2000 bytes deep. This can be changed by adding the following line anywhere in your code:
-`unsigned int _STACK_SIZE = [wanted stack size];`
-The heap is defaulted to use the rest of the available memory. This can be changed by adding the following line anywhere in your code:
-`unsigned int _HEAP_SIZE = [wanted heap size];`
+The stack is defaulted to 2000 bytes deep. This can be changed by adding the following line anywhere in your code:  
+`unsigned int _STACK_SIZE = [wanted stack size];`  
+The heap is defaulted to use the rest of the available memory. This can be changed by adding the following line anywhere in your code:  
+`unsigned int _HEAP_SIZE = [wanted heap size];`  
 
 ## Elf to prg technical:
 Conversion from elf to prg is done in two separate steps: link time and post link time.  
