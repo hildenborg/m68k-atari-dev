@@ -4,6 +4,7 @@
 
 PREFIX=$1
 TARGET=$2
+BUILD_THREADS=$(sysctl -n hw.ncpu)
 
 SOCAT_VERSION="1.7.4.4"
 ZLIB_VERSION="1.3.1"
@@ -47,26 +48,29 @@ if [ -z $(which socat) ]; then
 		cd ..
 	fi
 fi
-  
-if [ -z $(which gdb-multiarch) ]; then 
-	if [ ! -d gdb-$GDB_VERSION ]; then
-		echo "Downloading: gdb"
-		curl --output gdb-$GDB_VERSION.tar.xz "https://ftp.gnu.org/gnu/gdb/gdb-$GDB_VERSION.tar.xz"
-		echo "Extracting: gdb"
-		tar -xmf gdb-$GDB_VERSION.tar.xz
-	fi
-	if [ ! -d b-gdb ]; then
-		echo "Building: gdb"
-		mkdir -p b-gdb
-		cd b-gdb
-		../gdb-$GDB_VERSION/configure --enable-targets=all \
-			--disable-debug \
-			--disable-dependency-tracking \
-			--enable-tui
-		
-		make -j$BUILD_THREADS
-		#make install
-		cd ..
-	fi
-fi
+
+# Building gdb fails on mac.
+# Someone who actually knows and uses mac should have a go at it.
+#
+#if [ -z $(which gdb-multiarch) ]; then 
+#	if [ ! -d gdb-$GDB_VERSION ]; then
+#		echo "Downloading: gdb"
+#		curl --output gdb-$GDB_VERSION.tar.xz "https://ftp.gnu.org/gnu/gdb/gdb-$GDB_VERSION.tar.xz"
+#		echo "Extracting: gdb"
+#		tar -xmf gdb-$GDB_VERSION.tar.xz
+#	fi
+#	if [ ! -d b-gdb ]; then
+#		echo "Building: gdb"
+#		mkdir -p b-gdb
+#		cd b-gdb
+#		../gdb-$GDB_VERSION/configure --enable-targets=all \
+#			--disable-debug \
+#			--disable-dependency-tracking \
+#			--enable-tui
+#		
+#		make -j$BUILD_THREADS all-gdb
+#		make install-gdb
+#		cd ..
+#	fi
+#fi
 
