@@ -1,0 +1,26 @@
+From 82172715c232c6d322af0719cc45514464428ab5 Mon Sep 17 00:00:00 2001
+From: Mikael Hildenborg <micael@hildenborg.com>
+Date: Sun, 10 Aug 2025 08:49:23 +0200
+Subject: [PATCH 1/1] m68k-atari-elf: fixed wrong number of seconds between
+ 1900 and 1980.
+
+---
+ libgloss/m68k/atari/atari-gettod.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libgloss/m68k/atari/atari-gettod.c b/libgloss/m68k/atari/atari-gettod.c
+index 5477916a2..75139ed8c 100644
+--- a/libgloss/m68k/atari/atari-gettod.c
++++ b/libgloss/m68k/atari/atari-gettod.c
+@@ -14,7 +14,7 @@
+ 	The code below uses that limitation to simplify the code.
+ */
+ 
+-#define SEC_1900_TO_1980 2524521600
++#define SEC_1900_TO_1980 315529200
+ #define SEC_1900_TO_MAX 0x7fffffff
+ #define SECONDS_IN_A_DAY (24 * 60 * 60)
+ #define SEC_JAN_AND_FEB ((31 + 29) * SECONDS_IN_A_DAY)	// In a leap year
+-- 
+2.43.0
+

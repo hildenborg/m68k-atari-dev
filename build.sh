@@ -22,7 +22,7 @@ NEWLIB_PATH="$PWD/build/newlib-cygwin"
 # Versions to download and build.
 BINUTIL_VERSION="2.44"
 GCC_VERSION="15.1.0"
-NEWLIB_HASH="933d5beec5c5199ec9108bf626e0091897cd1618"
+NEWLIB_HASH="f13e8e21599ff12ea76980d6a8b19b0a5ebe9bed"
 
 # Detect system
 unameOut="$(uname -s)"
@@ -90,8 +90,8 @@ if [ ! -d newlib-cygwin ]; then
 	cd newlib-cygwin
 	echo "Checking out: newlib hash $NEWLIB_HASH"
 	git checkout $NEWLIB_HASH
-	#echo "Patching: newlib"
-	#git apply $PATCHES/newlib/$NEWLIB_HASH.patch
+	echo "Patching: newlib"
+	git apply $PATCHES/newlib/0001-m68k-atari-elf-fixed-wrong-number-of-seconds-between.patch
 	# Fixing specs will hopefully be integrated in newlib in future.
 	yes | cp -rf $PATCHES/newlib/$SPECS_FILE libgloss/m68k/atari/atari-tos.specs
 	cd ..
