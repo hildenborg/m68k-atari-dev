@@ -20,13 +20,9 @@ PATCHES="$PWD/patches"
 NEWLIB_PATH="$PWD/build/newlib-cygwin"
 
 # Versions to download and build.
-# Socat and zlib is only for mac.
 BINUTIL_VERSION="2.44"
 GCC_VERSION="15.1.0"
 NEWLIB_HASH="933d5beec5c5199ec9108bf626e0091897cd1618"
-SOCAT_VERSION="1.7.4.4"
-ZLIB_VERSION="1.3.1"
-TEXINFO_VERSION="7.2"
 
 # Detect system
 unameOut="$(uname -s)"
@@ -102,44 +98,7 @@ if [ ! -d newlib-cygwin ]; then
 fi
 
 if [ "$machine" == "Mac" ]; then
-	# Mac os needs zlib to be able to build binutils correct
-	if [[ ! "$(( gcc -lz) 2>&1)" =~ "_main" ]]; then 
-		if [ ! -d zlib-$ZLIB_VERSION ]; then
-			echo "Downloading: zlib"
-			curl --output zlib-$ZLIB_VERSION.tar.gz https://zlib.net/zlib-$ZLIB_VERSION.tar.gz
-			echo "Extracting: zlib"
-			tar -xmf zlib-$ZLIB_VERSION.tar.gz
-		fi
-		if [ ! -d b-zlib ]; then
-			echo "Building: zlib"
-			mkdir -p b-zlib
-			cd b-zlib
-			../zlib-$ZLIB_VERSION/configure
-			make -j$BUILD_THREADS
-			make install
-			cd ..
-		fi
-	fi
-
-	# Mac os does not have socat that we use for connecting hatari and gdb.
-	# So we check for its existance and if non existing, downloads and builds it.
-	if [ -z $(which socat) ]; then 
-		if [ ! -d socat-$SOCAT_VERSION ]; then
-			echo "Downloading: socat"
-			curl --output socat-$SOCAT_VERSION.tar.gz "http://www.dest-unreach.org/socat/download/socat-$SOCAT_VERSION.tar.gz"
-			echo "Extracting: socat"
-			tar -xmf socat-$SOCAT_VERSION.tar.gz
-		fi
-		if [ ! -d b-socat ]; then
-			echo "Building: socat"
-			mkdir -p b-socat
-			cd b-socat
-			../socat-$SOCAT_VERSION/configure
-			make -j$BUILD_THREADS
-			make install
-			cd ..
-		fi
-	fi
+	../macos-additionals.sh $PREFIX $TARGET
 fi
 
 # build binutils
