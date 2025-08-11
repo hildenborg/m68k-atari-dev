@@ -139,6 +139,9 @@ if [ ! -d b-gcc ]; then
 	--with-headers=$NEWLIB_PATH/newlib/libc/include
 	make -j$BUILD_THREADS
 	make install-strip
+	# --with-headers copies headers to sys-include during gcc build but do not remove them after build, so we have to do it.
+	# Thanks to Thorsten Otto for pointing that out.
+	rm -rf $PREFIX/$TARGET/sys-include
 	
 	# Check if we have built for lto (check if lto plugin exists).
 	if [ -f $PREFIX/libexec/gcc/$TARGET/$GCC_VERSION/liblto_plugin.$SHARED_EXT ]; then
