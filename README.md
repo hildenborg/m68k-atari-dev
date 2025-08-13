@@ -43,10 +43,20 @@ All binaries will be installed in (UserHome)/toolchain/m68k-atari-elf.
 There are a few examples in the [Extras](extras/README.md) folder.
 
 ## TOS specific C/C++ features:
-The stack is defaulted to 2000 bytes deep. This can be changed by adding the following line anywhere in your code:  
-`unsigned int _STACK_SIZE = [wanted stack size];`  
-The heap is defaulted to use the rest of the available memory. This can be changed by adding the following line anywhere in your code:  
-`unsigned int _HEAP_SIZE = [wanted heap size];`  
+Stack and heap settings are set in a way that should be compatible with mintlib.  
+A portion of memory is reserved and shared between the heap and the stack.  
+The heap starts at the bottom of the shared memory and the stack starts at the top, and they grow towards eachother.  
+A safety check for memory allocations is done to make sure that memory is not allocated and overwriting the stack.  
+The symbol: "_stksize" defines how much memory that is reserved for stack **and** heap using the following scheme:
+1. If "_stksize" is undefined, then all available memory is reserved.
+2. If `int _stksize = SIZE;` is defined anywhere in the code, then "SIZE" is used in this way:
+   * SIZE == 0: then MINKEEP (64KB) memory is reserved.
+   * SIZE == 1: then 1/4 of all memory is reserved.
+   * SIZE == 2: then 2/4 of all memory is reserved.
+   * SIZE == 3: then 3/4 of all memory is reserved.
+   * SIZE >= 4: then SIZE memory is reserved.
+   * SIZE == -1, then all available memory is reserved (for mintlib compatibillity).
+   * SIZE < -1, then -SIZE memory is reserved (for mintlib compatibillity).
 
 ## Elf to prg technical:
 Conversion from elf to prg is done in two separate steps: link time and post link time.  

@@ -8,7 +8,3 @@
 ---
 > MYCFLAGS= -Os -m68000
 > MYLDFLAGS= -m68000
-26c26
-< MYOBJS=
----
-> MYOBJS= stack.o

@@ -5,7 +5,6 @@ This is a minimal example, showing how to compile a "hello world" C program and 
 This example builds the lua language for Atari.  
 Run the `./download_and_build_lua.sh` script to do just that.  
 The script will modify the lua code to properly build for Atari.  
-Note the "stack.c" file that is added to the project, to increase the stack depth from the default.  
 
 ## vscode_hatari:
 This example will set up a hello world project with VsCode connected to Hatari.  

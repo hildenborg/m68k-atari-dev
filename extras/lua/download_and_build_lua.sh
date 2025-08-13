@@ -19,7 +19,6 @@ cd lua-5.4.8
 # Apply patches that sets correct build flags
 patch Makefile $SDIR/makefile.diff
 patch src/Makefile $SDIR/src_makefile.diff
-yes | cp -rf $SDIR/stack.c src/stack.c
 
 # Build lua
 make
