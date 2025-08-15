@@ -1,6 +1,6 @@
 /*
 	m68k compatible.
-	Current Serial implementation is specific to detecting CTRL-C on Stari ST/STE/TT.
+	Current Serial implementation is specific to detecting CTRL-C on Atari ST/STE/TT.
 */
 	.global registers
 	.global Exception
@@ -75,8 +75,10 @@ o\name:
 \name:
 	tst.w	CtrlC_enable
 	beq.s	o\name
+	btst	#7, 0xfffffa2b.w
+	beq.s	o2\name
 	cmp.b	#3, 0xfffffa2f.w	| CTRL-C from gdb
-	bne.s	o\name
+	bne.s	o2\name
 	ori.w	#0x700, sr
 	move.l	a7, exception_a7
 	pea		\num
@@ -85,20 +87,15 @@ o\name:
 	andi.w	#0xf8ff, d0
 	or.w	srvIrqLevel, d0
 	move.w	d0, sr
-	/*
-		We need to make sure that the system have handled the serial data correctly,
-		or we will not be able to use serial com properly in gdbserver.
-		So we do a bit of a hack here to fake an irq call to the system handler.
-	*/
-	move.l	#r\name, -(a7)
-	move.w	d0, -(a7)
-	jmp		o\name
-r\name:
+	clr.w	CtrlC_enable		| must do this before we enable irq again.
+	move.b	#0xef, 0xfffffa0f.w	| enable irq again so serial comm works in server.
 	jsr		Exception
 	ori.w	#0x700, sr
 	jsr		RestoreState
 	move.l	exception_a7, a7
-	| We cannot jump to the system handler now as we have stolen the data.
+	rte
+o2\name:
+	move.b	#0xef, 0xfffffa0f.w
 	rte
 o\name:
 	jmp 	0x12345678
