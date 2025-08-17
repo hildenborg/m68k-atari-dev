@@ -313,19 +313,19 @@ int LoadInferior(const char* fileName, const char* cmdLine, const char* environm
 
 bool inferiorTerminatedByServer = false;
 
-bool RunInferior(void)
+bool RunInferior(int* return_code)
 {
 	DbgOut("RunInferior: Started\r\n");
 	// Run inferior while saving and restoring various system properties.
 	inferiorState = RUNNING;
 	inferiorTerminatedByServer = false;
-	int killReason = Pexec(PE_GOTHENFREE, 0, (const char*)inferiorBasePage, 0);
+	*return_code = Pexec(PE_GOTHENFREE, 0, (const char*)inferiorBasePage, 0);
 	// Returning from a terminated inferior
 	inferiorState = NOT_LOADED;
 	inferiorBasePage = NULL;	// inferior have been unloaded.
 	if (inferiorTerminatedByServer)
 	{
-		if (killReason == -1)
+		if (*return_code == -1)
 		{
 			// Bad error, need to exit the extended remote protocol if set, so we will exit the main gdbserver loop.
 			extendedMode = false;
@@ -1294,12 +1294,15 @@ void ServerCommandLoop(int si_signo, int si_code)
 		EnableCtrlC(true);	// So we can break with Ctrl-C
 		if (inferiorState == LOADED)
 		{
-			if (!RunInferior())	// Returns after inferior is terminated.
+			int return_code = 0;
+			if (!RunInferior(&return_code))	// Returns after inferior is terminated.
 			{
-				// Inferior terminated itself. Report stop code to gdb.
+				// Inferior terminated itself. 
+				// Report process exit and inferior return code to gdb.
 				outPacketLength = 0;
-				WriteString("X01");
-				TransmitPacket(false);
+				WriteChar('W');
+				WriteByte((unsigned char)return_code);
+				TransmitPacket(true);	// We don't expect any answer.
 			}
 		}
 		else
