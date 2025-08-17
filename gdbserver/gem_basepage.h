@@ -1,8 +1,6 @@
 #ifndef GEM_BASEPAGE_H
 #define GEM_BASEPAGE_H
 
-//#include <stddef.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif

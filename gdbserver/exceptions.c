@@ -1,3 +1,4 @@
+#include "gdb_signals.h"
 #include "bios_calls.h"
 #include "exceptions.h"
 #include "server.h"
@@ -129,24 +130,24 @@ int IsBreakpoint(unsigned short* addr)
 
 void Exception(int num)
 {
-	int si_signo = SIGINT;
+	int si_signo = GDB_SIGINT;
 	int si_code = 0;
 	switch (num)
 	{
 		case 2:		// BusError
-			si_signo = SIGBUS;
+			si_signo = GDB_SIGBUS;
 			si_code = BUS_ADRALN;
 			break;
 		case 3:		// AddressError
-			si_signo = SIGBUS;
+			si_signo = GDB_SIGBUS;
 			si_code = BUS_ADRERR;
 			break;
 		case 4:		// IllegalInstruction
-			si_signo = SIGILL;
+			si_signo = GDB_SIGILL;
 			si_code = ILL_ILLOPC;
 			break;
 		case 5:		// DivisionByZero
-			si_signo = SIGFPE;
+			si_signo = GDB_SIGFPE;
 			si_code = FPE_INTDIV;
 			break;
 		/*
@@ -156,24 +157,24 @@ void Exception(int num)
 			break;
 		*/
 		case 7:		// TrapV
-			si_signo = SIGFPE;
+			si_signo = GDB_SIGFPE;
 			si_code = FPE_INTOVF;
 			break;
 		case 8:		// PrivilegeViolation
-			si_signo = SIGILL;
+			si_signo = GDB_SIGILL;
 			si_code = ILL_PRVOPC;
 			break;
 		case 9:		// Trace
-			si_signo = SIGTRAP;
+			si_signo = GDB_SIGTRAP;
 			si_code = TRAP_TRACE;
 			break;
 		case 31:	// NMI
-			si_signo = SIGBUS;
+			si_signo = GDB_SIGBUS;
 			si_code = BUS_OBJERR;
 			break;
 		case 32:	// BreakPoint
 			{
-				si_signo = SIGTRAP;
+				si_signo = GDB_SIGTRAP;
 				si_code = TRAP_BRKPT;
 				/*
 					When we set a breakpoint, we replace a word at the specified address with trap #0.
@@ -194,11 +195,11 @@ void Exception(int num)
 			}
 			break;
 		case 0x4c:	// SerialInput CTRL-C
-			si_signo = SIGINT;
+			si_signo = GDB_SIGINT;
 			si_code = 0;
 			break;
 		default:	// Anything else.
-			si_signo = SIGINT;
+			si_signo = GDB_SIGINT;
 			si_code = 0;
 			break;
 	}

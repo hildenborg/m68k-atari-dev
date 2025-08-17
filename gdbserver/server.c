@@ -78,9 +78,9 @@
 //#define QStartNoAckMode
 
 #define qXfer_features
-#include <unistd.h>
-#include <fcntl.h>
+#include <stddef.h>
 #include <stdbool.h>
+#include "gdb_signals.h"
 #include "bios_calls.h"
 #include "server.h"
 #include "exceptions.h"
@@ -339,7 +339,7 @@ void __attribute__ ((noreturn)) TerminateInferior(int si_signo)
 {
 	DbgOut("TerminateInferior: Terminating...\r\n");
 	inferiorTerminatedByServer = true;
-	Pterm(si_signo == SIGABRT ? -1 : -32);
+	Pterm(si_signo == GDB_SIGABRT ? -1 : -32);
 	// The code execution will not continue here. It will continue after Pexec() in RunInferior().
 }
 
@@ -654,7 +654,7 @@ void WriteError(int e)
 
 void WriteStop(int si_signo, int si_code)
 {
-	if (si_signo == SIGTRAP && si_code == TRAP_BRKPT)
+	if (si_signo == GDB_SIGTRAP && si_code == TRAP_BRKPT)
 	{
 		// Software breakpoint hit.
 		WriteChar('T');
@@ -1091,7 +1091,7 @@ void ServerCommandLoop(int si_signo, int si_code)
 
 	// Send response to GDB if needed.
 	outPacketLength = 0;
-	if (si_signo == SIGUSR1)
+	if (si_signo == GDB_SIGUSR1)
 	{
 		// We come here when called from ServerMain.
 		// This is the only time when ServerCommandLoop isn't run in supervisor mode.
@@ -1119,7 +1119,7 @@ void ServerCommandLoop(int si_signo, int si_code)
 			ConOutVal("si_signo", (unsigned int)si_signo);
 			ConOutVal("si_code", (unsigned int)si_code);
 			OutputCrashInfo();
-			si_signo = SIGABRT;
+			si_signo = GDB_SIGABRT;
 			loopState = KILL;
 		}
 		// Write stop packet to gdb.
@@ -1567,7 +1567,7 @@ int ServerMain(int argc, char** argv)
 				}
 				loadInferiorRequested = false;
 			}
-			ServerCommandLoop(SIGUSR1, userCodeForCommandLoop);
+			ServerCommandLoop(GDB_SIGUSR1, userCodeForCommandLoop);
 			DiscardAllBreakpoints();
 			CleanupKeyboardAcia();
 			ret = 0;

@@ -1,7 +1,6 @@
 #ifndef EXCEPTIONS_DEFINED
 #define EXCEPTIONS_DEFINED
 
-#include <signal.h>
 #include <stdbool.h>
 
 #ifdef __cplusplus
@@ -52,42 +51,6 @@ int ASM_ExceptionSafeMemoryRead(unsigned char* address, unsigned char* c);
 int ASM_ExceptionSafeMemoryWrite(unsigned char* address, unsigned char c);
 
 unsigned char ASM_CaptureMfpData(unsigned char* address);
-
-#ifndef BUS_ADRALN
-#define BUS_ADRALN	1
-#endif
-
-#ifndef BUS_ADRERR
-#define BUS_ADRERR	2
-#endif
-
-#ifndef ILL_ILLOPC
-#define ILL_ILLOPC	3
-#endif
-
-#ifndef FPE_INTDIV
-#define FPE_INTDIV	4
-#endif
-
-#ifndef FPE_INTOVF
-#define FPE_INTOVF	5
-#endif
-
-#ifndef ILL_PRVOPC
-#define ILL_PRVOPC	6
-#endif
-
-#ifndef TRAP_TRACE
-#define TRAP_TRACE	7
-#endif
-
-#ifndef BUS_OBJERR
-#define BUS_OBJERR	8
-#endif
-
-#ifndef TRAP_BRKPT
-#define TRAP_BRKPT	9
-#endif
 
 #ifdef __cplusplus
 }
