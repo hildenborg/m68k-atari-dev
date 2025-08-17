@@ -606,6 +606,10 @@ void TransmitPacket(bool skipAck)
 			DbgRemOut("\r\n\tError - Ack not OK!\r\n");
 		}
 	}
+	else
+	{
+		DbgRemOut("\r\n");
+	}
 }
 
 #define WriteChar(c) outPacket[outPacketLength++] = c
