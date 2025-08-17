@@ -327,11 +327,20 @@ void LoadMemoryRegisters(unsigned int inferior)
 	#undef MFP_CHAR
 }
 
-// This method make sure to return apointer to the data that would have been used by the inferior,
+// This method make sure to return a pointer to the data that would have been used by the inferior,
 // and not the one currently used by the server.
+// The addresses comes from gdb, and never from the inferior.
+// However, we still cannot trust that the addresses are "clean" and do not use the upper 8 bits
+// on a 24bit address bus.
 unsigned char* GetInferiorMemoryAddress(unsigned char* address)
 {
 	unsigned int la = (unsigned int)address;
+	if (Cookie_CPU < 20)
+	{
+		// Need to properly set the upper 8 bits.
+		//la = (la & 0x800000) ? la | 0xff000000 : la & 0xffffff;
+		la = (unsigned int)(((int)la << 8) >> 8);
+	}
 	if (la < 0x8000)
 	{
 		// 0x0000.w to 0x7fff.w
