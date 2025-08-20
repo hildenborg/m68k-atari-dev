@@ -251,7 +251,7 @@ void StoreMemoryRegisters(unsigned int inferior)
 	unsigned int* sysLongs = inferior == 0 ? serverSysLongs : inferiorSysLongs;
 	unsigned int* vdoLongs = inferior == 0 ? serverVdoLongs : inferiorVdoLongs;
 	unsigned char* vdoChars = inferior == 0 ? serverVdoChars : inferiorVdoChars;
-	unsigned char* mfpChars = inferior == 0 ? serverMfpChars : inferiorMfpChars;
+//	unsigned char* mfpChars = inferior == 0 ? serverMfpChars : inferiorMfpChars;
 	#define SYS_LONG(address) *sysLongs++ = *((unsigned int*)address)
 	#define VDO_LONG(address) *vdoLongs++ = *((unsigned int*)address)
 	#define VDO_CHAR(address) *vdoChars++ = *((unsigned char*)address)
@@ -271,6 +271,7 @@ void StoreMemoryRegisters(unsigned int inferior)
 	{
 		VDO_LONG(i);
 	}
+	/*
 	for (unsigned int i = 0xfffffa03; i <= 0xfffffa1d; i += 2)
 	{
 		MFP_CHAR(i);
@@ -279,6 +280,7 @@ void StoreMemoryRegisters(unsigned int inferior)
 	{
 		*mfpChars++ = ASM_CaptureMfpData((unsigned char*)i);
 	}
+	*/
 
 	SYS_LONG(0x44e);
 	
@@ -294,7 +296,7 @@ void LoadMemoryRegisters(unsigned int inferior)
 	unsigned int* sysLongs = inferior == 0 ? serverSysLongs : inferiorSysLongs;
 	unsigned int* vdoLongs = inferior == 0 ? serverVdoLongs : inferiorVdoLongs;
 	unsigned char* vdoChars = inferior == 0 ? serverVdoChars : inferiorVdoChars;
-	unsigned char* mfpChars = inferior == 0 ? serverMfpChars : inferiorMfpChars;
+//	unsigned char* mfpChars = inferior == 0 ? serverMfpChars : inferiorMfpChars;
 	#define SYS_LONG(address) *((unsigned int*)address) = *sysLongs++
 	#define VDO_LONG(address) *((unsigned int*)address) = *vdoLongs++
 	#define VDO_CHAR(address) *((unsigned char*)address) = *vdoChars++
@@ -314,11 +316,12 @@ void LoadMemoryRegisters(unsigned int inferior)
 	{
 		VDO_LONG(i);
 	}
+	/*
 	for (unsigned int i = 0xfffffa03; i <= 0xfffffa25; i += 2)
 	{
 		MFP_CHAR(i);
 	}
-
+	*/
 	SYS_LONG(0x44e);
 	
 	#undef SYS_LONG

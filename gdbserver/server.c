@@ -1493,28 +1493,6 @@ int HandleOptions(int argc, char** argv)
 	return result;
 }
 
-/*
-	Many atari programs will leave the keyboard acia in a hanging state.
-	So this little function cleans it up.
-*/
-volatile void CleanupKeyboardAcia(void )
-{
-	unsigned char acia_reset_command[2] = {0x80, 0x01};
-	__asm__ volatile (
-		"move.l		%0, %%a7@-\n\t"
-		"move.w		#1, %%a7@-\n\t"
-		"move.w		#0x19, %%a7@-\n\t"
-		"trap		#1\n\t"
-		"lea		%%a7@(8), %%a7\n\t"
-		:			
-		: "r" (acia_reset_command)				
-		:);				
-	while (Bconstat(DEV_CON) != 0)
-	{
-		Bconin(DEV_CON);
-	}
-}
-
 int ServerMain(int argc, char** argv)
 {
 	DbgOut("ServerMain: Server initing.\r\n");
@@ -1576,7 +1554,6 @@ int ServerMain(int argc, char** argv)
 			}
 			ServerCommandLoop(GDB_SIGUSR1, userCodeForCommandLoop);
 			DiscardAllBreakpoints();
-			CleanupKeyboardAcia();
 			ret = 0;
 		} while ((extendedMode && !run_once) || option_multi);
 	}
