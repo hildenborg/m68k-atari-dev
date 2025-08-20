@@ -139,11 +139,6 @@ ASM_InitExceptions:
 	| Get initial value
 	move.b	0xfffffa03.w, Mfp_ActiveEdgeRegister
 
-	pea		0.w		| server vectors
-	jsr		StoreVectors
-	jsr		StoreMemoryRegisters
-	lea		4(a7), a7
-	
 	HookVector	BusError
 	HookVector	AddressError
 	HookVector	IllegalInstruction
@@ -156,6 +151,11 @@ ASM_InitExceptions:
 	HookVector	BreakPoint
 	HookVector	MfpDcd
 	HookVector	SerialInput
+
+	pea		0.w		| server vectors
+	jsr		StoreVectors
+	jsr		StoreMemoryRegisters
+	lea		4(a7), a7
 
 	move.w	(a7)+, sr
 	moveq	#0, d0
@@ -179,13 +179,14 @@ ASM_RestoreExceptions:
 	UnHookVector	NMI
 	
 	UnHookVector	BreakPoint
-	| UnHookVector	MfpDcd 		| Not needed, it is included in LoadVectors
-	| UnHookVector	SerialInput | Not needed, it is included in LoadVectors
 	
 	pea		0.w		| server vectors
 	jsr		LoadVectors
 	jsr		LoadMemoryRegisters
 	lea		4(a7), a7
+
+	UnHookVector	MfpDcd
+	UnHookVector	SerialInput
 
 	move.w	(a7)+, sr
 	moveq	#0, d0
