@@ -57,10 +57,10 @@
 		
 	To add/change support for hardware memory registers, look at:
 		
-		exceptions.c:
+		context.c:
 		StoreMemoryRegisters
-		LoadMemoryRegisters
-		GetInferiorMemoryAddress
+		RestoreMemoryRegisters
+		InferiorContextMemoryAddress
 		
 */
 
@@ -84,6 +84,7 @@
 #include "bios_calls.h"
 #include "server.h"
 #include "exceptions.h"
+#include "context.h"
 #include "target_xml.h"
 
 typedef enum
@@ -835,7 +836,7 @@ void WriteMemory(void)
 		char* ptr = inPacket + offset;
 		for (unsigned int i = 0; i < len; ++i)
 		{
-			unsigned char* infAddr = GetInferiorMemoryAddress(addr + i);
+			unsigned char* infAddr = InferiorContextMemoryAddress(addr + i);
 			ASM_ExceptionSafeMemoryWrite(infAddr, HexToByte(ptr));
 			ptr += 2;
 		}
@@ -855,7 +856,7 @@ void ReadMemory(void)
 	{
 		for (unsigned int i = 0; i < len; ++i)
 		{
-			unsigned char* infAddr = GetInferiorMemoryAddress(addr + i);
+			unsigned char* infAddr = InferiorContextMemoryAddress(addr + i);
 			unsigned char membyte;
 			ASM_ExceptionSafeMemoryRead(infAddr, &membyte);
 			WriteByte(membyte);
@@ -1515,7 +1516,8 @@ int ServerMain(int argc, char** argv)
 	// Set DTR to ON
 	Ongibit(GI_DTR);
 #ifndef DISABLE_EXCEPTIONS
-	exceptionsInited = InitExceptions();
+	CreateServerContext();
+	exceptionsInited = 0;
 #else
 	exceptionsInited = 1;
 #endif // DISABLE_EXCEPTIONS
@@ -1563,7 +1565,7 @@ int ServerMain(int argc, char** argv)
 	}
 	if (exceptionsInited == 0)
 	{
-		RestoreExceptions();
+		DestroyServerContext();
 	}
 	// Set DTR to OFF
 	Offgibit(GI_DTR);

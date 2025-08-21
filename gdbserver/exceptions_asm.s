@@ -10,10 +10,8 @@
 	.global Cookie_VDO
 	.global Cookie_FPU
 	.global Cookie_MCH
-	.global StoreVectors
-	.global LoadVectors
-	.global StoreMemoryRegisters
-	.global LoadMemoryRegisters
+	.global SwitchToServerContext
+	.global SwitchToInferorContext
 
 	.macro HookVector name
 	move.l	n\name, o\name + 2
@@ -30,14 +28,14 @@
 	ori.w	#0x700, sr
 	move.l	a7, exception_a7
 	pea		\num
-	jsr		SaveState
+	jsr		SaveStateAndSwitchContext
 	move.w	sr, d0
 	andi.w	#0xf8ff, d0
 	or.w	srvIrqLevel, d0
 	move.w	d0, sr
 	jsr		Exception
 	ori.w	#0x700, sr
-	jsr		RestoreState
+	jsr		RestoreStateAndSwitchContext
 	move.l	exception_a7, a7
 o\name:
 	jmp 	0x12345678
@@ -52,14 +50,14 @@ o\name:
 	ori.w	#0x700, sr
 	move.l	a7, exception_a7
 	pea		\num
-	jsr		SaveState
+	jsr		SaveStateAndSwitchContext
 	move.w	sr, d0
 	andi.w	#0xf8ff, d0
 	or.w	srvIrqLevel, d0
 	move.w	d0, sr
 	jsr		Exception
 	ori.w	#0x700, sr
-	jsr		RestoreState
+	jsr		RestoreStateAndSwitchContext
 	move.l	exception_a7, a7
 	rte
 o\name:
@@ -82,7 +80,7 @@ o\name:
 	ori.w	#0x700, sr
 	move.l	a7, exception_a7
 	pea		\num
-	jsr		SaveState
+	jsr		SaveStateAndSwitchContext
 	move.w	sr, d0
 	andi.w	#0xf8ff, d0
 	or.w	srvIrqLevel, d0
@@ -91,7 +89,7 @@ o\name:
 	move.b	#0xef, 0xfffffa0f.w	| enable irq again so serial comm works in server.
 	jsr		Exception
 	ori.w	#0x700, sr
-	jsr		RestoreState
+	jsr		RestoreStateAndSwitchContext
 	move.l	exception_a7, a7
 	rte
 o2\name:
@@ -152,11 +150,6 @@ ASM_InitExceptions:
 	HookVector	MfpDcd
 	HookVector	SerialInput
 
-	pea		0.w		| server vectors
-	jsr		StoreVectors
-	jsr		StoreMemoryRegisters
-	lea		4(a7), a7
-
 	move.w	(a7)+, sr
 	moveq	#0, d0
 	rts
@@ -177,14 +170,7 @@ ASM_RestoreExceptions:
 	UnHookVector	PrivilegeViolation
 	UnHookVector	Trace
 	UnHookVector	NMI
-	
 	UnHookVector	BreakPoint
-	
-	pea		0.w		| server vectors
-	jsr		LoadVectors
-	jsr		LoadMemoryRegisters
-	lea		4(a7), a7
-
 	UnHookVector	MfpDcd
 	UnHookVector	SerialInput
 
@@ -193,7 +179,7 @@ ASM_RestoreExceptions:
 	rts
 	.endfunc
 
-SaveState:
+SaveStateAndSwitchContext:
 	movem.l	d0-d7/a0-a6, registers
 	move.l	exception_a7, a0
 	move.l	4(a7), d0
@@ -211,23 +197,13 @@ SaveState:
 1:
 	move.l	a1, registers + (15 * 4)	| We store the pre-exception stack pointer to show as register
 	move.l	a1, pre_exception_a7
-	
-	pea		1.w		| inferior vectors
-	jsr		StoreVectors
-	jsr		StoreMemoryRegisters
-	lea		4(a7), a7
-	pea		0.w		| server vectors
-	jsr		LoadVectors
-	jsr		LoadMemoryRegisters
-	lea		4(a7), a7
+
+	jsr		SwitchToServerContext
 	
 	rts
 
-RestoreState:
-	pea		1.w		| inferior vectors
-	jsr		LoadVectors
-	jsr		LoadMemoryRegisters
-	lea		4(a7), a7
+RestoreStateAndSwitchContext:
+	jsr		SwitchToInferiorContext
 
 	move.l	registers + (15 * 4), a0
 	move.l	registers + (16 * 4), d0	| sr

@@ -26,8 +26,6 @@ typedef struct
 	*/
 } ExceptionRegisters;
 
-int InitExceptions(void);
-void RestoreExceptions(void);
 void Exception(int num);
 void DiscardAllBreakpoints(void);
 
@@ -38,8 +36,6 @@ int IsBreakpoint(unsigned short* addr);
 ExceptionRegisters* GetRegisters(void);
 void EnableCtrlC(bool onOff);
 bool GetDCD(void);
-
-unsigned char* GetInferiorMemoryAddress(unsigned char* address);
 
 // exceptions_asm.s
 int ASM_InitExceptions(void);
