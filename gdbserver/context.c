@@ -1,14 +1,7 @@
 #include "context.h"
 #include "bios_calls.h"
 #include "server.h"
-//#include "exceptions.h"
-
-// exception.c
-extern void DiscardAllBreakpoints(void);
-
-// exceptions_asm.s
-extern int ASM_InitExceptions(void);
-extern int ASM_RestoreExceptions(void);
+#include "exceptions.h"
 
 #define NUM_IRQ_VECTORS 8
 #define NUM_MFP_VECTORS 16
