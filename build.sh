@@ -93,6 +93,8 @@ if [ ! -d newlib-cygwin ]; then
 	echo "Patching: newlib"
 	git apply $PATCHES/newlib/0001-m68k-atari-elf-fixed-wrong-number-of-seconds-between.patch
 	git apply $PATCHES/newlib/0002-m68k-atari-elf-changed-stack-and-heap-handling-to-mi.patch
+	git apply $PATCHES/newlib/0003-m68k-atari-elf-updated-readme.patch
+	git apply $PATCHES/newlib/0004-m68k-atari-elf-proper-setup-of-environment-variables.patch
 	# Fixing specs will hopefully be integrated in newlib in future.
 	yes | cp -rf $PATCHES/newlib/$SPECS_FILE libgloss/m68k/atari/atari-tos.specs
 	cd ..
