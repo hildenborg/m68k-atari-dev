@@ -2,6 +2,7 @@
 #include "bios_calls.h"
 #include "server.h"
 #include "exceptions.h"
+#include "cpu.h"
 
 #define NUM_IRQ_VECTORS 8
 #define NUM_MFP_VECTORS 16
@@ -28,6 +29,7 @@ void RestoreMemoryRegisters(unsigned int* longs, unsigned char* bytes);
 int CreateServerContext_super(void)
 {
 	ASM_InitExceptions();
+	ClearInternalCaches();
     // Store server context.
     StoreVectors(serverVectors);
     StoreMemoryRegisters(serverLongs, serverBytes);
@@ -51,6 +53,7 @@ void SwitchToInferiorContext(void)
     // Restore inferior context that was stored in SwitchToServerContext
     RestoreVectors(inferiorVectors);
     RestoreMemoryRegisters(inferiorLongs, inferiorBytes);
+	ClearInternalCaches();
 }
 
 void SwitchToServerContext(void)
@@ -61,6 +64,7 @@ void SwitchToServerContext(void)
     // Restore original server context.
     RestoreVectors(serverVectors);
     RestoreMemoryRegisters(serverLongs, serverBytes);
+	ClearInternalCaches();
 }
 
 #pragma GCC diagnostic push

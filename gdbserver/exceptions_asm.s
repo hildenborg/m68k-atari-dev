@@ -252,6 +252,11 @@ ASM_ExceptionSafeMemoryRead:
 	moveq	#0, d0
 	bra.s	2f
 1:
+	/*
+		If we have an exception, we simply restore the stack pointer and don't care about
+		checking what's in the stack frame.
+		We know that something went wrong and that is all we need to know.
+	*/
 	move.l	saved_a7, a7
 	moveq	#1, d0
 2:
@@ -278,6 +283,11 @@ ASM_ExceptionSafeMemoryWrite:
 	moveq	#0, d0
 	bra.s	2f
 1:
+	/*
+		If we have an exception, we simply restore the stack pointer and don't care about
+		checking what's in the stack frame.
+		We know that something went wrong and that is all we need to know.
+	*/
 	move.l	saved_a7, a7
 	moveq	#1, d0
 2:

@@ -1,19 +1,6 @@
 /*
 	For future feature additions:
 	
-	To add support for systems with cache, then the following code needs some attention:
-		(The danger is when self modifying code.)
-
-		exceptions.c:
-		InsertMemoryBreakpoint
-		RemoveMemoryBreakpoint
-		
-		server.c:
-		WriteMemory
-		
-		exceptions_asm.s:
-		ASM_InitExceptions
-
 	To add support for systems with fpu or additional registers, then the following code needs some attention:
 	
 		exceptions.h:
@@ -85,6 +72,7 @@
 #include "server.h"
 #include "exceptions.h"
 #include "context.h"
+#include "cpu.h"
 #include "target_xml.h"
 
 typedef enum
@@ -144,7 +132,7 @@ unsigned int	numOfCpuRegisters	=	18;
 unsigned int Cookie_CPU = 0;
 // _VDO (shifter [high word, low word]): [0,0] = st, [1,0] = ste, [2,0] = tt, [3,0] = falcon
 unsigned int Cookie_VDO = 0;
-// _FPU (float unit): 0 = none, 1 - 9 different variants.
+// _FPU (float unit): 0 = none, 1 - 9 different variants. Anything above 1 means that we have fpu registers and vectors.
 unsigned int Cookie_FPU = 0;
 // _MCH (machine [high word, low word]): [0,0] = st, [1,0] = ste, [1,8] = st book, [1,16] mega ste, [2,0] = tt, [3,0] = falcon
 unsigned int Cookie_MCH = 0;
@@ -840,6 +828,7 @@ void WriteMemory(void)
 			ASM_ExceptionSafeMemoryWrite(infAddr, HexToByte(ptr));
 			ptr += 2;
 		}
+		ClearInternalCaches();
 	}
 	else
 	{
@@ -861,6 +850,7 @@ void ReadMemory(void)
 			ASM_ExceptionSafeMemoryRead(infAddr, &membyte);
 			WriteByte(membyte);
 		}
+		ClearInternalCaches();
 	}
 	else
 	{

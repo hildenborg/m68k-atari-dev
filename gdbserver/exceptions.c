@@ -2,6 +2,7 @@
 #include "bios_calls.h"
 #include "exceptions.h"
 #include "server.h"
+#include "cpu.h"
 
 #define BREAKPOINT	0x4e40		// Trap #0
 #define NUM_MEMPOINTS 128		// Max number of breakpoints handled by this code.
@@ -67,6 +68,7 @@ int InsertMemoryBreakpoint(unsigned short* addr)
 			mempoints[i].addr = addr;
 			mempoints[i].store = *addr;
 			*addr = BREAKPOINT;
+			ClearInternalCaches();
 			return 0;
 		}
 	}
@@ -81,6 +83,7 @@ int RemoveMemoryBreakpoint(unsigned short* addr)
 		{
 			mempoints[i].addr = 0;
 			*addr = mempoints[i].store;
+			ClearInternalCaches();
 			return 0;
 		}
 	}
