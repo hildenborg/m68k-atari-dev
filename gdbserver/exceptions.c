@@ -68,7 +68,6 @@ int InsertMemoryBreakpoint(unsigned short* addr)
 			mempoints[i].addr = addr;
 			mempoints[i].store = *addr;
 			*addr = BREAKPOINT;
-			ClearInternalCaches();
 			return 0;
 		}
 	}
@@ -83,7 +82,6 @@ int RemoveMemoryBreakpoint(unsigned short* addr)
 		{
 			mempoints[i].addr = 0;
 			*addr = mempoints[i].store;
-			ClearInternalCaches();
 			return 0;
 		}
 	}

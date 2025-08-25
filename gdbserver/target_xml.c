@@ -1,5 +1,7 @@
 #include "target_xml.h"
 
+extern unsigned int Cookie_FPU;
+
 char target_xml[] =
 	"<?xml version=\"1.0\"?>\n"
 	"<!DOCTYPE feature SYSTEM \"gdb-target.dtd\">\n"
@@ -50,7 +52,7 @@ char* GetTargetXml(unsigned int Cookie_CPU, unsigned int Cookie_FPU, unsigned in
 	}
 	/*
 	// Fix for FPU later
-	if (Cookie_FPU != 0)
+	if ((Cookie_FPU & (0x1e << 16)) != 0)
 	{
 		while (target_xml[l] != 0)
 		{

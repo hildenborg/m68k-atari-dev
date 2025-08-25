@@ -182,18 +182,43 @@ RestoreExceptions:
 	rts
 	.endfunc
 
+/*
+	In:
+		a0 = stack ptr at exception call.
+		d1 = exception number
+	Out:
+		a0 = ptr to sr, pc
+		a1 = exception ptr before exception call.
+*/
+Calc68000Stack:
+    cmp.l   #10, Cookie_CPU
+	jpl		Calc68010Stack
+	cmp.w	#4, d1
+	bge.s	2f
+	lea		14(a0), a1		| 7 word stack frame
+	rts
+2:
+	lea		6(a0), a1		| 3 word stack frame
+	rts
+Calc68010Stack:
+	cmp.w	#4, d1
+	bge.s	2f
+	lea		58(a0), a1		| 29 word stack frame
+	rts
+2:
+	lea		8(a0), a1		| 4 word stack frame
+	rts
+
+
 SaveStateAndSwitchContext:
 	movem.l	d0-d7/a0-a6, registers
 	move.l	exception_a7, a0
-	move.l	4(a7), d0
-	cmp.w	#4, d0
-	bge.s	2f
-	lea		8(a0), a0		| 7 word exception stack
-2:
+	move.l	4(a7), d1
+	jsr		Calc68000Stack
+	move.l	a0, exception_sr_pc
 	move.l	2(a0), registers + (17 * 4)	| pc
 	move.w	(a0), d0
 	move.l	d0, registers + (16 * 4)	| sr
-	lea	6(a0), a1
 	btst	#13, d0
 	bne.s	1f
 	move.l	usp, a1
@@ -226,17 +251,11 @@ RestoreStateAndSwitchContext:
 3:
 	move.l exception_a7, a0
 	move.l	4(a7), d1
-	cmp.w	#4, d1
-	bge.s	1f
-	lea		8(a0), a0		| 7 word exception stack
-1:
+	jsr		Calc68000Stack
 	move.w	d0, (a0)	| sr
 	move.l	registers + (17 * 4), 2(a0)	| pc
 	movem.l	registers, d0-d7/a0-a6
 	rts
-
-CatchException:
-	jmp 	0x12345678
 
 	.global ExceptionSafeMemoryRead
 ExceptionSafeMemoryRead:
@@ -244,9 +263,8 @@ ExceptionSafeMemoryRead:
 	move.l	a0, -(a7)
 	move.w	sr, -(a7)
 	move.l	a7, saved_a7
-	move.l	#1f, CatchException + 2
-	move.l	#CatchException, nBusError
-	move.l	#CatchException, nAddressError
+	move.l	#1f, nBusError
+	move.l	#1f, nAddressError
 	
 	move.l	10(a7), a0
 	move.b	(a0), d0
@@ -276,9 +294,8 @@ ExceptionSafeMemoryWrite:
 	move.l	a0, -(a7)
 	move.w	sr, -(a7)
 	move.l	a7, saved_a7
-	move.l	#1f, CatchException + 2
-	move.l	#CatchException, nBusError
-	move.l	#CatchException, nAddressError
+	move.l	#1f, nBusError
+	move.l	#1f, nAddressError
 	
 	move.l	10(a7), a0
 	move.l	14(a7), d0
@@ -334,10 +351,12 @@ ClearInternalCaches:
     move.l  (a7)+, d1
 1:
     rts
+	.endfunc
 
 	.bss
 	.lcomm	exception_a7,		4
 	.lcomm	pre_exception_a7,	4
+	.lcomm	exception_sr_pc,	4
 	.lcomm	saved_a7,			4
 	.lcomm	srvIrqLevel,		2
 	.even

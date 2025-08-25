@@ -862,7 +862,6 @@ void WriteMemory(void)
 			ExceptionSafeMemoryWrite(infAddr, HexToByte(ptr));
 			ptr += 2;
 		}
-		ClearInternalCaches();
 	}
 	else
 	{
@@ -884,7 +883,6 @@ void ReadMemory(void)
 			ExceptionSafeMemoryRead(infAddr, &membyte);
 			WriteByte(membyte);
 		}
-		ClearInternalCaches();
 	}
 	else
 	{
@@ -1526,7 +1524,6 @@ int ServerMain(int argc, char** argv)
 		return -1;
 	}
 	int ret = -1;
-	int exceptionsInited = -1;
 	// Get cookies
 	Supexec(GetCookies);
 	// Set serial conf
@@ -1539,58 +1536,43 @@ int ServerMain(int argc, char** argv)
 	
 	// Set DTR to ON
 	Ongibit(GI_DTR);
-#ifndef DISABLE_EXCEPTIONS
 	CreateServerContext();
-	exceptionsInited = 0;
-#else
-	exceptionsInited = 1;
-#endif // DISABLE_EXCEPTIONS
 	inferiorState = NOT_LOADED;
 	
-	if (exceptionsInited >= 0)
-	{
-		DbgOut("ServerMain: Server started.\r\n");
+	DbgOut("ServerMain: Server started.\r\n");
 
-		// If we get extended remote protocol, then we just keep looping.
-		// This allows for restarting the inferior or starting another.
-		extendedMode = false;
-		userCodeForCommandLoop = USERCODE_SILENT;
-		do
+	// If we get extended remote protocol, then we just keep looping.
+	// This allows for restarting the inferior or starting another.
+	extendedMode = false;
+	userCodeForCommandLoop = USERCODE_SILENT;
+	do
+	{
+		if (loadInferiorRequested)
 		{
-			if (loadInferiorRequested)
+			// Load inferior
+			if (LoadInferior(inferior_filename, inferior_cmdline, NULL) < 0)
 			{
-				// Load inferior
-				if (LoadInferior(inferior_filename, inferior_cmdline, NULL) < 0)
+				DbgOut("Could not load inferior: ");
+				DbgOut(inferior_filename);
+				DbgOut(newline);
+				
+				if (userCodeForCommandLoop == USERCODE_REPORT)
 				{
-					DbgOut("Could not load inferior: ");
-					DbgOut(inferior_filename);
-					DbgOut(newline);
-					
-					if (userCodeForCommandLoop == USERCODE_REPORT)
-					{
-						userCodeForCommandLoop = USERCODE_ERROR;
-					}
-					else
-					{
-						// Exit gdbserver if *command line* specified inferior could not be loaded.
-						break;
-					}
+					userCodeForCommandLoop = USERCODE_ERROR;
 				}
-				loadInferiorRequested = false;
+				else
+				{
+					// Exit gdbserver if *command line* specified inferior could not be loaded.
+					break;
+				}
 			}
-			ServerCommandLoop(GDB_SIGUSR1, userCodeForCommandLoop);
-			DiscardAllBreakpoints();
-			ret = 0;
-		} while ((extendedMode && !run_once) || option_multi);
-	}
-	else
-	{
-		ConOut("ServerMain: Error - could not start server!\r\n");
-	}
-	if (exceptionsInited == 0)
-	{
-		DestroyServerContext();
-	}
+			loadInferiorRequested = false;
+		}
+		ServerCommandLoop(GDB_SIGUSR1, userCodeForCommandLoop);
+		DiscardAllBreakpoints();
+		ret = 0;
+	} while ((extendedMode && !run_once) || option_multi);
+	DestroyServerContext();
 	// Set DTR to OFF
 	Offgibit(GI_DTR);
 	
