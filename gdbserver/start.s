@@ -1,5 +1,4 @@
 	.equ	DEFAULT_STACK, 2048
-	.equ	DEFAULT_HEAP, 1024
 
 	.global _BasePage
 	.global __BSS_SEGMENT_END
@@ -15,7 +14,7 @@ _start:
 		Set up memory to use just a minimum of stack and heap.
 	*/
     lea     __BSS_SEGMENT_END + DEFAULT_STACK, a7
-    lea     DEFAULT_HEAP(a7), a1
+    move.l	a7, a1
 	sub.l	(a0), a1
 
 	move.l	a1, -(a7)
