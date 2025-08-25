@@ -37,17 +37,6 @@ ExceptionRegisters* GetRegisters(void);
 void EnableCtrlC(bool onOff);
 bool GetDCD(void);
 
-// exceptions_asm.s
-int ASM_InitExceptions(void);
-int ASM_RestoreExceptions(void);
-
-// These functions assume that we are in Supervisor mode.
-// Returns non zero if exception occured.
-int ASM_ExceptionSafeMemoryRead(unsigned char* address, unsigned char* c);
-int ASM_ExceptionSafeMemoryWrite(unsigned char* address, unsigned char c);
-
-unsigned char ASM_CaptureMfpData(unsigned char* address);
-
 #ifdef __cplusplus
 }
 #endif

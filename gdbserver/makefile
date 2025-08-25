@@ -4,7 +4,7 @@
 TARGET_NAME := gdbsrv
 BUILD_DIR := .
 SRC_DIR := $(dir $(realpath $(lastword $(MAKEFILE_LIST))))
-SOURCES := start.s main.c server.c exceptions_asm.s exceptions.c bios_calls.c context.c cpu.s target_xml.c
+SOURCES := start.s main.c server.c exceptions.c bios_calls.c context.c target_xml.c
 
 # Project build architecture settings
 CPU := 68000
@@ -20,6 +20,7 @@ ELFTOPRG := $(TOOLKIT_BIN)/m68k-atari-elf-prg
 
 CFLAGS := -Wall -Os -g -m$(CPU)
 ASFLAGS := -g --register-prefix-optional -mcpu=$(CPU)
+CPU_ASFLAGS := -g --register-prefix-optional -mcpu=68030 -m68882
 LDFLAGS := -specs=$(SRC_DIR)/specs.spec
 
 TARGET_PRG := $(BUILD_DIR)/$(TARGET_NAME).ttp
@@ -35,12 +36,15 @@ $(TARGET_PRG): $(TARGET_ELF)
 	$(ELFTOPRG) $< $@
 
 # Make elf target
-$(TARGET_ELF): $(OBJS)
+$(TARGET_ELF): $(OBJS) $(BUILD_DIR)/critical.o
 	$(LD) $(LDFLAGS) $^ -o $@  -Xlinker -T -Xlinker $(SRC_DIR)/link.ld
 
 # assembly
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.s
 	$(AS) $(ASFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/critical.o: $(SRC_DIR)/critical.s
+	$(AS) $(CPU_ASFLAGS) -c $< -o $@
 
 # c source
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c

@@ -2,7 +2,7 @@
 #include "bios_calls.h"
 #include "exceptions.h"
 #include "server.h"
-#include "cpu.h"
+#include "critical.h"
 
 #define BREAKPOINT	0x4e40		// Trap #0
 #define NUM_MEMPOINTS 128		// Max number of breakpoints handled by this code.

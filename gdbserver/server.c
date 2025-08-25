@@ -6,7 +6,7 @@
 		exceptions.h:
 		struct ExceptionRegisters
 		
-		exceptions_asm.s:
+		critical.s:
 		SaveState:
 		RestoreState:
 	
@@ -23,13 +23,13 @@
 		exceptions.c:
 		Exception
 
-		exceptions_asm.s:
+		critical.s:
 		.macro HookVector
 		.macro UnHookVector
 		.macro Hook
 		.macro Hijack
-		ASM_InitExceptions
-		ASM_RestoreExceptions
+		InitExceptions
+		RestoreExceptions
 
 	To add support for other serial communications than the original ST, look at:
 	
@@ -38,7 +38,7 @@
 		GetByte
 		PutByte
 	
-		exceptions_asm.s:
+		critical.s:
 		S_Hook
 		DCD_Hook
 		
@@ -72,7 +72,7 @@
 #include "server.h"
 #include "exceptions.h"
 #include "context.h"
-#include "cpu.h"
+#include "critical.h"
 #include "target_xml.h"
 
 typedef enum
@@ -128,13 +128,47 @@ int				userCodeForCommandLoop = USERCODE_SILENT;	// Used as si_code when calling
 
 unsigned int	numOfCpuRegisters	=	18;
 
-// _CPU (cpu): 0 = 68000, 10 = 68010, 20 = 68020, 30 = 68030
+/* 
+	_CPU: 
+	0 = 68000
+	10 = 68010
+	20 = 68020
+	30 = 68030
+	40 = 68040
+	60 = 68060
+*/
 unsigned int Cookie_CPU = 0;
-// _VDO (shifter [high word, low word]): [0,0] = st, [1,0] = ste, [2,0] = tt, [3,0] = falcon
+/*
+	_VDO (shifter [high word, low word]):
+	[0,0] = st
+	[1,0] = ste
+	[2,0] = tt
+	[3,0] = falcon
+*/
 unsigned int Cookie_VDO = 0;
-// _FPU (float unit): 0 = none, 1 - 9 different variants. Anything above 1 means that we have fpu registers and vectors.
+/*
+	_FPU (float unit):
+	High word bit 0 = SFP004
+	High word bits 1 - 2 =
+		01	= 68881 or 68882
+		10	= 68881
+		11	= 68882
+	High word bit 3 = 68040 Internal
+	High word bit 4 = 68060 Internal
+
+	Note:
+	If any of the bits 1-4 is set, then we know that we have a system that can run fpu instructions directly.
+*/
 unsigned int Cookie_FPU = 0;
-// _MCH (machine [high word, low word]): [0,0] = st, [1,0] = ste, [1,8] = st book, [1,16] mega ste, [2,0] = tt, [3,0] = falcon
+/*
+	_MCH (machine [high word, low word]):
+	[0,0] = st
+	[1,0] = ste
+	[1,8] = st book
+	[1,16] mega ste
+	[2,0] = tt
+	[3,0] = falcon
+*/
 unsigned int Cookie_MCH = 0;
 
 /*
@@ -162,9 +196,9 @@ size_t strlen(const char* s)
 		"bne.s	1b\n\t"
 		"sub.l	%1, %0\n\t"		// -(len + 1)
 		"not.l	%0\n\t"			// !(-(len + 1)) = len
-		: "=d" (len) 			
-		: "a" (s)				
-		:);				
+		: "=d" (len)
+		: "a" (s)
+		:);
 	return len;
 
 //	size_t len = 0;
@@ -825,7 +859,7 @@ void WriteMemory(void)
 		for (unsigned int i = 0; i < len; ++i)
 		{
 			unsigned char* infAddr = InferiorContextMemoryAddress(addr + i);
-			ASM_ExceptionSafeMemoryWrite(infAddr, HexToByte(ptr));
+			ExceptionSafeMemoryWrite(infAddr, HexToByte(ptr));
 			ptr += 2;
 		}
 		ClearInternalCaches();
@@ -847,7 +881,7 @@ void ReadMemory(void)
 		{
 			unsigned char* infAddr = InferiorContextMemoryAddress(addr + i);
 			unsigned char membyte;
-			ASM_ExceptionSafeMemoryRead(infAddr, &membyte);
+			ExceptionSafeMemoryRead(infAddr, &membyte);
 			WriteByte(membyte);
 		}
 		ClearInternalCaches();

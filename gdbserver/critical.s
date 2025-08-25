@@ -1,6 +1,9 @@
 /*
-	m68k compatible.
-	Current Serial implementation is specific to detecting CTRL-C on Atari ST/STE/TT.
+	This file contains code that is NOT 68000 compatible!
+	There are functions that use instructions for 68020+ here.
+	Important for anyone using such instructions:
+		Always check in code that the computer running the code supports those
+		instructions before usage. Like checking the Cookie_CPU or Cookie_FPU. 
 */
 	.global registers
 	.global Exception
@@ -125,9 +128,9 @@ o\name:
 	DCD_Hook MfpDcd, 0x41
 	S_Hook SerialInput, 0x4c
 
-	.global ASM_InitExceptions
-ASM_InitExceptions:
-	.func ASM_InitExceptions
+	.global InitExceptions
+InitExceptions:
+	.func InitExceptions
 	move.w	sr, -(a7)
 	move.w	(a7), d0
 	andi.w	#0x700, d0
@@ -155,9 +158,9 @@ ASM_InitExceptions:
 	rts
 	.endfunc
 
-	.global ASM_RestoreExceptions
-ASM_RestoreExceptions:
-	.func ASM_RestoreExceptions
+	.global RestoreExceptions
+RestoreExceptions:
+	.func RestoreExceptions
 	move.w	sr, -(a7)
 	ori.w	#0x700, sr
 
@@ -235,9 +238,9 @@ RestoreStateAndSwitchContext:
 CatchException:
 	jmp 	0x12345678
 
-	.global ASM_ExceptionSafeMemoryRead
-ASM_ExceptionSafeMemoryRead:
-	.func ASM_ExceptionSafeMemoryRead
+	.global ExceptionSafeMemoryRead
+ExceptionSafeMemoryRead:
+	.func ExceptionSafeMemoryRead
 	move.l	a0, -(a7)
 	move.w	sr, -(a7)
 	move.l	a7, saved_a7
@@ -267,9 +270,9 @@ ASM_ExceptionSafeMemoryRead:
 	rts
 	.endfunc
 
-	.global ASM_ExceptionSafeMemoryWrite
-ASM_ExceptionSafeMemoryWrite:
-	.func ASM_ExceptionSafeMemoryWrite
+	.global ExceptionSafeMemoryWrite
+ExceptionSafeMemoryWrite:
+	.func ExceptionSafeMemoryWrite
 	move.l	a0, -(a7)
 	move.w	sr, -(a7)
 	move.l	a7, saved_a7
@@ -298,9 +301,9 @@ ASM_ExceptionSafeMemoryWrite:
 	rts
 	.endfunc
 
-	.global ASM_CaptureMfpData
-ASM_CaptureMfpData:
-	.func ASM_CaptureMfpData
+	.global CaptureMfpData
+CaptureMfpData:
+	.func CaptureMfpData
 	movem.l	d1-d2/a0, -(a7)
 	move.l	16(a7), a0
 
@@ -317,6 +320,20 @@ ASM_CaptureMfpData:
 	movem.l	(a7)+, d1-d2/a0
 	rts
 	.endfunc
+
+	.global	ClearInternalCaches
+ClearInternalCaches:
+	.func ClearInternalCaches
+    cmp.l   #20, Cookie_CPU
+    jmi     1f
+    move.l  d1, -(a7)
+    movec	cacr, d1
+    bset	#3, d1
+    bset	#11, d1
+	movec	d1, cacr
+    move.l  (a7)+, d1
+1:
+    rts
 
 	.bss
 	.lcomm	exception_a7,		4
