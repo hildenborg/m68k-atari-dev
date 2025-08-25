@@ -30,15 +30,8 @@
 \name:
 	ori.w	#0x700, sr
 	move.l	a7, exception_a7
-	pea		\num
-	jsr		SaveStateAndSwitchContext
-	move.w	sr, d0
-	andi.w	#0xf8ff, d0
-	or.w	srvIrqLevel, d0
-	move.w	d0, sr
-	jsr		Exception
-	ori.w	#0x700, sr
-	jsr		RestoreStateAndSwitchContext
+	move.w	#\num, exception_num
+	jsr		HandleException
 	move.l	exception_a7, a7
 o\name:
 	jmp 	0x12345678
@@ -52,15 +45,8 @@ o\name:
 \name:
 	ori.w	#0x700, sr
 	move.l	a7, exception_a7
-	pea		\num
-	jsr		SaveStateAndSwitchContext
-	move.w	sr, d0
-	andi.w	#0xf8ff, d0
-	or.w	srvIrqLevel, d0
-	move.w	d0, sr
-	jsr		Exception
-	ori.w	#0x700, sr
-	jsr		RestoreStateAndSwitchContext
+	move.w	#\num, exception_num
+	jsr		HandleException
 	move.l	exception_a7, a7
 	rte
 o\name:
@@ -82,17 +68,8 @@ o\name:
 	bne.s	o2\name
 	ori.w	#0x700, sr
 	move.l	a7, exception_a7
-	pea		\num
-	jsr		SaveStateAndSwitchContext
-	move.w	sr, d0
-	andi.w	#0xf8ff, d0
-	or.w	srvIrqLevel, d0
-	move.w	d0, sr
-	clr.w	CtrlC_enable		| must do this before we enable irq again.
-	move.b	#0xef, 0xfffffa0f.w	| enable irq again so serial comm works in server.
-	jsr		Exception
-	ori.w	#0x700, sr
-	jsr		RestoreStateAndSwitchContext
+	move.w	#\num, exception_num
+	jsr		HandleSerialException
 	move.l	exception_a7, a7
 	rte
 o2\name:
@@ -182,18 +159,47 @@ RestoreExceptions:
 	rts
 	.endfunc
 
+
+	.global GetExceptionNum
+GetExceptionNum:
+	.func GetExceptionNum
+	moveq	#0, d0
+	move.w	exception_num, d0
+	rts
+	.endfunc
+
+HandleException:
+	jsr		SaveStateAndSwitchContext
+	move.w	sr, d0
+	andi.w	#0xf8ff, d0
+	or.w	srvIrqLevel, d0
+	move.w	d0, sr
+	jsr		Exception
+	ori.w	#0x700, sr
+	jmp		RestoreStateAndSwitchContext
+
+HandleSerialException:
+	jsr		SaveStateAndSwitchContext
+	move.w	sr, d0
+	andi.w	#0xf8ff, d0
+	or.w	srvIrqLevel, d0
+	move.w	d0, sr
+	clr.w	CtrlC_enable		| must do this before we enable irq again.
+	move.b	#0xef, 0xfffffa0f.w	| enable irq again so serial comm works in server.
+	jsr		Exception
+	ori.w	#0x700, sr
+	jmp		RestoreStateAndSwitchContext
+
 /*
-	In:
-		a0 = stack ptr at exception call.
-		d1 = exception number
 	Out:
 		a0 = ptr to sr, pc
 		a1 = exception ptr before exception call.
 */
 Calc68000Stack:
+	move.l	exception_a7, a0
     cmp.l   #10, Cookie_CPU
 	jpl		Calc68010Stack
-	cmp.w	#4, d1
+	cmp.w	#4, exception_num
 	bge.s	2f
 	lea		14(a0), a1		| 7 word stack frame
 	rts
@@ -201,7 +207,7 @@ Calc68000Stack:
 	lea		6(a0), a1		| 3 word stack frame
 	rts
 Calc68010Stack:
-	cmp.w	#4, d1
+	cmp.w	#4, exception_num
 	bge.s	2f
 	lea		58(a0), a1		| 29 word stack frame
 	rts
@@ -212,8 +218,6 @@ Calc68010Stack:
 
 SaveStateAndSwitchContext:
 	movem.l	d0-d7/a0-a6, registers
-	move.l	exception_a7, a0
-	move.l	4(a7), d1
 	jsr		Calc68000Stack
 	move.l	a0, exception_sr_pc
 	move.l	2(a0), registers + (17 * 4)	| pc
@@ -249,8 +253,6 @@ RestoreStateAndSwitchContext:
 2:
 	move.l	a0, usp
 3:
-	move.l exception_a7, a0
-	move.l	4(a7), d1
 	jsr		Calc68000Stack
 	move.w	d0, (a0)	| sr
 	move.l	registers + (17 * 4), 2(a0)	| pc
@@ -355,6 +357,7 @@ ClearInternalCaches:
 
 	.bss
 	.lcomm	exception_a7,		4
+	.lcomm	exception_num,		2
 	.lcomm	pre_exception_a7,	4
 	.lcomm	exception_sr_pc,	4
 	.lcomm	saved_a7,			4

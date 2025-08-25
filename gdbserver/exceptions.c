@@ -100,11 +100,11 @@ int IsBreakpoint(unsigned short* addr)
 	return -1;
 }
 
-void Exception(int num)
+void Exception(void)
 {
 	int si_signo = GDB_SIGINT;
 	int si_code = 0;
-	switch (num)
+	switch (GetExceptionNum())
 	{
 		case 2:		// BusError
 			si_signo = GDB_SIGBUS;

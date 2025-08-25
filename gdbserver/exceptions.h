@@ -26,7 +26,7 @@ typedef struct
 	*/
 } ExceptionRegisters;
 
-void Exception(int num);
+void Exception(void);
 void DiscardAllBreakpoints(void);
 
 bool IsServerException(void);

@@ -14,4 +14,7 @@ unsigned char CaptureMfpData(unsigned char* address);
 int ExceptionSafeMemoryRead(unsigned char* address, unsigned char* c);
 int ExceptionSafeMemoryWrite(unsigned char* address, unsigned char c);
 
+// Supervisor mode not needed.
+int GetExceptionNum(void);
+
 #endif // CRITICAL_DEFINED
