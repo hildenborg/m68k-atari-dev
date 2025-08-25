@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-char* GetTargetXml(unsigned int Cookie_CPU, unsigned int Cookie_FPU, unsigned int* length);
+char* GetTargetXml(unsigned int* length);
 
 #ifdef __cplusplus
 }

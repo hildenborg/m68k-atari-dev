@@ -25,7 +25,6 @@ char target_xml[] =
 	"  <reg name=\"ps\" bitsize=\"32\"/>\n"
 	"  <reg name=\"pc\" bitsize=\"32\" type=\"code_ptr\"/>\n"
 	"</feature>\n"
-	/*
 	"\t"
 	"<feature name=\"org.gnu.gdb.coldfire.fp\">\n"
 	"  <reg name=\"fp0\" bitsize=\"96\" type=\"float\" group=\"float\"/>\n"
@@ -40,26 +39,23 @@ char target_xml[] =
 	"  <reg name=\"fpstatus\" bitsize=\"32\" group=\"float\"/>\n"
 	"  <reg name=\"fpiaddr\" bitsize=\"32\" type=\"code_ptr\" group=\"float\"/>\n"
 	"</feature>\n"
-	*/
 	;
 	
-char* GetTargetXml(unsigned int Cookie_CPU, unsigned int Cookie_FPU, unsigned int* length)
+char* GetTargetXml(unsigned int* length)
 {
 	unsigned int l = 0;
 	while (target_xml[l] != '\t' && target_xml[l] != 0)
 	{
 		++l;
 	}
-	/*
 	// Fix for FPU later
-	if ((Cookie_FPU & (0x1e << 16)) != 0)
+	if ((Cookie_FPU & (0x1f << 16)) != 0)
 	{
 		while (target_xml[l] != 0)
 		{
 			++l;
 		}
 	}
-	*/
 	*length = l;
 	return target_xml;
 }

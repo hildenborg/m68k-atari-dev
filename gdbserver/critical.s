@@ -16,6 +16,15 @@
 	.global SwitchToServerContext
 	.global SwitchToInferorContext
 
+	.equ	o_to_sp, 60
+	.equ	o_to_sr, 64
+	.equ	o_to_pc, 68
+	.equ	o_to_fp0, 72
+	.equ	o_to_fp_control, 168
+	.equ	o_to_fp_status,	172
+	.equ	o_to_fp_iaddr,	176
+
+
 	.macro HookVector name
 	move.l	n\name, o\name + 2
 	move.l	#\name, n\name
@@ -218,16 +227,33 @@ Calc68010Stack:
 
 SaveStateAndSwitchContext:
 	movem.l	d0-d7/a0-a6, registers
+	move.w	Cookie_FPU, d0
+	and.w	#0x1f, d0
+	jeq		2f
+    cmp.l   #20, Cookie_CPU
+	jmi		1f
+	| Got fpu and a 020+ cpu
+	fmovem.x	fp0-fp7, registers + o_to_fp0
+	fmove.l		fpcr, registers + o_to_fp_control
+	fmove.l		fpsr, registers + o_to_fp_status
+	fmove.l		fpiar, registers + o_to_fp_iaddr
+	jra		2f
+1:
+	btst	#0, d0
+	jeq		2f
+	| ToDo: SFP004
+
+2:
 	jsr		Calc68000Stack
 	move.l	a0, exception_sr_pc
-	move.l	2(a0), registers + (17 * 4)	| pc
+	move.l	2(a0), registers + o_to_pc
 	move.w	(a0), d0
-	move.l	d0, registers + (16 * 4)	| sr
+	move.l	d0, registers + o_to_sr
 	btst	#13, d0
 	bne.s	1f
 	move.l	usp, a1
 1:
-	move.l	a1, registers + (15 * 4)	| We store the pre-exception stack pointer to show as register
+	move.l	a1, registers + o_to_sp
 	move.l	a1, pre_exception_a7
 
 	jsr		SwitchToServerContext
@@ -237,8 +263,8 @@ SaveStateAndSwitchContext:
 RestoreStateAndSwitchContext:
 	jsr		SwitchToInferiorContext
 
-	move.l	registers + (15 * 4), a0
-	move.l	registers + (16 * 4), d0	| sr
+	move.l	registers + o_to_sp, a0
+	move.l	registers + o_to_sr, d0
 	btst	#13, d0
 	beq.s	2f
 	move.l	pre_exception_a7, a1
@@ -255,7 +281,24 @@ RestoreStateAndSwitchContext:
 3:
 	jsr		Calc68000Stack
 	move.w	d0, (a0)	| sr
-	move.l	registers + (17 * 4), 2(a0)	| pc
+	move.l	registers + o_to_pc, 2(a0)
+	move.w	Cookie_FPU, d0
+	and.w	#0x1f, d0
+	jeq		2f
+    cmp.l   #20, Cookie_CPU
+	jmi		1f
+	| Got fpu and a 020+ cpu
+	fmovem.x	registers + o_to_fp0, fp0-fp7
+	fmove.l		registers + o_to_fp_control, fpcr
+	fmove.l		registers + o_to_fp_status, fpsr
+	fmove.l		registers + o_to_fp_iaddr, fpiar
+	jra		2f
+1:
+	btst	#0, d0
+	jeq		2f
+	| ToDo: SFP004
+	
+2:
 	movem.l	registers, d0-d7/a0-a6
 	rts
 

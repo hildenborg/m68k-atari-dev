@@ -9,21 +9,11 @@ extern "C" {
 
 typedef struct
 {
-	unsigned int	exponent;	// lower 16 bits are always zero and unused.
-	unsigned int	mantissa_high;
-	unsigned int	mantissa_low;
-}  float96;
-
-typedef struct
-{
 	unsigned int	d0, d1, d2, d3, d4, d5, d6, d7;
 	unsigned int	a0, a1, a2, a3, a4, a5, a6, sp;
 	unsigned int	sr, pc;
-	/*
-		Fix for FPU later:
-	unsigned char	fp0[12], fp1[12], fp2[12], fp3[12], fp4[12], fp5[12], fp6[12], fp7[12];
+	unsigned int	fp0[3], fp1[3], fp2[3], fp3[3], fp4[3], fp5[3], fp6[3], fp7[3];
 	unsigned int	fpControl, fpStatus, fpIAddr;
-	*/
 } ExceptionRegisters;
 
 void Exception(void);

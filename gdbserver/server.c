@@ -733,7 +733,13 @@ void WriteStop(int si_signo, int si_code)
 void ReadRegisters()
 {
 	unsigned int* ptr = (unsigned int*)GetRegisters();
-	for (size_t i = 0; i < (sizeof(ExceptionRegisters) / sizeof(unsigned int)); ++i)
+	size_t num = 18;
+	if ((Cookie_FPU & (0x1f << 16)) != 0)
+	{
+		num += (8*3) + 3;
+	}
+
+	for (size_t i = 0; i < num; ++i)
 	{
 		WriteLong(ptr[i]);
 	}
@@ -749,7 +755,12 @@ void WriteRegisters(void)
 	{
 		unsigned int* ptr = (unsigned int*)GetRegisters();
 		char* buf = inPacket + 1;
-		for (size_t i = 0; i < (sizeof(ExceptionRegisters) / sizeof(unsigned int)); ++i)
+		size_t num = 18;
+		if ((Cookie_FPU & (0x1f << 16)) != 0)
+		{
+			num += (8*3) + 3;
+		}
+		for (size_t i = 0; i < num; ++i)
 		{
 			ptr[i] = HexToLong(buf);
 			buf += 8;
@@ -786,7 +797,22 @@ void WriteRegister(void)
 		{
 			if (inPacket[offset] == '=')
 			{
-				rptr[idx] = HexToLong(inPacket + offset + 1);
+				if (idx < 18)
+				{
+					rptr[idx] = HexToLong(inPacket + offset + 1);
+				}
+				else if (idx >= (18 + 8))
+				{
+					idx += 16;
+					rptr[idx] = HexToLong(inPacket + offset + 1);
+				}
+				else
+				{
+					idx = 18 + ((idx - 18) * 3);
+					rptr[idx] = HexToLong(inPacket + offset + 1);
+					rptr[idx + 1] = HexToLong(inPacket + offset + 9);
+					rptr[idx + 2] = HexToLong(inPacket + offset + 17);
+				}
 			}
 		}
 		else
@@ -806,7 +832,22 @@ void ReadRegister(void)
 	{
 		if (idx < numOfCpuRegisters)
 		{
-			WriteLong(rptr[idx]);
+			if (idx < 18)
+			{
+				WriteLong(rptr[idx]);
+			}
+			else if (idx >= (18 + 8))
+			{
+				idx += 16;
+				WriteLong(rptr[idx]);
+			}
+			else
+			{
+				idx = 18 + ((idx - 18) * 3);
+				WriteLong(rptr[idx]);
+				WriteLong(rptr[idx + 1]);
+				WriteLong(rptr[idx + 2]);
+			}
 		}
 		/*
 		else
@@ -978,7 +1019,7 @@ void CmdQuery(void)
 		{
 			unsigned int offset = (unsigned int)addr;
 			unsigned int xml_len;
-			char* xml = GetTargetXml(Cookie_CPU, Cookie_FPU, &xml_len);
+			char* xml = GetTargetXml(&xml_len);
 			
 			if ((offset + len) >= xml_len)
 			{
@@ -1526,6 +1567,10 @@ int ServerMain(int argc, char** argv)
 	int ret = -1;
 	// Get cookies
 	Supexec(GetCookies);
+	if ((Cookie_FPU & (0x1f << 16)) != 0 && Cookie_CPU >= 20)
+	{
+		numOfCpuRegisters = 29;
+	}
 	// Set serial conf
 	Rsconf(BAUD_9600, FLOW_HARD, RS_CLK16 | RS_1STOP | RS_8BITS, RS_INQUIRE, RS_INQUIRE, RS_INQUIRE);
 	// Empty serial buffer
