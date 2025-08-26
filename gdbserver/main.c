@@ -1,4 +1,9 @@
 /*
+	Copyright (C) 2025 Mikael Hildenborg
+	SPDX-License-Identifier: MIT
+*/
+
+/*
 	This is not gdbserver.
 	It is something that partly works similarily to gdbserver.
 	The usage is similar enough to warrant the name gdbserver.

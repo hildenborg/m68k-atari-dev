@@ -1,4 +1,9 @@
 /*
+	Copyright (C) 2025 Mikael Hildenborg
+	SPDX-License-Identifier: MIT
+*/
+
+/*
 	This file contains code that is NOT 68000 compatible!
 	There are functions that use instructions for 68020+ here.
 	Important for anyone using such instructions:

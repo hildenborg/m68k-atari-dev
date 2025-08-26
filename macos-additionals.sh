@@ -1,5 +1,8 @@
 #!/bin/bash
 
+#	Copyright (C) 2025 Mikael Hildenborg
+#	SPDX-License-Identifier: MIT
+
 # We are in the build folder when this is executed.
 
 PREFIX=$1

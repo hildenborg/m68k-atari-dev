@@ -1,3 +1,8 @@
+/*
+	Copyright (C) 2025 Mikael Hildenborg
+	SPDX-License-Identifier: MIT
+*/
+
 #include "target_xml.h"
 
 extern unsigned int Cookie_FPU;

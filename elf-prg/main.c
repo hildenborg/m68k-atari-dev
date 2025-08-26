@@ -1,3 +1,8 @@
+/*
+	Copyright (C) 2025 Mikael Hildenborg
+	SPDX-License-Identifier: MIT
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

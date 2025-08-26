@@ -1,3 +1,8 @@
+/*
+	Copyright (C) 2025 Mikael Hildenborg
+	SPDX-License-Identifier: MIT
+*/
+
 #ifndef BIOS_CALLS_DEFINED
 #define BIOS_CALLS_DEFINED
 

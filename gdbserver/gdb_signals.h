@@ -1,3 +1,8 @@
+/*
+	Copyright (C) 2025 Mikael Hildenborg
+	SPDX-License-Identifier: MIT
+*/
+
 #ifndef GDB_SIGNALS_DEFINED
 #define GDB_SIGNALS_DEFINED
 

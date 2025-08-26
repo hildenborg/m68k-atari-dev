@@ -1,3 +1,8 @@
+/*
+	Copyright (C) 2025 Mikael Hildenborg
+	SPDX-License-Identifier: MIT
+*/
+
 #ifndef CONTEXT_DEFINED
 #define CONTEXT_DEFINED
 

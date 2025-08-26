@@ -1,3 +1,8 @@
+/*
+	Copyright (C) 2025 Mikael Hildenborg
+	SPDX-License-Identifier: MIT
+*/
+
 #ifndef TARGET_XML_DEFINED
 #define TARGET_XML_DEFINED
 

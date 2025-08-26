@@ -1,3 +1,8 @@
+/*
+	Copyright (C) 2025 Mikael Hildenborg
+	SPDX-License-Identifier: MIT
+*/
+
 #include "bios_calls.h"
 
 // Store stack pointer in a3, that by Atari documentation will be left untouched by the trap call.

@@ -1,4 +1,9 @@
 /*
+	Copyright (C) 2025 Mikael Hildenborg
+	SPDX-License-Identifier: MIT
+*/
+
+/*
 	For future feature additions:
 	
 	To add support for systems with fpu or additional registers, then the following code needs some attention:

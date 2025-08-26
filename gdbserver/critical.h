@@ -1,4 +1,9 @@
 /*
+	Copyright (C) 2025 Mikael Hildenborg
+	SPDX-License-Identifier: MIT
+*/
+
+/*
     Supervisor mode is assumed for all functions!
 */
 #ifndef CRITICAL_DEFINED

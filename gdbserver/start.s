@@ -1,3 +1,8 @@
+/*
+	Copyright (C) 2025 Mikael Hildenborg
+	SPDX-License-Identifier: MIT
+*/
+
 	.equ	DEFAULT_STACK, 2048
 
 	.global _BasePage

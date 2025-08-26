@@ -1,5 +1,8 @@
 #!/bin/bash
 
+#	Copyright (C) 2025 Mikael Hildenborg
+#	SPDX-License-Identifier: MIT
+
 # The built toolchain will not support wide characters or multi-treading, and will be optimized for size.
 # A build folder will be created with individual "b-*" folders for separate parts.
 # Any "b-*" can be deleted to force a rebuild of that specific part.

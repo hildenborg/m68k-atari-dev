@@ -1,5 +1,8 @@
 #!/bin/bash
 
+#	Copyright (C) 2025 Mikael Hildenborg
+#	SPDX-License-Identifier: MIT
+
 # You need to set up Hatari with a tos image before calling this script.
 # You also need a folder to use as a gem drive.
 

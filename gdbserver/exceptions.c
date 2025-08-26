@@ -1,3 +1,8 @@
+/*
+	Copyright (C) 2025 Mikael Hildenborg
+	SPDX-License-Identifier: MIT
+*/
+
 #include "gdb_signals.h"
 #include "bios_calls.h"
 #include "exceptions.h"
