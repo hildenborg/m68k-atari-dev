@@ -60,4 +60,25 @@
 #define TRAP_BRKPT	9
 #endif
 
+#ifndef FPE_FLTRES
+#define FPE_FLTRES  10
+#endif
+
+#ifndef FPE_FLTDIV
+#define FPE_FLTDIV  11
+#endif
+
+#ifndef FPE_FLTUND
+#define FPE_FLTUND  12
+#endif
+
+#ifndef FPE_FLTOVF
+#define FPE_FLTOVF  13
+#endif
+
+#ifndef FPE_FLTINV
+#define FPE_FLTINV  14
+#endif
+
 #endif // GDB_SIGNALS_DEFINED
+

@@ -166,6 +166,38 @@ void Exception(void)
 				
 			}
 			break;
+		case 48:	// FPUnordered
+			si_signo = GDB_SIGFPE;
+			si_code = FPE_FLTINV;
+			break;
+		case 49:	// FPInexact
+			si_signo = GDB_SIGFPE;
+			si_code = FPE_FLTRES;
+			break;
+		case 50:	// FPDivideZero
+			si_signo = GDB_SIGFPE;
+			si_code = FPE_FLTDIV;
+			break;
+		case 51:	// FPUnderflow
+			si_signo = GDB_SIGFPE;
+			si_code = FPE_FLTUND;
+			break;
+		case 52:	// FPOperandError
+			si_signo = GDB_SIGFPE;
+			si_code = FPE_FLTINV;
+			break;
+		case 53:	// FPOverflow
+			si_signo = GDB_SIGFPE;
+			si_code = FPE_FLTOVF;
+			break;
+		case 54:	// FPSignalingNAN
+			si_signo = GDB_SIGFPE;
+			si_code = FPE_FLTINV;
+			break;
+		case 55:	// FPUnimplemented
+			si_signo = GDB_SIGFPE;
+			si_code = FPE_FLTINV;
+			break;
 		case 0x4c:	// SerialInput CTRL-C
 			si_signo = GDB_SIGINT;
 			si_code = 0;

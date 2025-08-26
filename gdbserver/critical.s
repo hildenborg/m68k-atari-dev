@@ -114,6 +114,15 @@ o\name:
 	DCD_Hook MfpDcd, 0x41
 	S_Hook SerialInput, 0x4c
 
+	Hook FPUnordered, 48
+	Hook FPInexact, 49
+	Hook FPDivideZero, 50
+	Hook FPUnderflow, 51
+	Hook FPOperandError, 52
+	Hook FPOverflow, 53
+	Hook FPSignalingNAN, 54
+	Hook FPUnimplemented, 55
+
 	.global InitExceptions
 InitExceptions:
 	.func InitExceptions
@@ -126,19 +135,35 @@ InitExceptions:
 	| Get initial value
 	move.b	0xfffffa03.w, Mfp_ActiveEdgeRegister
 
-	HookVector	BusError
-	HookVector	AddressError
-	HookVector	IllegalInstruction
-	HookVector	DivisionByZero
+	HookVector BusError
+	HookVector AddressError
+	HookVector IllegalInstruction
+	HookVector DivisionByZero
 	| HookVector	CHK
-	HookVector	TrapV
-	HookVector	PrivilegeViolation
-	HookVector	Trace
-	HookVector	NMI
-	HookVector	BreakPoint
-	HookVector	MfpDcd
-	HookVector	SerialInput
+	HookVector TrapV
+	HookVector PrivilegeViolation
+	HookVector Trace
+	HookVector NMI
+	HookVector BreakPoint
+	HookVector MfpDcd
+	HookVector SerialInput
 
+	move.l	Cookie_FPU, d0
+	swap	d0
+	and.w	#0x1e, d0
+	jeq		1f
+	HookVector FPUnordered
+	HookVector FPInexact
+	HookVector FPDivideZero
+	HookVector FPUnderflow
+	HookVector FPOperandError
+	HookVector FPOverflow
+	HookVector FPSignalingNAN
+	HookVector FPUnimplemented
+	fmove.l	fpcr, d0
+	or.w	#0xf0, d0	| fpu exception, enable all exceptions.
+	fmove.l	d0, fpcr
+1:
 	move.w	(a7)+, sr
 	moveq	#0, d0
 	rts
@@ -150,19 +175,32 @@ RestoreExceptions:
 	move.w	sr, -(a7)
 	ori.w	#0x700, sr
 
-	UnHookVector	BusError
-	UnHookVector	AddressError
-	UnHookVector	IllegalInstruction
-	UnHookVector	DivisionByZero
+	UnHookVector BusError
+	UnHookVector AddressError
+	UnHookVector IllegalInstruction
+	UnHookVector DivisionByZero
 	| UnHookVector	CHK
-	UnHookVector	TrapV
-	UnHookVector	PrivilegeViolation
-	UnHookVector	Trace
-	UnHookVector	NMI
-	UnHookVector	BreakPoint
-	UnHookVector	MfpDcd
-	UnHookVector	SerialInput
+	UnHookVector TrapV
+	UnHookVector PrivilegeViolation
+	UnHookVector Trace
+	UnHookVector NMI
+	UnHookVector BreakPoint
+	UnHookVector MfpDcd
+	UnHookVector SerialInput
 
+	move.l	Cookie_FPU, d0
+	swap	d0
+	and.w	#0x1e, d0
+	jeq		1f
+	UnHookVector FPUnordered
+	UnHookVector FPInexact
+	UnHookVector FPDivideZero
+	UnHookVector FPUnderflow
+	UnHookVector FPOperandError
+	UnHookVector FPOverflow
+	UnHookVector FPSignalingNAN
+	UnHookVector FPUnimplemented
+1:
 	move.w	(a7)+, sr
 	moveq	#0, d0
 	rts
@@ -227,7 +265,8 @@ Calc68010Stack:
 
 SaveStateAndSwitchContext:
 	movem.l	d0-d7/a0-a6, registers
-	move.w	Cookie_FPU, d0
+	move.l	Cookie_FPU, d0
+	swap	d0
 	and.w	#0x1f, d0
 	jeq		2f
     cmp.l   #20, Cookie_CPU
@@ -282,7 +321,8 @@ RestoreStateAndSwitchContext:
 	jsr		Calc68000Stack
 	move.w	d0, (a0)	| sr
 	move.l	registers + o_to_pc, 2(a0)
-	move.w	Cookie_FPU, d0
+	move.l	Cookie_FPU, d0
+	swap	d0
 	and.w	#0x1f, d0
 	jeq		2f
     cmp.l   #20, Cookie_CPU

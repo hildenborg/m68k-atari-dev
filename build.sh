@@ -5,10 +5,18 @@
 # Any "b-*" can be deleted to force a rebuild of that specific part.
 # The build folder can be deleted after build script have sucessfully finished.
 
+# BUG NOTICE!
+# There is a bug in gcc: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=87076
+# This have the consequence that building this toolchain with:
+# --enable-lto and --enable-multilib, will cause problems when selecting any other cpu than the default.
+# So either disable lto, or disable multilib and select a default cpu that suits you.
+
 # LTO: enable/disable link time optimizing.
 CONF_LTO=--enable-lto
 # Multilib: enable/disable building of libraries for single or multiple motorola cpus.
 CONF_MULTILIB=--disable-multilib
+# Default cpu when using gcc.
+CONF_DEFAULT_CPU=68000
 # Toolchain install dir.
 CONF_INSTALL=$HOME/toolchain
 
@@ -138,7 +146,7 @@ if [ ! -d b-gcc ]; then
 	--enable-target-optspace \
 	--enable-sjlj-exceptions \
 	--with-arch=m68k \
-	--with-cpu=m68000 \
+	--with-cpu=m$CONF_DEFAULT_CPU \
 	--with-headers=$NEWLIB_PATH/newlib/libc/include
 	make -j$BUILD_THREADS
 	make install-strip
