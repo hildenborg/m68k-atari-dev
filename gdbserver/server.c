@@ -6,36 +6,6 @@
 /*
 	For future feature additions:
 	
-	To add support for systems with fpu or additional registers, then the following code needs some attention:
-	
-		exceptions.h:
-		struct ExceptionRegisters
-		
-		critical.s:
-		SaveState:
-		RestoreState:
-	
-		server.c:
-		numOfCpuRegisters
-		WriteStop
-		ReadRegisters
-		WriteRegisters
-		ReadRegister
-		WriteRegister
-
-	To add support for more exceptions (like for fpu), then look at:
-
-		exceptions.c:
-		Exception
-
-		critical.s:
-		.macro HookVector
-		.macro UnHookVector
-		.macro Hook
-		.macro Hijack
-		InitExceptions
-		RestoreExceptions
-
 	To add support for other serial communications than the original ST, look at:
 	
 		server.c:
@@ -72,13 +42,15 @@
 #define qXfer_features
 #include <stddef.h>
 #include <stdbool.h>
-#include "gdb_signals.h"
+#include "gdb_defines.h"
 #include "bios_calls.h"
 #include "server.h"
 #include "exceptions.h"
 #include "context.h"
 #include "critical.h"
+#include "file_io.h"
 #include "target_xml.h"
+#include "clib.h"
 
 typedef enum
 {
@@ -188,28 +160,6 @@ char	outPacket[PACKET_SIZE + 1] __attribute__((aligned(2)));
 const char hex[] = "0123456789abcdef";
 
 const char newline[] = "\r\n";
-
-// We need to provide this as we don't use the standard libraries, and GCC optimization will
-// Convert test loops into strlen calls...
-size_t strlen(const char* s)
-{
-	size_t len = 0;
-	__asm__ volatile (
-		"move.l	%1, %0\n\t"
-		"1:\n\t"
-		"tst.b	%1@+\n\t"
-		"bne.s	1b\n\t"
-		"sub.l	%1, %0\n\t"		// -(len + 1)
-		"not.l	%0\n\t"			// !(-(len + 1)) = len
-		: "=d" (len)
-		: "a" (s)
-		:);
-	return len;
-
-//	size_t len = 0;
-//	while (s[len] != 0) {++len;}
-//	return len;
-}
 
 #define NibbleToHex(nibb) hex[(nibb) & 0xf]
 
@@ -1111,6 +1061,176 @@ LoopState CmdContinue(bool trace)
 	return CONTINUE_EXECUTION;
 }
 
+void WriteVariable(int val)
+{
+	if (val < 0)
+	{
+		WriteChar('-');
+		val = -val;
+	}
+	int v = val >> 4;
+	int l = 0;
+	while (v != 0)
+	{
+		l += 4;
+		v >>= 4;
+	}
+
+	for (int i = l; i >= 0; i -= 4)
+	{
+		WriteChar(NibbleToHex(val >> i));
+	}
+}
+
+void WriteFileResponse(int result, int ioErrno, const char* attachment)
+{
+	WriteChar('F');
+	WriteVariable(result);
+	if (result < 0)
+	{
+		WriteChar(',');
+		WriteVariable(ioErrno);
+	}
+	if (attachment != 0)
+	{
+		WriteChar(';');
+		for (int i = 0; i < result; ++i)
+		{
+			WriteByte(attachment[i]);
+		}
+	}
+}
+
+bool CheckFileCmdArgs(const char* cmd, short args, const char* argv0, short argc)
+{
+	return (StringCompare(cmd, argv0) > 0 && args == argc);
+}
+
+int HexConvertByteArray(char *hexArray)
+{
+	// To save memory, we just convert the array in the same buffer.
+	char* hexptr = hexArray;
+	char* byteArray = hexArray;
+	while (*hexptr != 0)
+	{
+		*byteArray++ = (char)HexToByte(hexptr);
+		hexptr += 2;
+	}
+	*byteArray = 0;
+	return byteArray - hexArray;
+}
+
+// Unknown length.
+int HexToVariable(char* ptr)
+{
+	unsigned int val = 0;
+	while (*ptr != 0)
+	{
+		val = (val << 4 ) | NibbleToHex(*ptr++);
+	}
+	return val;
+}
+
+LoopState CmdFileOperation(short cmdEnd)
+{
+	int ioErrno = VFILE_ERRNO_EINVAL;
+	int result = -1;
+	char *attachment = 0;
+
+	// Find operand and arguments and end all with 0
+	char* argv[4];
+	char *ptr = inPacket + cmdEnd;
+	short argc = 0;
+	do
+	{
+		argv[argc++] = ptr;
+		while (*ptr != 0 && *ptr != ',' && *ptr != ':')
+		{
+			++ptr;
+		}
+		if (*argv != 0)
+		{
+			*ptr++ = 0;
+		}
+	} while (argc < 4 && *ptr != 0);
+	
+
+	if (CheckFileCmdArgs("open:", 4, argv[0], argc))
+	{
+		// open example vFile:open:433a2f64756d702e747874,601,1c0
+		HexConvertByteArray(argv[1]);
+		char *filename = argv[1];
+		int flags = HexToVariable(argv[2]);
+		//int mode = HexToVariable(argv[3]);	// Not supported on TOS
+		result = VfileOpen(filename, flags, &ioErrno);
+	}
+	else if (CheckFileCmdArgs("close:", 2, argv[0], argc))
+	{
+		int fd = HexToVariable(argv[1]);
+		result = VfileClose(fd, &ioErrno);
+	}
+	else if (CheckFileCmdArgs("pread:", 4, argv[0], argc))
+	{
+		int fd = HexToVariable(argv[1]);
+		int count = HexToVariable(argv[2]);
+		int offset = HexToVariable(argv[3]);
+		/*
+			We have decoded everything in the inPacket, so we can use it as a read buffer.
+			We need to estimate how many hex encoded bytes we can read.
+		*/
+		int maxRead = (PACKET_SIZE - (4 + 6)) >> 1;	// max packet size - packet header, footer and file response
+		if (count > maxRead) {count = maxRead;}
+		result = VfileWrite(fd, inPacket, offset, count, &ioErrno);
+		if (result >= 0)
+		{
+			attachment = inPacket;
+		}
+	}
+	else if (CheckFileCmdArgs("pwrite:", 4, argv[0], argc))
+	{
+		int fd = HexToVariable(argv[1]);
+		int offset = HexToVariable(argv[2]);
+		int count = HexConvertByteArray(argv[3]);
+		char *data = argv[3];
+		result = VfileWrite(fd, data, offset, count, &ioErrno);
+	}
+	else if (CheckFileCmdArgs("fstat:", 2, argv[0], argc))
+	{
+		int fd = HexToVariable(argv[1]);
+		vfile_stat* stat = (vfile_stat*)inPacket;	// Use inPacket as a buffer.
+		result = VfileFstat(fd, stat, &ioErrno);
+		if (result >= 0)
+		{
+			attachment = (char*)stat;
+		}
+	}
+	else if (CheckFileCmdArgs("stat:", 2, argv[0], argc))
+	{
+		HexConvertByteArray(argv[1]);
+		char *filename = argv[1];
+		vfile_stat* stat = (vfile_stat*)inPacket;	// Use inPacket as a buffer.
+		result = VfileStat(filename, stat, &ioErrno);
+		if (result >= 0)
+		{
+			attachment = (char*)stat;
+		}
+	}
+	else if (CheckFileCmdArgs("unlink:", 2, argv[0], argc))
+	{
+		HexConvertByteArray(argv[1]);
+		char *filename = argv[1];
+		result = VfileDelete(filename, &ioErrno);
+	}
+	else if (CheckFileCmdArgs("pid:", 2, argv[0], argc))
+	{
+		// unsigned int pid = HexToVariable(argv[1]);
+		// Don't need to do anything. File system is the same for all processes in TOS.
+		result = 0;
+	}
+	WriteFileResponse(result, ioErrno, attachment);
+	return LISTEN_TO_GDB;
+}
+
 LoopState CmdFlexible(void)
 {
 	short vNameEnd;
@@ -1148,6 +1268,10 @@ LoopState CmdFlexible(void)
 	else if ((vNameEnd = StringCompare("vKill;",  inPacket)) > 0)
 	{
 		return KILL;
+	}
+	else if ((vNameEnd = StringCompare("vFile:",  inPacket)) > 0)
+	{
+		return CmdFileOperation(vNameEnd);
 	}
 	return LISTEN_TO_GDB;
 }
@@ -1587,6 +1711,7 @@ int ServerMain(int argc, char** argv)
 	// Set DTR to ON
 	Ongibit(GI_DTR);
 	CreateServerContext();
+	InitFileIO();
 	inferiorState = NOT_LOADED;
 	
 	DbgOut("ServerMain: Server started.\r\n");
@@ -1622,6 +1747,7 @@ int ServerMain(int argc, char** argv)
 		DiscardAllBreakpoints();
 		ret = 0;
 	} while ((extendedMode && !run_once) || option_multi);
+	ExitFileIO();
 	DestroyServerContext();
 	// Set DTR to OFF
 	Offgibit(GI_DTR);

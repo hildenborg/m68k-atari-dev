@@ -38,6 +38,118 @@ int Dsetpath(const char* bios_path)
 	return result;
 }
 
+int Fcreate(const char* bios_path, unsigned short bios_attrib)
+{
+	register int bios_handle asm ("d0") = -1;
+	__asm__ volatile (
+		TRAP_BEGIN
+		"move.w		%2, %%a7@-\n\t"
+		"move.l		%1, %%a7@-\n\t"
+		TRAP_FUNC(1, 0x3c)
+		: "=r" (bios_handle)
+		: "r" (bios_path), "r" (bios_attrib)
+		: CLOBBER_REG);
+	return bios_handle;
+}
+
+int Fopen(const char* bios_path, unsigned short bios_mode)
+{
+	register int bios_handle asm ("d0") = -1;
+	__asm__ volatile (
+		TRAP_BEGIN
+		"move.w		%2, %%a7@-\n\t"
+		"move.l		%1, %%a7@-\n\t"
+		TRAP_FUNC(1, 0x3d)
+		: "=r" (bios_handle)
+		: "r" (bios_path), "r" (bios_mode)
+		: CLOBBER_REG);
+	return bios_handle;
+}
+
+int Fclose(unsigned short bios_handle)
+{
+	register int result asm ("d0") = -1;
+	__asm__ volatile (
+		TRAP_BEGIN
+		"move.w		%1, %%a7@-\n\t"
+		TRAP_FUNC(1, 0x3e)
+		: "=r" (result)
+		: "r" (bios_handle)
+		: CLOBBER_REG);
+	return result;
+}
+
+int Fseek(unsigned int file_position, unsigned short bios_handle, unsigned short bios_mode)
+{
+	register int new_position asm ("d0") = -1;
+	__asm__ volatile (
+		TRAP_BEGIN
+		"move.w		%3, %%a7@-\n\t"
+		"move.w		%2, %%a7@-\n\t"
+		"move.l		%1, %%a7@-\n\t"
+		TRAP_FUNC(1, 0x42)
+		: "=r" (new_position)
+		: "r" (file_position), "r" (bios_handle), "r" (bios_mode)
+		: CLOBBER_REG);
+	return new_position;
+}
+
+int Fdelete(const char* bios_path)
+{
+	register int result asm ("d0") = -1;
+	__asm__ volatile (
+		TRAP_BEGIN
+		"move.l		%1, %%a7@-\n\t"
+		TRAP_FUNC(1, 0x41)
+		: "=r" (result)
+		: "r" (bios_path)
+		: CLOBBER_REG);
+	return result;
+}
+
+int Fread(unsigned short bios_handle, int length, void* buf)
+{
+	register int result asm ("d0") = -1;
+	__asm__ volatile (
+		TRAP_BEGIN
+		"move.l		%3, %%a7@-\n\t"
+		"move.l		%2, %%a7@-\n\t"
+		"move.w		%1, %%a7@-\n\t"
+		TRAP_FUNC(1, 0x3f)
+		: "=r" (result)
+		: "r" (bios_handle), "r" (length), "r" (buf)
+		: CLOBBER_REG);
+	return result;
+}
+
+int Fwrite(unsigned short bios_handle, int length, const void* buf)
+{
+	register int result asm ("d0") = -1;
+	__asm__ volatile (
+		TRAP_BEGIN
+		"move.l		%3, %%a7@-\n\t"
+		"move.l		%2, %%a7@-\n\t"
+		"move.w		%1, %%a7@-\n\t"
+		TRAP_FUNC(1, 0x40)
+		: "=r" (result)
+		: "r" (bios_handle), "r" (length), "r" (buf)
+		: CLOBBER_REG);
+	return result;
+}
+
+struct DTA* Fgetdta(unsigned short bios_handle)
+{
+	register struct DTA* result asm ("d0") = (struct DTA*)-1;
+	__asm__ volatile (
+		TRAP_BEGIN
+		"move.w		%1, %%a7@-\n\t"
+		TRAP_FUNC(1, 0x2f)
+		: "=r" (result)
+		: "r" (bios_handle)
+		: CLOBBER_REG);
+	return result;
+}
+
 int Mfree(void* start_addr)
 {
 	register int result asm ("d0") = -1;

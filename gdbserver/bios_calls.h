@@ -16,6 +16,22 @@ unsigned int Dsetdrv(unsigned short bios_drive);
 
 int Dsetpath(const char* bios_path);
 
+int Fcreate(const char* bios_path, unsigned short bios_attrib);
+
+int Fopen(const char* bios_path, unsigned short bios_mode);
+
+int Fclose(unsigned short bios_handle);
+
+int Fseek(unsigned int file_position, unsigned short bios_handle, unsigned short bios_mode);
+
+int Fdelete(const char* bios_path);
+
+int Fread(unsigned short bios_handle, int length, void* buf);
+
+int Fwrite(unsigned short bios_handle, int length, const void* buf);
+
+struct DTA* Fgetdta(unsigned short bios_handle);
+
 int Mfree(void* start_addr);
 
 #define PE_LOADGO		0

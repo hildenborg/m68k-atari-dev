@@ -6,7 +6,7 @@
 TARGET_NAME := gdbsrv
 BUILD_DIR := .
 SRC_DIR := $(dir $(realpath $(lastword $(MAKEFILE_LIST))))
-SOURCES := start.s main.c server.c exceptions.c bios_calls.c context.c target_xml.c
+SOURCES := start.s main.c server.c exceptions.c bios_calls.c context.c file_io.c clib.c target_xml.c
 
 # Project build architecture settings
 CPU := 68000

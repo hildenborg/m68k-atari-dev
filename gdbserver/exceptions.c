@@ -3,7 +3,7 @@
 	SPDX-License-Identifier: MIT
 */
 
-#include "gdb_signals.h"
+#include "gdb_defines.h"
 #include "bios_calls.h"
 #include "exceptions.h"
 #include "server.h"

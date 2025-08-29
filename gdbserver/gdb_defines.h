@@ -85,5 +85,47 @@
 #define FPE_FLTINV  14
 #endif
 
+// Responses for file operations
+#define VFILE_ERRNO_EPERM           1
+#define VFILE_ERRNO_ENOENT          2
+#define VFILE_ERRNO_EINTR           4
+#define VFILE_ERRNO_EBADF           9
+#define VFILE_ERRNO_EACCES         13
+#define VFILE_ERRNO_EFAULT         14
+#define VFILE_ERRNO_EBUSY          16
+#define VFILE_ERRNO_EEXIST         17
+#define VFILE_ERRNO_ENODEV         19
+#define VFILE_ERRNO_ENOTDIR        20
+#define VFILE_ERRNO_EISDIR         21
+#define VFILE_ERRNO_EINVAL         22
+#define VFILE_ERRNO_ENFILE         23
+#define VFILE_ERRNO_EMFILE         24
+#define VFILE_ERRNO_EFBIG          27
+#define VFILE_ERRNO_ENOSPC         28
+#define VFILE_ERRNO_ESPIPE         29
+#define VFILE_ERRNO_EROFS          30
+#define VFILE_ERRNO_ENAMETOOLONG   91
+#define VFILE_ERRNO_EUNKNOWN       9999
+
+#define VFILE_O_RDONLY        0x0
+#define VFILE_O_WRONLY        0x1
+#define VFILE_O_RDWR          0x2
+#define VFILE_O_APPEND        0x8
+#define VFILE_O_CREAT       0x200
+#define VFILE_O_TRUNC       0x400
+#define VFILE_O_EXCL        0x800
+
+#define VFILE_S_IFREG       0100000
+#define VFILE_S_IFDIR        040000
+#define VFILE_S_IRUSR          0400
+#define VFILE_S_IWUSR          0200
+#define VFILE_S_IXUSR          0100
+#define VFILE_S_IRGRP           040
+#define VFILE_S_IWGRP           020
+#define VFILE_S_IXGRP           010
+#define VFILE_S_IROTH            04
+#define VFILE_S_IWOTH            02
+#define VFILE_S_IXOTH            01
+
 #endif // GDB_SIGNALS_DEFINED
 
