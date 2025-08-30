@@ -552,7 +552,7 @@ void TransmitPacket(bool skipAck)
 	for (int i = 0; i < outPacketLength; ++i)
 	{
 		char c = outPacket[i];
-		if (c == '$' || c == '#' || c == 0x7d)
+		if (c == '$' || c == '#' || c == '*' || c == 0x7d)
 		{
 			PutByte(0x7d);
 			sum += 0x7d;
@@ -1096,7 +1096,8 @@ void WriteFileResponse(int result, int ioErrno, const char* attachment)
 		WriteChar(';');
 		for (int i = 0; i < result; ++i)
 		{
-			WriteByte(attachment[i]);
+			WriteChar(attachment[i]);
+			//WriteByte(attachment[i]);
 		}
 	}
 }
@@ -1126,7 +1127,7 @@ int HexToVariable(char* ptr)
 	unsigned int val = 0;
 	while (*ptr != 0)
 	{
-		val = (val << 4 ) | NibbleToHex(*ptr++);
+		val = (val << 4 ) | (unsigned int)HexToNibble(*ptr++);
 	}
 	return val;
 }
@@ -1148,28 +1149,34 @@ LoopState CmdFileOperation(short cmdEnd)
 		{
 			++ptr;
 		}
-		if (*argv != 0)
+		if (*ptr != 0)
 		{
 			*ptr++ = 0;
 		}
 	} while (argc < 4 && *ptr != 0);
-	
 
-	if (CheckFileCmdArgs("open:", 4, argv[0], argc))
+	DbgOut("vFile:\r\n");
+	for (int i = 0; i < argc; ++i)
 	{
-		// open example vFile:open:433a2f64756d702e747874,601,1c0
+		DbgOut("\t arg: ");
+		DbgOut(argv[i]);
+		DbgOut("\r\n");
+	}
+
+	if (CheckFileCmdArgs("open", 4, argv[0], argc))
+	{
 		HexConvertByteArray(argv[1]);
 		char *filename = argv[1];
 		int flags = HexToVariable(argv[2]);
 		//int mode = HexToVariable(argv[3]);	// Not supported on TOS
 		result = VfileOpen(filename, flags, &ioErrno);
 	}
-	else if (CheckFileCmdArgs("close:", 2, argv[0], argc))
+	else if (CheckFileCmdArgs("close", 2, argv[0], argc))
 	{
 		int fd = HexToVariable(argv[1]);
 		result = VfileClose(fd, &ioErrno);
 	}
-	else if (CheckFileCmdArgs("pread:", 4, argv[0], argc))
+	else if (CheckFileCmdArgs("pread", 4, argv[0], argc))
 	{
 		int fd = HexToVariable(argv[1]);
 		int count = HexToVariable(argv[2]);
@@ -1180,21 +1187,24 @@ LoopState CmdFileOperation(short cmdEnd)
 		*/
 		int maxRead = (PACKET_SIZE - (4 + 6)) >> 1;	// max packet size - packet header, footer and file response
 		if (count > maxRead) {count = maxRead;}
-		result = VfileWrite(fd, inPacket, offset, count, &ioErrno);
+		result = VfileRead(fd, inPacket, offset, count, &ioErrno);
 		if (result >= 0)
 		{
 			attachment = inPacket;
 		}
 	}
-	else if (CheckFileCmdArgs("pwrite:", 4, argv[0], argc))
+	else if (CheckFileCmdArgs("pwrite", 4, argv[0], argc))
 	{
 		int fd = HexToVariable(argv[1]);
 		int offset = HexToVariable(argv[2]);
-		int count = HexConvertByteArray(argv[3]);
 		char *data = argv[3];
+		int count = inPacketLength - (int)(data - inPacket);
+		DbgOutVal("fd:", (unsigned int)fd);
+		DbgOutVal("offset:", (unsigned int)offset);
+		DbgOutVal("count:", (unsigned int)count);
 		result = VfileWrite(fd, data, offset, count, &ioErrno);
 	}
-	else if (CheckFileCmdArgs("fstat:", 2, argv[0], argc))
+	else if (CheckFileCmdArgs("fstat", 2, argv[0], argc))
 	{
 		int fd = HexToVariable(argv[1]);
 		vfile_stat* stat = (vfile_stat*)inPacket;	// Use inPacket as a buffer.
@@ -1204,7 +1214,7 @@ LoopState CmdFileOperation(short cmdEnd)
 			attachment = (char*)stat;
 		}
 	}
-	else if (CheckFileCmdArgs("stat:", 2, argv[0], argc))
+	else if (CheckFileCmdArgs("stat", 2, argv[0], argc))
 	{
 		HexConvertByteArray(argv[1]);
 		char *filename = argv[1];
@@ -1215,13 +1225,13 @@ LoopState CmdFileOperation(short cmdEnd)
 			attachment = (char*)stat;
 		}
 	}
-	else if (CheckFileCmdArgs("unlink:", 2, argv[0], argc))
+	else if (CheckFileCmdArgs("unlink", 2, argv[0], argc))
 	{
 		HexConvertByteArray(argv[1]);
 		char *filename = argv[1];
 		result = VfileDelete(filename, &ioErrno);
 	}
-	else if (CheckFileCmdArgs("pid:", 2, argv[0], argc))
+	else if (CheckFileCmdArgs("setfs", 2, argv[0], argc))
 	{
 		// unsigned int pid = HexToVariable(argv[1]);
 		// Don't need to do anything. File system is the same for all processes in TOS.

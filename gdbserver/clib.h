@@ -1,3 +1,8 @@
+/*
+	Copyright (C) 2025 Mikael Hildenborg
+	SPDX-License-Identifier: MIT
+*/
+
 #ifndef CLIB_DEFINED
 #define CLIB_DEFINED
 

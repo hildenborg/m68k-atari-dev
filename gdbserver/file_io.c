@@ -12,11 +12,19 @@
 #define NUM_HANDLES 8
 int fd_handles[NUM_HANDLES];
 
+extern void DbgOutVal(const char* name, unsigned int val);
+extern void ConOut(const char* txt);
+
+
 void InitFileIO(void)
 {
 	for (int i = 0; i < NUM_HANDLES; ++i)
 	{
 		fd_handles[i] = -1;
+	}
+	for (int i = 0; i < NUM_HANDLES; ++i)
+	{
+		DbgOutVal("handle", fd_handles[i]);
 	}
 }
 
@@ -40,6 +48,8 @@ void AddHandle(int fd)
 		if (fd_handles[i] == -1)
 		{
 			fd_handles[i] = fd;
+			DbgOutVal("add handle", fd);
+			DbgOutVal("index", i);
 			break;
 		}
 	}
@@ -53,6 +63,8 @@ void RemoveHandle(int fd)
 		if (fd_handles[i] == fd)
 		{
 			fd_handles[i] = -1;
+			DbgOutVal("del handle", fd);
+			DbgOutVal("index", i);
 			break;
 		}
 	}
@@ -67,6 +79,7 @@ int IsHandle(int fd)
 			return 0;
 		}
 	}
+	ConOut("Handle not found.");
 	return -1;
 }
 
@@ -75,7 +88,7 @@ int gem_to_errno(int gemError)
     int err = VFILE_ERRNO_EACCES;
 	if (gemError == -33 || gemError == -34)
 	{
-		err = VFILE_ERRNO_EACCES;
+		err = VFILE_ERRNO_ENOENT;
 	}
     return err;
 }
@@ -163,13 +176,17 @@ int VfileWrite(int fd, const void *buf, int offset, int nbytes, int *ioErrno)
 	int numWritten = -1;
 	if (IsHandle(fd) == 0)
 	{
-		int new_file_pos = Fseek(offset, (unsigned short)fd, 0);
-		if (new_file_pos < 0)
+		if (offset > 0)
 		{
-			*ioErrno = gem_to_errno(new_file_pos);
-			return -1;
+			int new_file_pos = Fseek(offset, (unsigned short)fd, 0);
+			if (new_file_pos < 0)
+			{
+				*ioErrno = gem_to_errno(new_file_pos);
+				return -1;
+			}
 		}
 		numWritten = Fwrite((unsigned short)fd, nbytes, buf);
+		DbgOutVal("numWritten", numWritten);
 	}
 	if (numWritten < 0)
 	{
@@ -184,11 +201,14 @@ int VfileRead(int fd, void *buf, int offset, int nbytes, int *ioErrno)
 	int numRead = -1;
 	if (IsHandle(fd) == 0)
 	{
-		int new_file_pos = Fseek(offset, (unsigned short)fd, 0);
-		if (new_file_pos < 0)
+		if (offset > 0)
 		{
-			*ioErrno = gem_to_errno(new_file_pos);
-			return -1;
+			int new_file_pos = Fseek(offset, (unsigned short)fd, 0);
+			if (new_file_pos < 0)
+			{
+				*ioErrno = gem_to_errno(new_file_pos);
+				return -1;
+			}
 		}
 		numRead = Fread((unsigned short)fd, nbytes, buf);
 	}
@@ -236,16 +256,18 @@ int VfileFstat(int fd, vfile_stat* stat, int *ioErrno)
 
 int VfileStat(const char *bios_path, vfile_stat* stat, int *ioErrno)
 {
-	int handle = Fopen(bios_path, 0);
-	if (handle > 0)
+	int fd = Fopen(bios_path, 0);
+	if (fd > 0)
 	{
-		int err = VfileFstat(handle, stat, ioErrno);
-		Fclose(handle);
-		handle = err;
+		AddHandle(fd);
+		int err = VfileFstat(fd, stat, ioErrno);
+		Fclose(fd);
+		RemoveHandle(fd);
+		fd = err;
 	}
-	if (handle < 0)
+	if (fd < 0)
 	{
-		*ioErrno = gem_to_errno(handle);
+		*ioErrno = gem_to_errno(fd);
 		return -1;
 	}
 	return sizeof(vfile_stat);

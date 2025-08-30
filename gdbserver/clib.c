@@ -36,15 +36,16 @@ size_t strlen(const char* s)
 
 void* memset(void *ptr, int value, size_t num)
 {
+	if (num > 0)
+	{
 	__asm__ volatile (
-		"bra.s	2f\n\t"
 		"1:\n\t"
 		"move.b	%1, %0@+\n\t"
-		"2:\n\t"
 		"subq.l #1, %2\n\t"
-		"bpl.s	1b\n\t"
+		"bne.s	1b\n\t"
 		:
-		: "a" (ptr), "r" (value), "r" (num)
+		: "a" (ptr), "d" (value), "d" (num)
 		:);
+	}
 	return ptr;
 }
