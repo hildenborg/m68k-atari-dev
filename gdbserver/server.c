@@ -394,7 +394,7 @@ int GetByte(void)
 		}
 		if (CheckServerQuitKey() < 0)
 		{
-			return 0x1a;
+			return -2;
 		}
 	}
 	return Bconin(DEV_AUX) & 0xff;
@@ -417,11 +417,11 @@ void ReceivePacket(void)
 {
 	DbgRemOut("ReceivePacket: \r\n");
 	int c;
-	unsigned char sum = 0;
 	bool waitForPacket = true;
 
 	while (waitForPacket)
 	{
+		unsigned char sum = 0;
 		inPacketLength = 0;
 		DbgRemOut("\tWaiting...\r\n");
 		
@@ -443,60 +443,78 @@ void ReceivePacket(void)
 		// Wait for packet start
 		while ((c = GetByte()) != '$')
 		{
-			if (c < 0)
+			if (c == -1)
 			{
 				DbgRemOut("\r\n\tConnection dropped!\r\n");
-				c = 'k';
-				break;
+				inPacketLength = 1;
+				inPacket[0] = (unsigned char)'k';
+				return;
 			}
-			else if (c == 0x03)
+			else if (c == -2)
 			{
-				DbgRemOut("\r\n\tCtrl-C!\r\n");
-				break;
+				DbgRemOut("\r\n\tKill Server!\r\n");
+				inPacketLength = 1;
+				inPacket[0] = 0x1a;		// Ctrl-Z
+				return;
 			}
-			else if (c == 0x1a)
-			{
-				DbgOut("\r\n\tKill Server!\r\n");
-				break;
-			}
-		}
-		if (c != '$')
-		{
-			// Either got a dropped connection or a Ctrl-C
-			inPacketLength = 1;
-			inPacket[0] = (unsigned char)c;
-			return;
 		}
 		
 		DbgRemOut("\tGot beginning of packet.\r\n");
 		// Fetch payload
 		bool escaped = false;
-		while ((c = GetByte()) != '#') 
+		bool error = false;
+		while (!error) 
 		{
-			if (c < 0)
+			c = GetByte();
+			if (c == -1)
 			{
 				DbgRemOut("\r\n\tConnection dropped!\r\n");
 				inPacketLength = 1;
-				inPacket[0] = 'k';	// Kill inferior
+				inPacket[0] = (unsigned char)'k';
 				return;
 			}
-			else if (c == '$')
+			else if (c == -2)
 			{
-				inPacketLength = 0;
-				sum = 0;
-				escaped = false;
+				DbgRemOut("\r\n\tKill Server!\r\n");
+				inPacketLength = 1;
+				inPacket[0] = 0x1a;		// Ctrl-Z
+				return;
 			}
-			sum += (unsigned char)c;
-			if (c == 0x7d)
+			if (escaped)
 			{
-				escaped = true;
+				sum += (unsigned char)c;
+				c ^= 0x20;
+				escaped = false;
+				inPacket[inPacketLength++] = (unsigned char)c;
 			}
 			else
 			{
-				if (escaped) { c ^= 0x20; }
-				inPacket[inPacketLength++] = (unsigned char)c;
-				escaped = false;
+				if (c == '$')
+				{
+					// Error, wait for new packet.
+					error = true;
+					break;
+				}
+				else if (c == '#')
+				{
+					// End of packet.
+					break;
+				}
+				else if (c == 0x7d)
+				{
+					escaped = true;
+				}
+				else
+				{
+					inPacket[inPacketLength++] = (unsigned char)c;
+				}
+				sum += (unsigned char)c;
 			}
+		}
+		if (error)
+		{
+			DbgRemOut("\r\n\tError in packet, retrying.\r\n\t");
+			continue;
 		}
 		inPacket[inPacketLength] = 0;
 		DbgRemOut("\tGot end of packet.\r\n\t");
@@ -1141,6 +1159,7 @@ LoopState CmdFileOperation(short cmdEnd)
 	// Find operand and arguments and end all with 0
 	char* argv[4];
 	char *ptr = inPacket + cmdEnd;
+	char *ptrend = inPacket + inPacketLength;
 	short argc = 0;
 	do
 	{
@@ -1153,8 +1172,8 @@ LoopState CmdFileOperation(short cmdEnd)
 		{
 			*ptr++ = 0;
 		}
-	} while (argc < 4 && *ptr != 0);
-
+	} while (argc < 4 && ptr != ptrend);
+/*
 	DbgOut("vFile:\r\n");
 	for (int i = 0; i < argc; ++i)
 	{
@@ -1162,7 +1181,7 @@ LoopState CmdFileOperation(short cmdEnd)
 		DbgOut(argv[i]);
 		DbgOut("\r\n");
 	}
-
+*/
 	if (CheckFileCmdArgs("open", 4, argv[0], argc))
 	{
 		HexConvertByteArray(argv[1]);
@@ -1185,7 +1204,7 @@ LoopState CmdFileOperation(short cmdEnd)
 			We have decoded everything in the inPacket, so we can use it as a read buffer.
 			We need to estimate how many hex encoded bytes we can read.
 		*/
-		int maxRead = (PACKET_SIZE - (4 + 6)) >> 1;	// max packet size - packet header, footer and file response
+		int maxRead = (PACKET_SIZE - 20);	// max packet size - some room for response
 		if (count > maxRead) {count = maxRead;}
 		result = VfileRead(fd, inPacket, offset, count, &ioErrno);
 		if (result >= 0)
@@ -1198,10 +1217,10 @@ LoopState CmdFileOperation(short cmdEnd)
 		int fd = HexToVariable(argv[1]);
 		int offset = HexToVariable(argv[2]);
 		char *data = argv[3];
-		int count = inPacketLength - (int)(data - inPacket);
-		DbgOutVal("fd:", (unsigned int)fd);
-		DbgOutVal("offset:", (unsigned int)offset);
-		DbgOutVal("count:", (unsigned int)count);
+		int count = (int)((inPacket + inPacketLength) - data);
+//		DbgOutVal("fd:", (unsigned int)fd);
+//		DbgOutVal("offset:", (unsigned int)offset);
+//		DbgOutVal("count:", (unsigned int)count);
 		result = VfileWrite(fd, data, offset, count, &ioErrno);
 	}
 	else if (CheckFileCmdArgs("fstat", 2, argv[0], argc))
@@ -1722,6 +1741,7 @@ int ServerMain(int argc, char** argv)
 	Ongibit(GI_DTR);
 	CreateServerContext();
 	InitFileIO();
+
 	inferiorState = NOT_LOADED;
 	
 	DbgOut("ServerMain: Server started.\r\n");
@@ -1757,6 +1777,7 @@ int ServerMain(int argc, char** argv)
 		DiscardAllBreakpoints();
 		ret = 0;
 	} while ((extendedMode && !run_once) || option_multi);
+
 	ExitFileIO();
 	DestroyServerContext();
 	// Set DTR to OFF

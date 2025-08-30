@@ -12,8 +12,8 @@
 #define NUM_HANDLES 8
 int fd_handles[NUM_HANDLES];
 
-extern void DbgOutVal(const char* name, unsigned int val);
-extern void ConOut(const char* txt);
+//extern void DbgOutVal(const char* name, unsigned int val);
+//extern void ConOut(const char* txt);
 
 
 void InitFileIO(void)
@@ -22,10 +22,12 @@ void InitFileIO(void)
 	{
 		fd_handles[i] = -1;
 	}
+	/*
 	for (int i = 0; i < NUM_HANDLES; ++i)
 	{
 		DbgOutVal("handle", fd_handles[i]);
 	}
+	*/
 }
 
 void ExitFileIO(void)
@@ -48,8 +50,8 @@ void AddHandle(int fd)
 		if (fd_handles[i] == -1)
 		{
 			fd_handles[i] = fd;
-			DbgOutVal("add handle", fd);
-			DbgOutVal("index", i);
+//			DbgOutVal("add handle", fd);
+//			DbgOutVal("index", i);
 			break;
 		}
 	}
@@ -63,8 +65,8 @@ void RemoveHandle(int fd)
 		if (fd_handles[i] == fd)
 		{
 			fd_handles[i] = -1;
-			DbgOutVal("del handle", fd);
-			DbgOutVal("index", i);
+//			DbgOutVal("del handle", fd);
+//			DbgOutVal("index", i);
 			break;
 		}
 	}
@@ -79,7 +81,7 @@ int IsHandle(int fd)
 			return 0;
 		}
 	}
-	ConOut("Handle not found.");
+	//ConOut("Handle not found.");
 	return -1;
 }
 
@@ -186,7 +188,7 @@ int VfileWrite(int fd, const void *buf, int offset, int nbytes, int *ioErrno)
 			}
 		}
 		numWritten = Fwrite((unsigned short)fd, nbytes, buf);
-		DbgOutVal("numWritten", numWritten);
+		//DbgOutVal("numWritten", numWritten);
 	}
 	if (numWritten < 0)
 	{
