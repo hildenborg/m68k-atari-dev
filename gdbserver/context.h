@@ -7,7 +7,7 @@
 #define CONTEXT_DEFINED
 
 // Sets up all vectors and registers for running the server.
-void CreateServerContext(void);
+int CreateServerContext(void);
 
 // Cleans up all vectors and registers altered by CreateServerContext.
 void DestroyServerContext(void);

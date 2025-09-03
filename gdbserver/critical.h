@@ -22,4 +22,6 @@ int ExceptionSafeMemoryWrite(unsigned char* address, unsigned char c);
 // Supervisor mode not needed.
 int GetExceptionNum(void);
 
+void CtrlCException(void);
+
 #endif // CRITICAL_DEFINED

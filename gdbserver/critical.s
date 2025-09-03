@@ -12,8 +12,6 @@
 */
 	.global registers
 	.global Exception
-	.global CtrlC_enable
-	.global Mfp_ActiveEdgeRegister
 	.global Cookie_CPU
 	.global Cookie_VDO
 	.global Cookie_FPU
@@ -67,43 +65,6 @@ o\name:
 	jmp 	0x12345678
 	.endm
 
-/*
-	Special for serial comm.
-	If CTRL-C checking is enabled, and a CTRL-C (0x03) is detected, then pause the execution.
-*/
-	.macro S_Hook name, num
-	.equ	n\name,	\num * 4
-\name:
-	tst.w	CtrlC_enable
-	beq.s	o\name
-	btst	#7, 0xfffffa2b.w
-	beq.s	o2\name
-	cmp.b	#3, 0xfffffa2f.w	| CTRL-C from gdb
-	bne.s	o2\name
-	ori.w	#0x700, sr
-	move.l	a7, exception_a7
-	move.w	#\num, exception_num
-	jsr		HandleSerialException
-	move.l	exception_a7, a7
-	rte
-o2\name:
-	move.b	#0xef, 0xfffffa0f.w
-	rte
-o\name:
-	jmp 	0x12345678
-	.endm
-
-/*
-	Capture the mfp state, so we can easily detect DCD
-*/
-	.macro DCD_Hook name, num
-	.equ	n\name,	\num * 4
-\name:
-	move.b	0xfffffa03.w, Mfp_ActiveEdgeRegister
-o\name:
-	jmp 	0x12345678
-	.endm
-
 	.text
 
 	Hook BusError, 2
@@ -116,8 +77,6 @@ o\name:
 	Hijack Trace, 9
 	Hook NMI, 31
 	Hijack BreakPoint, 32
-	DCD_Hook MfpDcd, 0x41
-	S_Hook SerialInput, 0x4c
 
 	Hook FPUnordered, 48
 	Hook FPInexact, 49
@@ -150,8 +109,6 @@ InitExceptions:
 	HookVector Trace
 	HookVector NMI
 	HookVector BreakPoint
-	HookVector MfpDcd
-	HookVector SerialInput
 
 	move.l	Cookie_FPU, d0
 	swap	d0
@@ -190,8 +147,6 @@ RestoreExceptions:
 	UnHookVector Trace
 	UnHookVector NMI
 	UnHookVector BreakPoint
-	UnHookVector MfpDcd
-	UnHookVector SerialInput
 
 	move.l	Cookie_FPU, d0
 	swap	d0
@@ -211,6 +166,20 @@ RestoreExceptions:
 	rts
 	.endfunc
 
+	.global CtrlCException
+CtrlCException:
+	.func CtrlCException
+	move.l	a0, -(a7)
+	lea		+8(a7), a0				| Back up to where we were when the exception occured
+	move.l	a0, exception_a7
+	move.w	#1000, exception_num	| made up ctrl-c exception num
+	move.l	(a7)+, a0
+
+	jsr		HandleException
+	move.l	exception_a7, a7
+	lea		-8(a7), a7				| Forward to where we were when the function was called
+	rts
+	.endfunc
 
 	.global GetExceptionNum
 GetExceptionNum:
@@ -226,18 +195,6 @@ HandleException:
 	andi.w	#0xf8ff, d0
 	or.w	srvIrqLevel, d0
 	move.w	d0, sr
-	jsr		Exception
-	ori.w	#0x700, sr
-	jmp		RestoreStateAndSwitchContext
-
-HandleSerialException:
-	jsr		SaveStateAndSwitchContext
-	move.w	sr, d0
-	andi.w	#0xf8ff, d0
-	or.w	srvIrqLevel, d0
-	move.w	d0, sr
-	clr.w	CtrlC_enable		| must do this before we enable irq again.
-	move.b	#0xef, 0xfffffa0f.w	| enable irq again so serial comm works in server.
 	jsr		Exception
 	ori.w	#0x700, sr
 	jmp		RestoreStateAndSwitchContext

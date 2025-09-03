@@ -14,9 +14,6 @@
 
 ExceptionRegisters registers;
 
-volatile short CtrlC_enable = 0;
-volatile unsigned char Mfp_ActiveEdgeRegister __attribute__((aligned(2))) = 0;
-
 typedef struct
 {
 	unsigned short* addr;
@@ -28,16 +25,6 @@ MemBreak mempoints[NUM_MEMPOINTS];
 extern volatile struct BasePage*	inferiorBasePage;
 
 extern void DbgOutVal(const char* name, unsigned int val);
-
-void EnableCtrlC(bool onOff)
-{
-	CtrlC_enable = onOff ? 1 : 0;
-}
-
-bool GetDCD(void)
-{
-	return (Mfp_ActiveEdgeRegister & 0x02) == 0;
-}
 
 // Check pc to see if it is in server code.
 bool IsServerException(void)
@@ -203,7 +190,7 @@ void Exception(void)
 			si_signo = GDB_SIGFPE;
 			si_code = FPE_FLTINV;
 			break;
-		case 0x4c:	// SerialInput CTRL-C
+		case 1000:	// CtrlCException
 			si_signo = GDB_SIGINT;
 			si_code = 0;
 			break;

@@ -12,6 +12,7 @@
 extern "C" {
 #endif
 
+
 typedef struct
 {
 	unsigned int	d0, d1, d2, d3, d4, d5, d6, d7;
@@ -29,8 +30,6 @@ int InsertMemoryBreakpoint(unsigned short* addr);
 int RemoveMemoryBreakpoint(unsigned short* addr);
 int IsBreakpoint(unsigned short* addr);
 ExceptionRegisters* GetRegisters(void);
-void EnableCtrlC(bool onOff);
-bool GetDCD(void);
 
 #ifdef __cplusplus
 }

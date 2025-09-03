@@ -8,6 +8,7 @@
 #include "server.h"
 #include "exceptions.h"
 #include "critical.h"
+#include "comm.h"
 
 #define NUM_IRQ_VECTORS 8
 #define NUM_MFP_VECTORS 16
@@ -31,9 +32,16 @@ void RestoreVectors(unsigned int* vectors);
 void StoreMemoryRegisters(unsigned int* longs, unsigned char* bytes);
 void RestoreMemoryRegisters(unsigned int* longs, unsigned char* bytes);
 
+extern comm	comDev;
+extern char	com_method[];
+
 int CreateServerContext_super(void)
 {
 	InitExceptions();
+	if (comDev.Init(com_method, CtrlCException) < 0)
+	{
+		return -1;
+	}
 	ClearInternalCaches();
     // Store server context.
     StoreVectors(serverVectors);
@@ -41,16 +49,23 @@ int CreateServerContext_super(void)
     return 0;
 }
 
-void CreateServerContext(void)
+int CreateServerContext(void)
 {
 	DiscardAllBreakpoints();
-	Supexec(CreateServerContext_super);
+	return Supexec(CreateServerContext_super);
+}
+
+int DestroyServerContext_super(void)
+{
+	comDev.Exit();
+	RestoreExceptions();
+    return 0;
 }
 
 void DestroyServerContext(void)
 {
     // No need to restore server context as we will not use it again.
-	Supexec(RestoreExceptions);
+	Supexec(DestroyServerContext_super);
 }
 
 void SwitchToInferiorContext(void)

@@ -4,19 +4,6 @@
 */
 
 /*
-	For future feature additions:
-	
-	To add support for other serial communications than the original ST, look at:
-	
-		server.c:
-		ServerMain
-		GetByte
-		PutByte
-	
-		critical.s:
-		S_Hook
-		DCD_Hook
-		
 	To add/change support for hardware memory registers, look at:
 		
 		context.c:
@@ -51,6 +38,7 @@
 #include "file_io.h"
 #include "target_xml.h"
 #include "clib.h"
+#include "comm.h"
 
 typedef enum
 {
@@ -94,6 +82,8 @@ char	inferior_filename[MAX_PATH_LEN] __attribute__((aligned(2)));	// The filenam
 char	inferior_cmdline[MAX_PATH_LEN] __attribute__((aligned(2)));		// Command line args to debugged inferior.
 char	inferior_workpath[MAX_PATH_LEN] __attribute__((aligned(2)));	// The work path of the inferior being debugged. Can be empty if nothing is loaded.
 char	com_method[MAX_PATH_LEN] __attribute__((aligned(2)));			// Communication method. Only supports COM1 for now.
+
+comm	comDev;
 
 bool			option_multi = false;
 bool			run_once = false;				// If set and if extended mode, then gdbserver exits when inferior is killed.
@@ -378,39 +368,32 @@ int CheckServerQuitKey(void)
 		return (((Bconin(DEV_CON) >> 16) & 0xff) == 62) ? -1 : 0;
 	}
 	return 0;
-	// Check if Shift-F4 have been released
-//	volatile unsigned char* keyboardACIA = (unsigned char*)0xfffffc02;
-//	return *keyboardACIA == (62|0x80) ? -1 : 0;
 }
 
 int GetByte(void)
 {
-	while (Bconstat(DEV_AUX) == 0)
+	int byte = comDev.ReceiveByte();
+
+	while ((byte = comDev.ReceiveByte()) == COMM_ERR_NOT_READY)
 	{
-		if (!GetDCD())
-		{
-			// Lost contact
-			return -1;
-		}
 		if (CheckServerQuitKey() < 0)
 		{
-			return -2;
+			byte = COMM_ERR_KILLED;
+			break;
 		}
 	}
-	return Bconin(DEV_AUX) & 0xff;
+	if (byte < 0)
+	{
+		return byte;
+	}
+	return byte;
 }
 
 void PutByte(char ch)
 {
-	while (Bcostat(DEV_AUX) == 0)
+	while (comDev.TransmitByte(ch) == COMM_ERR_NOT_READY)
 	{
-		if (!GetDCD())
-		{
-			// Lost contact
-			return;
-		}
 	}
-	Bconout(DEV_AUX, (unsigned short)ch);
 }
 
 void ReceivePacket(void)
@@ -426,7 +409,7 @@ void ReceivePacket(void)
 		DbgRemOut("\tWaiting...\r\n");
 		
 		// Wait for connection.
-		while (!GetDCD())
+		while (!comDev.IsConnected())
 		{
 			// Check keypress
 			// If we do not have any connection yet, then we cannot have any running inferiors, which means that we cannot be in supervisor mode.
@@ -443,14 +426,14 @@ void ReceivePacket(void)
 		// Wait for packet start
 		while ((c = GetByte()) != '$')
 		{
-			if (c == -1)
+			if (c == COMM_ERR_DISCONNECTED)
 			{
 				DbgRemOut("\r\n\tConnection dropped!\r\n");
 				inPacketLength = 1;
 				inPacket[0] = (unsigned char)'k';
 				return;
 			}
-			else if (c == -2)
+			else if (c == COMM_ERR_KILLED)
 			{
 				DbgRemOut("\r\n\tKill Server!\r\n");
 				inPacketLength = 1;
@@ -466,14 +449,14 @@ void ReceivePacket(void)
 		while (!error) 
 		{
 			c = GetByte();
-			if (c == -1)
+			if (c == COMM_ERR_DISCONNECTED)
 			{
 				DbgRemOut("\r\n\tConnection dropped!\r\n");
 				inPacketLength = 1;
 				inPacket[0] = (unsigned char)'k';
 				return;
 			}
-			else if (c == -2)
+			else if (c == COMM_ERR_KILLED)
 			{
 				DbgRemOut("\r\n\tKill Server!\r\n");
 				inPacketLength = 1;
@@ -541,7 +524,7 @@ void ReceivePacket(void)
 		{
 			waitForPacket = false;
 		}
-		if (!GetDCD())
+		if (!comDev.IsConnected())
 		{
 			DbgRemOut("\r\n\tConnection dropped!\r\n");
 			inPacketLength = 1;
@@ -557,7 +540,7 @@ void TransmitPacket(bool skipAck)
 	outPacket[outPacketLength] = 0;
 	DbgRemOut(outPacket);
 
-	if (!GetDCD())
+	if (!comDev.IsConnected())
 	{
 		// Connection dropped...
 		DbgRemOut("\r\n\tConnection dropped!\r\n");
@@ -1313,7 +1296,7 @@ void ServerCommandLoop(int si_signo, int si_code)
 	DbgOutVal("si_code", (unsigned int)si_code);
 
 	LoopState loopState = LISTEN_TO_GDB;
-	EnableCtrlC(false); // We don't want any Ctrl-C breaking now.
+	comDev.EnableCtrlC(false); // We don't want any Ctrl-C breaking now.
 
 	// Send response to GDB if needed.
 	outPacketLength = 0;
@@ -1517,7 +1500,7 @@ void ServerCommandLoop(int si_signo, int si_code)
 			We can only get here with inferiorState as LOADED or RUNNING.
 			CmdContinue will handle inferiorState NOT_LOADED.
 		*/
-		EnableCtrlC(true);	// So we can break with Ctrl-C
+		comDev.EnableCtrlC(true);	// So we can break with Ctrl-C
 		if (inferiorState == LOADED)
 		{
 			int return_code = 0;
@@ -1633,6 +1616,7 @@ int HandleOptions(int argc, char** argv)
 {
 	int result = 0;
 	loadInferiorRequested = false;
+	com_method[0] = 0;
 	char *inferior_args = inferior_cmdline;
 	inferior_args[0] = 0;
 	if (argc <= 1)
@@ -1729,17 +1713,17 @@ int ServerMain(int argc, char** argv)
 	{
 		numOfCpuRegisters = 29;
 	}
-	// Set serial conf
-	Rsconf(BAUD_9600, FLOW_HARD, RS_CLK16 | RS_1STOP | RS_8BITS, RS_INQUIRE, RS_INQUIRE, RS_INQUIRE);
-	// Empty serial buffer
-	while (Bconstat(DEV_AUX) != 0)
+	if (InitComm(com_method, &comDev) < 0)
 	{
-		Bconin(DEV_AUX);
+		ConOut("Failed creating communication method.");
+		return -1;
 	}
 	
-	// Set DTR to ON
-	Ongibit(GI_DTR);
-	CreateServerContext();
+	if (CreateServerContext() < 0)
+	{
+		ConOut("Could not create server context.");
+		return -1;
+	}
 	InitFileIO();
 
 	inferiorState = NOT_LOADED;
@@ -1780,8 +1764,6 @@ int ServerMain(int argc, char** argv)
 
 	ExitFileIO();
 	DestroyServerContext();
-	// Set DTR to OFF
-	Offgibit(GI_DTR);
 	
 	if (log_debug || log_debug_remote || ret < 0)
 	{
