@@ -96,9 +96,6 @@ InitExceptions:
 	move.w	d0, srvIrqLevel
 	ori.w	#0x700, sr
 
-	| Get initial value
-	move.b	0xfffffa03.w, Mfp_ActiveEdgeRegister
-
 	HookVector BusError
 	HookVector AddressError
 	HookVector IllegalInstruction
@@ -169,16 +166,11 @@ RestoreExceptions:
 	.global CtrlCException
 CtrlCException:
 	.func CtrlCException
-	move.l	a0, -(a7)
-	lea		+8(a7), a0				| Back up to where we were when the exception occured
-	move.l	a0, exception_a7
+	move.l	a7, exception_a7
 	move.w	#1000, exception_num	| made up ctrl-c exception num
-	move.l	(a7)+, a0
-
 	jsr		HandleException
 	move.l	exception_a7, a7
-	lea		-8(a7), a7				| Forward to where we were when the function was called
-	rts
+	rte
 	.endfunc
 
 	.global GetExceptionNum

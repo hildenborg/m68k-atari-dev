@@ -372,7 +372,7 @@ int CheckServerQuitKey(void)
 
 int GetByte(void)
 {
-	int byte = comDev.ReceiveByte();
+	int byte;
 
 	while ((byte = comDev.ReceiveByte()) == COMM_ERR_NOT_READY)
 	{
@@ -381,10 +381,6 @@ int GetByte(void)
 			byte = COMM_ERR_KILLED;
 			break;
 		}
-	}
-	if (byte < 0)
-	{
-		return byte;
 	}
 	return byte;
 }
@@ -422,6 +418,7 @@ void ReceivePacket(void)
 				return;
 			}
 		}
+		DbgRemOut("\tGot connection...\r\n");
 
 		// Wait for packet start
 		while ((c = GetByte()) != '$')
@@ -1718,12 +1715,14 @@ int ServerMain(int argc, char** argv)
 		ConOut("Failed creating communication method.");
 		return -1;
 	}
-	
+	comDev.EnableCtrlC(false); // Init as off
+
 	if (CreateServerContext() < 0)
 	{
 		ConOut("Could not create server context.");
 		return -1;
 	}
+	
 	InitFileIO();
 
 	inferiorState = NOT_LOADED;
@@ -1763,8 +1762,9 @@ int ServerMain(int argc, char** argv)
 	} while ((extendedMode && !run_once) || option_multi);
 
 	ExitFileIO();
-	DestroyServerContext();
 	
+	DestroyServerContext();
+
 	if (log_debug || log_debug_remote || ret < 0)
 	{
 		ConOut("Press any key...");

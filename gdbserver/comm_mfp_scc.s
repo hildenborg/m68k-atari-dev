@@ -5,14 +5,13 @@
 
 	.global Mfp_ActiveEdgeRegister
 	.global CtrlC_enable
-	.global SerialExceptionCall
 
 	.text
 
 	.global InitMfpCom1
 InitMfpCom1:
 	.func InitMfpCom1
-	move.l	-4(a7), SerialExceptionCall + 2
+	move.l	4(a7), SerialExceptionCall + 2
 
 	move.w	sr, -(a7)
 	ori.w	#0x700, sr
@@ -51,8 +50,7 @@ SerialInput:
 	clr.w	CtrlC_enable	| Clear CtrlC_enable so we don't handle that while the server context is running. 
 	move.b	#0xef, 0xfffffa0f.w	| enable irq again so serial comm works in server.
 SerialExceptionCall:
-	jsr		0x12345678
-	rte
+	jmp		0x12345678
 o2SerialInput:
 	move.b	#0xef, 0xfffffa0f.w
 	rte

@@ -17,7 +17,7 @@ void ExitMfpCom1(void);
 
 bool Mfp_IsMyDevice(char *comString)
 {
-	return (StringCompare("COM1", comString) > 0);
+	return (StringCompare("COM1", comString) >= 0);
 }
 
 
@@ -35,6 +35,7 @@ int Mfp_Init(char *comString, _CommException CommException)
 	
 	// Set DTR to ON
 	Ongibit(GI_DTR);
+
 	return 0;
 }
 
@@ -102,7 +103,13 @@ void CreateMfpSerial(comm* com)
 
 void CreateSccSerial(comm* com)
 {
-
+	com->IsMyDevice = Mfp_IsMyDevice;
+	com->Init = Mfp_Init;
+	com->Exit = Mfp_Exit;
+	com->TransmitByte = Mfp_TransmitByte;
+	com->ReceiveByte = Mfp_ReceiveByte;
+	com->IsConnected = Mfp_IsConnected;
+	com->EnableCtrlC = Mfp_EnableCtrlC;
 }
 
 int InitComm(const char *comString, comm* com)
@@ -112,7 +119,7 @@ int InitComm(const char *comString, comm* com)
 	{
 		comString = defaultString;
 	}
-	if (StringCompare("COM1", comString) > 0)
+	if (StringCompare("COM1", comString) >= 0)
 	{
 		if ((Cookie_MCH >> 16) == 3)
 		{
