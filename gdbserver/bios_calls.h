@@ -50,6 +50,16 @@ void __attribute__ ((noreturn)) Pterm(unsigned short retcode);
 #define DEV_MIDI		3
 #define DEV_IKBD		4
 #define DEV_RAW			5
+#define DEV_MEGAMODEM1	6
+#define DEV_TTMODEM1	6
+#define DEV_MEGAMODEM2	7
+#define DEV_TTMODEM2	7
+#define DEV_FALCONMODEM	7
+#define DEV_MEGALAN		8
+#define DEV_TTSERIAL1	8
+#define DEV_FALCONLAN	8
+#define DEV_TTLAN		9
+
 int Bconstat(unsigned short dev);
 
 unsigned int Bconin(unsigned short dev);
