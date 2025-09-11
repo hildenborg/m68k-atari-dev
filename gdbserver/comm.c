@@ -13,25 +13,33 @@ volatile short CtrlC_enable;
 volatile unsigned char Mfp_ActiveEdgeRegister;
 volatile unsigned char Scc_StatusRegister;
 
-void InitMfpCom1(_CommException CommException);
-void ExitMfpCom1(void);
+void InitMfpAux(_CommException CommException);
+void ExitMfpAux(void);
 
-void InitSccCom1(_CommException CommException);
-void ExitSccCom1(void);
+void InitSccAux(_CommException CommException);
+void ExitSccAux(void);
 
 
 bool Mfp_IsMyDevice(char *comString)
 {
-	return (StringCompare("COM1", comString) >= 0);
+	if ((Cookie_MCH >> 16) < 3 && StringCompare("AUX", comString) >= 0)
+	{
+		return true;
+	}
+	return false;
 }
 
 
 int Mfp_Init(char *comString, _CommException CommException)
 {
-	InitMfpCom1(CommException);
+	InitMfpAux(CommException);
 
+	/*
+		Don't do any serial configuration.
+		It is better to leave that to external apps like serial.cpx
+	*/
 	// Set serial conf
-	Rsconf(BAUD_9600, FLOW_HARD, RS_CLK16 | RS_1STOP | RS_8BITS, RS_INQUIRE, RS_INQUIRE, RS_INQUIRE);
+	// Rsconf(BAUD_9600, FLOW_HARD, RS_CLK16 | RS_1STOP | RS_8BITS, RS_INQUIRE, RS_INQUIRE, RS_INQUIRE);
 	// Empty serial buffer
 	while (Bconstat(DEV_AUX) != 0)
 	{
@@ -49,7 +57,7 @@ void Mfp_Exit(void)
 {
 	// Set DTR to OFF
 	Offgibit(GI_DTR);
-	ExitMfpCom1();
+	ExitMfpAux();
 }
 
 
@@ -89,7 +97,7 @@ int Mfp_ReceiveByte(void)
 }
 
 
-void Mfp_Scc_EnableCtrlC(bool enable)
+void SetCtrlCFlag(bool enable)
 {
 	CtrlC_enable = enable ? 1 : 0;
 }
@@ -103,20 +111,28 @@ void CreateMfpSerial(comm* com)
 	com->TransmitByte = Mfp_TransmitByte;
 	com->ReceiveByte = Mfp_ReceiveByte;
 	com->IsConnected = Mfp_IsConnected;
-	com->EnableCtrlC = Mfp_Scc_EnableCtrlC;
+	com->EnableCtrlC = SetCtrlCFlag;
 }
 
 bool Scc_IsMyDevice(char *comString)
 {
-	return (StringCompare("COM1", comString) >= 0);
+	if ((Cookie_MCH >> 16) == 3 && StringCompare("AUX", comString) >= 0)
+	{
+		return true;
+	}
+	return false;
 }
 
 int Scc_Init(char *comString, _CommException CommException)
 {
-	InitSccCom1(CommException);
+	InitSccAux(CommException);
 
+	/*
+		Don't do any serial configuration.
+		It is better to leave that to external apps like serial.cpx
+	*/
 	// Set serial conf
-//	Rsconf(BAUD_9600, FLOW_HARD, RS_CLK16 | RS_1STOP | RS_8BITS, RS_INQUIRE, RS_INQUIRE, RS_INQUIRE);
+	// Rsconf(BAUD_9600, FLOW_HARD, RS_CLK16 | RS_1STOP | RS_8BITS, RS_INQUIRE, RS_INQUIRE, RS_INQUIRE);
 	// Empty serial buffer
 	while (Bconstat(DEV_AUX) != 0)
 	{
@@ -131,7 +147,7 @@ int Scc_Init(char *comString, _CommException CommException)
 void Scc_Exit(void)
 {
 	
-	ExitSccCom1();
+	ExitSccAux();
 }
 
 
@@ -177,30 +193,33 @@ void CreateSccSerial(comm* com)
 	com->TransmitByte = Scc_TransmitByte;
 	com->ReceiveByte = Scc_ReceiveByte;
 	com->IsConnected = Scc_IsConnected;
-	com->EnableCtrlC = Mfp_Scc_EnableCtrlC;
+	com->EnableCtrlC = SetCtrlCFlag;
 }
 
 int InitComm(const char *comString, comm* com)
 {
-	const char* defaultString = "COM1";
+	const char* defaultString = "AUX";
 	if (comString == 0 || comString[0] == 0)
 	{
 		comString = defaultString;
 	}
-	if (StringCompare("COM1", comString) >= 0)
+	if (Mfp_IsMyDevice(comString))
 	{
-		if ((Cookie_MCH >> 16) == 3)
-		{
-			// Falcon
-			CreateSccSerial(com);
-			return 0;
-		}
-		else
-		{
-			// All computers with modem1 connected to MFP.
-			CreateMfpSerial(com);
-			return 0;
-		}
+		// All computers with modem1 connected to MFP.
+		CreateMfpSerial(com);
+		return 0;
+	}
+	else if (Scc_IsMyDevice(comString))
+	{
+		// Falcon, modem1 connected to SCC.
+		/*
+			There is some confusion in documentation regarding com ports for the Falcon.
+			Some name the lan port as modem1 and serial port as modem2, while
+			others name lan port as lan port and serial port as modem1...
+			This software choose to follow the serial.cpx naming.
+		*/
+		CreateSccSerial(com);
+		return 0;
 	}
 	return -1;
 }

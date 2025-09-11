@@ -8,9 +8,9 @@
 
 	.text
 
-	.global InitMfpCom1
-InitMfpCom1:
-	.func InitMfpCom1
+	.global InitMfpAux
+InitMfpAux:
+	.func InitMfpAux
 	move.l	4(a7), MfpSerialExceptionCall + 2
 
 	move.w	sr, -(a7)
@@ -24,9 +24,9 @@ InitMfpCom1:
 	rts
 	.endfunc
 
-	.global ExitMfpCom1
-ExitMfpCom1:
-	.func ExitMfpCom1
+	.global ExitMfpAux
+ExitMfpAux:
+	.func ExitMfpAux
 	move.w	sr, -(a7)
 	ori.w	#0x700, sr
 	move.l	oMfpDcd + 2, 0x104.w
@@ -58,9 +58,9 @@ MfpDcd:
 oMfpDcd:
 	jmp 	0x12345678
 
-	.global InitSccCom1
-InitSccCom1:
-	.func InitSccCom1
+	.global InitSccAux
+InitSccAux:
+	.func InitSccAux
 	move.l	4(a7), SccSerialExceptionCall + 2
 	move.w	sr, -(a7)
 	ori.w	#0x700, sr
@@ -80,9 +80,9 @@ InitSccCom1:
 	rts
 	.endfunc
 
-	.global ExitSccCom1
-ExitSccCom1:
-	.func ExitSccCom1
+	.global ExitSccAux
+ExitSccAux:
+	.func ExitSccAux
 	move.w	sr, -(a7)
 	ori.w	#0x700, sr
 

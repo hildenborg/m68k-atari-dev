@@ -81,7 +81,7 @@ volatile bool			loadInferiorRequested = false;	// Set when an action wants to lo
 char	inferior_filename[MAX_PATH_LEN] __attribute__((aligned(2)));	// The filename of the inferior being debugged. Can be empty if nothing is loaded.
 char	inferior_cmdline[MAX_PATH_LEN] __attribute__((aligned(2)));		// Command line args to debugged inferior.
 char	inferior_workpath[MAX_PATH_LEN] __attribute__((aligned(2)));	// The work path of the inferior being debugged. Can be empty if nothing is loaded.
-char	com_method[MAX_PATH_LEN] __attribute__((aligned(2)));			// Communication method. Only supports COM1 for now.
+char	com_method[MAX_PATH_LEN] __attribute__((aligned(2)));			// Communication method. Only supports AUX for now.
 
 comm	comDev;
 
@@ -1594,8 +1594,7 @@ int GetCookies(void)
 
 	gdbsrv.ttp	[options] [comm] prog [args]
 
-	comm	(Default if missing: COM1)
-		COM[n]	Where n is the com port number to use.
+	comm	(Default if missing: AUX)
 	prog	(Default if missing: turns on option --multi)
 		The executable you want to debug.
 	args
