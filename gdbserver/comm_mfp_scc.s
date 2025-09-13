@@ -70,11 +70,9 @@ InitSccAux:
 	move.l	#SccStatus, 0x188.w
 	move.l	0x190.w, oSccSerialInput + 2
 	move.l	#SccSerialInput, 0x190.w
+	move.b	#0, 0xffff8c85.w
+	move.b	0xffff8c85.w, Scc_StatusRegister
 */
-|	move.b	#0, 0xffff8c85.w
-|	move.b	0xffff8c85.w, Scc_StatusRegister
-|	move.b	#5, 0xffff8c85.w
-|	move.b	#0xea, 0xffff8c85.w
 	move.w	(a7)+, sr
 	moveq	#0, d0
 	rts

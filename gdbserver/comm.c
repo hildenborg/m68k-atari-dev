@@ -20,7 +20,7 @@ void InitSccAux(_CommException CommException);
 void ExitSccAux(void);
 
 
-bool Mfp_IsMyDevice(char *comString)
+bool Mfp_IsMyDevice(const char *comString)
 {
 	if ((Cookie_MCH >> 16) < 3 && StringCompare("AUX", comString) >= 0)
 	{
@@ -30,7 +30,7 @@ bool Mfp_IsMyDevice(char *comString)
 }
 
 
-int Mfp_Init(char *comString, _CommException CommException)
+int Mfp_Init(const char *comString, _CommException CommException)
 {
 	InitMfpAux(CommException);
 
@@ -114,7 +114,7 @@ void CreateMfpSerial(comm* com)
 	com->EnableCtrlC = SetCtrlCFlag;
 }
 
-bool Scc_IsMyDevice(char *comString)
+bool Scc_IsMyDevice(const char *comString)
 {
 	if ((Cookie_MCH >> 16) == 3 && StringCompare("AUX", comString) >= 0)
 	{
@@ -123,7 +123,7 @@ bool Scc_IsMyDevice(char *comString)
 	return false;
 }
 
-int Scc_Init(char *comString, _CommException CommException)
+int Scc_Init(const char *comString, _CommException CommException)
 {
 	InitSccAux(CommException);
 
@@ -138,22 +138,19 @@ int Scc_Init(char *comString, _CommException CommException)
 	{
 		Bconin(DEV_AUX);
 	}
-	Scc_StatusRegister = 0xff;
-
-//	Ongibit(GI_DTR);
 	return 0;
 }
 
 void Scc_Exit(void)
 {
-	
 	ExitSccAux();
 }
 
 
 bool Scc_IsConnected(void)
 {
-	return (Scc_StatusRegister & 0x08) != 0;
+	return true;
+//	return (Scc_StatusRegister & 0x08) != 0;
 }
 
 

@@ -15,8 +15,8 @@
 
 typedef void	(*_CommException)(void);
 
-typedef bool	(*_IsMyDevice)(char *comString);
-typedef int 	(*_Init)(char *comString, _CommException CommException);
+typedef bool	(*_IsMyDevice)(const char *comString);
+typedef int 	(*_Init)(const char *comString, _CommException CommException);
 typedef void	(*_Exit)(void);
 typedef int		(*_TransmitByte)(unsigned char byte);
 typedef int		(*_ReceiveByte)(void);
