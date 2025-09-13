@@ -17,6 +17,9 @@
 // Legacy ST is 128, but we might need a zero at the end too.
 #define MAX_PATH_LEN	130
 
+// Disable all console or logfile output (saves about 3kb)
+//#define NO_CON_OR_LOG
+
 // Disable all exceptions. Useful when debugging packet handling.
 //#define DISABLE_EXCEPTIONS
 
@@ -89,6 +92,7 @@ bool			option_multi = false;
 bool			run_once = false;				// If set and if extended mode, then gdbserver exits when inferior is killed.
 bool			log_debug = false;				// cmdline option --debug
 bool			log_debug_remote = false;		// cmdline option --debug-remote
+int 			logHandle;
 bool			noAckMode = false;				// gdb QStartNoAckMode
 unsigned short* __start_Breakpoint = NULL;		// Only set during startup of inferior, and used to break at __start.
 int				userCodeForCommandLoop = USERCODE_SILENT;	// Used as si_code when calling ServerCommandLoop.
@@ -155,12 +159,21 @@ const char newline[] = "\r\n";
 
 void ConOut(const char* txt)
 {
-	int len = 0;
-	while (txt[len] != 0) 
+#ifndef NO_CON_OR_LOG
+	if (logHandle > 0)
 	{
-		Bconout(DEV_CONSOLE, txt[len]);
-		++len;
+		Fwrite((unsigned short)logHandle, strlen(txt), txt);
 	}
+	else
+	{
+		int len = 0;
+		while (txt[len] != 0) 
+		{
+			Bconout(DEV_CONSOLE, txt[len]);
+			++len;
+		}
+	}
+#endif
 }
 
 void DbgOut(const char* txt)
@@ -183,23 +196,6 @@ void DbgRemOut(const char* txt)
 	}
 }
 
-void DbgOutVal(const char* name, unsigned int val)
-{
-	char buf[12];
-	int i = 8;
-	buf[i] = 0;
-	while (--i >= 0)
-	{
-		buf[i] = NibbleToHex(val);
-		val = val >> 4;
-	}
-	DbgOut("\t");
-	DbgOut(name);
-	DbgOut(": 0x");
-	DbgOut(buf);
-	DbgOut(newline);
-}
-
 void ConOutVal(const char* name, unsigned int val)
 {
 	char buf[12];
@@ -215,6 +211,26 @@ void ConOutVal(const char* name, unsigned int val)
 	ConOut(": 0x");
 	ConOut(buf);
 	ConOut(newline);
+}
+
+void DbgOutVal(const char* name, unsigned int val)
+{
+#ifndef DEBUG_OPTIONS_ON
+	if (log_debug)
+#endif
+	{
+		ConOutVal(name, val);
+	}
+}
+
+void DbgRemOutVal(const char* name, unsigned int val)
+{
+#ifndef DEBUG_OPTIONS_ON
+	if (log_debug_remote)
+#endif
+	{
+		ConOutVal(name, val);
+	}
 }
 
 
@@ -515,6 +531,7 @@ void ReceivePacket(void)
 			else
 			{
 				DbgRemOut("\r\n\tError - Packet checksum not OK!\r\n");
+				DbgRemOutVal("Checksum", sum);
 			}
 		}
 		else
@@ -1636,17 +1653,7 @@ int HandleOptions(int argc, char** argv)
 		{
 			if (StringCompare("--", argv[i]) > 0)
 			{
-				if (StringCompare("--debug-remote", argv[i]) > 0)
-				{
-					log_debug_remote = true;
-					DbgOut("Using: --debug-remote\r\n");
-				}
-				else if (StringCompare("--debug", argv[i]) > 0)
-				{
-					log_debug = true;
-					DbgOut("Using: --debug\r\n");
-				}
-				else if (StringCompare("--multi", argv[i]) > 0)
+				if (StringCompare("--multi", argv[i]) > 0)
 				{
 					// If extended mode is not requested, then this option stops gdbsrv from exiting after killing inferior.
 					option_multi = true;
@@ -1657,6 +1664,22 @@ int HandleOptions(int argc, char** argv)
 					run_once = true;
 					DbgOut("Using: --once\r\n");
 				}
+#ifndef NO_CON_OR_LOG
+				else if (StringCompare("--debug-remote", argv[i]) > 0)
+				{
+					log_debug_remote = true;
+					DbgOut("Using: --debug-remote\r\n");
+				}
+				else if (StringCompare("--debug", argv[i]) > 0)
+				{
+					log_debug = true;
+					DbgOut("Using: --debug\r\n");
+				}
+				else if (StringCompare("--log", argv[i]) > 0)
+				{
+					DbgOut("Using: --log\r\n");
+				}
+#endif // NO_CON_OR_LOG
 				else
 				{
 					ConOut("Unknown option: ");
@@ -1697,6 +1720,15 @@ int HandleOptions(int argc, char** argv)
 
 int ServerMain(int argc, char** argv)
 {
+	logHandle = -1;
+#ifndef NO_CON_OR_LOG
+	if (argc >= 2 && StringCompare("--log", argv[1]) > 0)
+	{
+		log_debug_remote = true;
+		log_debug = true;
+		logHandle = Fcreate("gdblog.txt", 0);
+	}
+#endif // NO_CON_OR_LOG
 	DbgOut("ServerMain: Server initing.\r\n");
 	if (HandleOptions(argc, argv) != 0)
 	{
@@ -1764,7 +1796,11 @@ int ServerMain(int argc, char** argv)
 	
 	DestroyServerContext();
 
-	if (log_debug || log_debug_remote || ret < 0)
+	if (logHandle > 0)
+	{
+		Fclose((unsigned short)logHandle);
+	}
+	else if (log_debug || log_debug_remote || ret < 0)
 	{
 		ConOut("Press any key...");
 		// Wait for keypress
