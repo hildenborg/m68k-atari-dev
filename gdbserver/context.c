@@ -130,19 +130,24 @@ void StoreMemoryRegisters(unsigned int* longs, unsigned char* bytes)
 	#define VDO_CHAR(address) *vdoChars++ = *((unsigned char*)address)
 	//#define MFP_CHAR(address) *mfpChars++ = *((unsigned char*)address)
 
-	VDO_CHAR(0xffff8201);
-	VDO_CHAR(0xffff8203);
-	VDO_CHAR(0xffff820a);
-	VDO_CHAR(0xffff8260);
-	if (Cookie_VDO == 0x10000)
+	if ((Cookie_MCH >> 16) <= 1)
 	{
-		// Got STE shifter
-		VDO_CHAR(0xffff820d);
-		VDO_CHAR(0xffff8265);
-	}
-	for (unsigned int i = 0xffff8240; i < 0xffff8260; i += 4)
-	{
-		VDO_LONG(i);
+		// Just handle st/ste shifter for now.
+		// It's really only necessary when we want to display anything in gdbserver... 
+		VDO_CHAR(0xffff8201);
+		VDO_CHAR(0xffff8203);
+		VDO_CHAR(0xffff820a);
+		VDO_CHAR(0xffff8260);
+		if (Cookie_VDO == 0x10000)
+		{
+			// Got STE shifter
+			VDO_CHAR(0xffff820d);
+			VDO_CHAR(0xffff8265);
+		}
+		for (unsigned int i = 0xffff8240; i < 0xffff8260; i += 4)
+		{
+			VDO_LONG(i);
+		}
 	}
 	/*
 	for (unsigned int i = 0xfffffa03; i <= 0xfffffa1d; i += 2)
@@ -174,19 +179,24 @@ void RestoreMemoryRegisters(unsigned int* longs, unsigned char* bytes)
 	#define VDO_CHAR(address) *((unsigned char*)address) = *vdoChars++
 //	#define MFP_CHAR(address) *((unsigned char*)address) = *mfpChars++
 
-	VDO_CHAR(0xffff8201);
-	VDO_CHAR(0xffff8203);
-	VDO_CHAR(0xffff820a);
-	VDO_CHAR(0xffff8260);
-	if (Cookie_VDO == 0x10000)
+	if ((Cookie_MCH >> 16) <= 1)
 	{
-		// Got STE shifter
-		VDO_CHAR(0xffff820d);
-		VDO_CHAR(0xffff8265);
-	}
-	for (unsigned int i = 0xffff8240; i < 0xffff8260; i += 4)
-	{
-		VDO_LONG(i);
+		// Just handle st/ste shifter for now.
+		// It's really only necessary when we want to display anything in gdbserver... 
+		VDO_CHAR(0xffff8201);
+		VDO_CHAR(0xffff8203);
+		VDO_CHAR(0xffff820a);
+		VDO_CHAR(0xffff8260);
+		if (Cookie_VDO == 0x10000)
+		{
+			// Got STE shifter
+			VDO_CHAR(0xffff820d);
+			VDO_CHAR(0xffff8265);
+		}
+		for (unsigned int i = 0xffff8240; i < 0xffff8260; i += 4)
+		{
+			VDO_LONG(i);
+		}
 	}
 	/*
 	for (unsigned int i = 0xfffffa03; i <= 0xfffffa25; i += 2)
@@ -238,29 +248,34 @@ unsigned char* InferiorContextMemoryAddress(unsigned char* address)
 	else if (la >= 0xffff8000)
 	{
 		// 0xffff8000.w to 0xffffffff.w
-		if (la >= 0xffff8240 && la < 0xffff8260)
+		if ((Cookie_MCH >> 16) <= 1)
 		{
-            unsigned char* inferiorVdoLongs = (unsigned char*)(inferiorLongs + NUM_SYS_LONGS);
-			return &inferiorVdoLongs[la - 0xffff8240];
-		}
-        /*
-		else if (la >= 0xfffffa03 && la <= 0xfffffa25 && ((la & 1) != 0))
-		{
-			return &((unsigned char*)inferiorMfpChars)[(la - 0xfffffa03) >> 1];
-		}
-        */
-		else
-		{
-            unsigned char* inferiorVdoChars = (inferiorBytes);
-			switch (la)
+			// Just handle st/ste shifter for now.
+			// It's really only necessary when we want to display anything in gdbserver... 
+			if (la >= 0xffff8240 && la < 0xffff8260)
 			{
-				case 0xffff8201:	return &inferiorVdoChars[0];
-				case 0xffff8203:	return &inferiorVdoChars[1];
-				case 0xffff820a:	return &inferiorVdoChars[2];
-				case 0xffff8260:	return &inferiorVdoChars[3];
-				case 0xffff820d:	return &inferiorVdoChars[4];
-				case 0xffff8265:	return &inferiorVdoChars[5];
-				default:			return address;
+				unsigned char* inferiorVdoLongs = (unsigned char*)(inferiorLongs + NUM_SYS_LONGS);
+				return &inferiorVdoLongs[la - 0xffff8240];
+			}
+			/*
+			else if (la >= 0xfffffa03 && la <= 0xfffffa25 && ((la & 1) != 0))
+			{
+				return &((unsigned char*)inferiorMfpChars)[(la - 0xfffffa03) >> 1];
+			}
+			*/
+			else
+			{
+				unsigned char* inferiorVdoChars = (inferiorBytes);
+				switch (la)
+				{
+					case 0xffff8201:	return &inferiorVdoChars[0];
+					case 0xffff8203:	return &inferiorVdoChars[1];
+					case 0xffff820a:	return &inferiorVdoChars[2];
+					case 0xffff8260:	return &inferiorVdoChars[3];
+					case 0xffff820d:	return &inferiorVdoChars[4];
+					case 0xffff8265:	return &inferiorVdoChars[5];
+					default:			return address;
+				}
 			}
 		}
 	}
