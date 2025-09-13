@@ -12,9 +12,18 @@
 #define NUM_HANDLES 8
 int fd_handles[NUM_HANDLES];
 
-//extern void DbgOutVal(const char* name, unsigned int val);
-//extern void ConOut(const char* txt);
-
+void VfileFixPath(char *fileName)
+{
+	char c;
+	while ((c = *fileName) != 0)
+	{
+		if (c == '/')
+		{
+			*fileName = '\\';
+		}
+		++fileName;
+	}
+}
 
 void InitFileIO(void)
 {
@@ -22,12 +31,6 @@ void InitFileIO(void)
 	{
 		fd_handles[i] = -1;
 	}
-	/*
-	for (int i = 0; i < NUM_HANDLES; ++i)
-	{
-		DbgOutVal("handle", fd_handles[i]);
-	}
-	*/
 }
 
 void ExitFileIO(void)
@@ -50,8 +53,6 @@ void AddHandle(int fd)
 		if (fd_handles[i] == -1)
 		{
 			fd_handles[i] = fd;
-//			DbgOutVal("add handle", fd);
-//			DbgOutVal("index", i);
 			break;
 		}
 	}
@@ -65,8 +66,6 @@ void RemoveHandle(int fd)
 		if (fd_handles[i] == fd)
 		{
 			fd_handles[i] = -1;
-//			DbgOutVal("del handle", fd);
-//			DbgOutVal("index", i);
 			break;
 		}
 	}
@@ -81,7 +80,6 @@ int IsHandle(int fd)
 			return 0;
 		}
 	}
-	//ConOut("Handle not found.");
 	return -1;
 }
 
@@ -95,7 +93,7 @@ int gem_to_errno(int gemError)
     return err;
 }
 
-int VfileOpen(const char *bios_path, int flags, int *ioErrno)
+int VfileOpen(const char *fileName, int flags, int *ioErrno)
 {
 	int fd = -1;
 	unsigned short bios_mode = (unsigned short)(flags & 0x3);
@@ -106,12 +104,12 @@ int VfileOpen(const char *bios_path, int flags, int *ioErrno)
 
 	if (!trunc)
 	{
-		fd = Fopen(bios_path, bios_mode);
+		fd = Fopen(fileName, bios_mode);
 	}
 	if (fd < 0 && (create || trunc))
 	{
 		unsigned short bios_attrib = 0;
-		fd = Fcreate(bios_path, bios_attrib);
+		fd = Fcreate(fileName, bios_attrib);
 	}
 	else if (create && excl)
 	{
@@ -162,9 +160,9 @@ int VfileClose(int fd, int *ioErrno)
 	return 0;
 }
 
-int VfileDelete(const char *bios_path, int *ioErrno)
+int VfileDelete(const char *fileName, int *ioErrno)
 {
-	int result = Fdelete(bios_path);
+	int result = Fdelete(fileName);
 	if (result < 0)
 	{
 		*ioErrno = gem_to_errno(result);
@@ -188,7 +186,6 @@ int VfileWrite(int fd, const void *buf, int offset, int nbytes, int *ioErrno)
 			}
 		}
 		numWritten = Fwrite((unsigned short)fd, nbytes, buf);
-		//DbgOutVal("numWritten", numWritten);
 	}
 	if (numWritten < 0)
 	{
@@ -256,9 +253,9 @@ int VfileFstat(int fd, vfile_stat* stat, int *ioErrno)
 	return sizeof(vfile_stat);
 }
 
-int VfileStat(const char *bios_path, vfile_stat* stat, int *ioErrno)
+int VfileStat(const char *fileName, vfile_stat* stat, int *ioErrno)
 {
-	int fd = Fopen(bios_path, 0);
+	int fd = Fopen(fileName, 0);
 	if (fd > 0)
 	{
 		AddHandle(fd);

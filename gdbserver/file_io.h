@@ -28,11 +28,13 @@ typedef struct _vfile_stat {
 void InitFileIO(void);
 void ExitFileIO(void);
 
-int VfileOpen(const char *bios_path, int flags, int *ioErrno);
+void VfileFixPath(char *fileName);
+
+int VfileOpen(const char *fileName, int flags, int *ioErrno);
 
 int VfileClose(int fd, int *ioErrno);
 
-int VfileDelete(const char *bios_path, int *ioErrno);
+int VfileDelete(const char *fileName, int *ioErrno);
 
 int VfileWrite(int fd, const void *buf, int offset, int nbytes, int *ioErrno);
 
@@ -40,6 +42,6 @@ int VfileRead(int fd, void *buf, int offset, int nbytes, int *ioErrno);
 
 int VfileFstat(int fd, vfile_stat* stat, int *ioErrno);
 
-int VfileStat(const char *bios_path, vfile_stat* stat, int *ioErrno);
+int VfileStat(const char *fileName, vfile_stat* stat, int *ioErrno);
 
 #endif // FILE_IO_DEFINED

@@ -1170,19 +1170,11 @@ LoopState CmdFileOperation(short cmdEnd)
 			*ptr++ = 0;
 		}
 	} while (argc < 4 && ptr != ptrend);
-/*
-	DbgOut("vFile:\r\n");
-	for (int i = 0; i < argc; ++i)
-	{
-		DbgOut("\t arg: ");
-		DbgOut(argv[i]);
-		DbgOut("\r\n");
-	}
-*/
 	if (CheckFileCmdArgs("open", 4, argv[0], argc))
 	{
 		HexConvertByteArray(argv[1]);
 		char *filename = argv[1];
+		VfileFixPath(filename);
 		int flags = HexToVariable(argv[2]);
 		//int mode = HexToVariable(argv[3]);	// Not supported on TOS
 		result = VfileOpen(filename, flags, &ioErrno);
@@ -1215,9 +1207,6 @@ LoopState CmdFileOperation(short cmdEnd)
 		int offset = HexToVariable(argv[2]);
 		char *data = argv[3];
 		int count = (int)((inPacket + inPacketLength) - data);
-//		DbgOutVal("fd:", (unsigned int)fd);
-//		DbgOutVal("offset:", (unsigned int)offset);
-//		DbgOutVal("count:", (unsigned int)count);
 		result = VfileWrite(fd, data, offset, count, &ioErrno);
 	}
 	else if (CheckFileCmdArgs("fstat", 2, argv[0], argc))
@@ -1234,6 +1223,7 @@ LoopState CmdFileOperation(short cmdEnd)
 	{
 		HexConvertByteArray(argv[1]);
 		char *filename = argv[1];
+		VfileFixPath(filename);
 		vfile_stat* stat = (vfile_stat*)inPacket;	// Use inPacket as a buffer.
 		result = VfileStat(filename, stat, &ioErrno);
 		if (result >= 0)
@@ -1245,6 +1235,7 @@ LoopState CmdFileOperation(short cmdEnd)
 	{
 		HexConvertByteArray(argv[1]);
 		char *filename = argv[1];
+		VfileFixPath(filename);
 		result = VfileDelete(filename, &ioErrno);
 	}
 	else if (CheckFileCmdArgs("setfs", 2, argv[0], argc))
