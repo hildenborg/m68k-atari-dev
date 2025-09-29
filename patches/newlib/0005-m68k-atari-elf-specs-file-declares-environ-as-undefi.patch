@@ -1,0 +1,25 @@
+From c71bddf39a040492dcfdb27c386227c816b63da4 Mon Sep 17 00:00:00 2001
+From: Mikael Hildenborg <micael@hildenborg.com>
+Date: Fri, 26 Sep 2025 08:47:21 +0200
+Subject: [PATCH 5/5] m68k-atari-elf: specs file declares environ as undefined.
+
+---
+ libgloss/m68k/atari/atari-tos.specs | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libgloss/m68k/atari/atari-tos.specs b/libgloss/m68k/atari/atari-tos.specs
+index 00781c4fc..02037132c 100644
+--- a/libgloss/m68k/atari/atari-tos.specs
++++ b/libgloss/m68k/atari/atari-tos.specs
+@@ -4,7 +4,7 @@
+ # Atari gcc specs
+ 
+ *link:
+-+ --emit-relocs --no-warn-rwx-segments -static --no-warn-execstack --undefined=__errno -T atari-tos.ld
+++ --emit-relocs --no-warn-rwx-segments -static --no-warn-execstack --undefined=environ --undefined=__errno -T atari-tos.ld
+ 
+ *lib:
+ + -latari-tos
+-- 
+2.43.0
+
