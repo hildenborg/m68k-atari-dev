@@ -33,7 +33,7 @@ NEWLIB_PATH="$PWD/build/newlib-cygwin"
 # Versions to download and build.
 BINUTIL_VERSION="2.44"
 GCC_VERSION="15.1.0"
-NEWLIB_HASH="f13e8e21599ff12ea76980d6a8b19b0a5ebe9bed"
+NEWLIB_HASH="9fac993ba74bd6ab3fc638a169ffdc92b78bd679"
 
 # Detect system
 unameOut="$(uname -s)"
@@ -101,12 +101,7 @@ if [ ! -d newlib-cygwin ]; then
 	cd newlib-cygwin
 	echo "Checking out: newlib hash $NEWLIB_HASH"
 	git checkout $NEWLIB_HASH
-	echo "Patching: newlib"
-	git apply $PATCHES/newlib/0001-m68k-atari-elf-fixed-wrong-number-of-seconds-between.patch
-	git apply $PATCHES/newlib/0002-m68k-atari-elf-changed-stack-and-heap-handling-to-mi.patch
-	git apply $PATCHES/newlib/0003-m68k-atari-elf-updated-readme.patch
-	git apply $PATCHES/newlib/0004-m68k-atari-elf-proper-setup-of-environment-variables.patch
-	git apply $PATCHES/newlib/0005-m68k-atari-elf-specs-file-declares-environ-as-undefi.patch
+#	echo "Patching: newlib"
 	# Fixing specs will hopefully be integrated in newlib in future.
 	yes | cp -rf $PATCHES/newlib/$SPECS_FILE libgloss/m68k/atari/atari-tos.specs
 	cd ..
