@@ -1264,21 +1264,27 @@ LoopState CmdFlexible(void)
 		// Get filename and command line arguments
 		// If filename is empty, then restart previous inferior.
 		char* strOut = inferior_filename;
+		inferior_cmdline[0] = 0;	// length
+		inferior_cmdline[1] = 0;
 		short args = GetHexString(vNameEnd, &strOut);	// Will not replace old filename if no new exists
-		if (args > vNameEnd + 1)
+		if (args > vNameEnd)
 		{
-			strOut = inferior_cmdline;
+			strOut = inferior_cmdline + 1;
 			while (args < inPacketLength)
 			{
 				args = GetHexString(args, &strOut);
 				*strOut++ = ' ';
 			}
-			*strOut++ = 0;
+			if (inferior_cmdline[1] != 0)
+			{
+				strOut[-1] = 0;
+				inferior_cmdline[0] = (char)strlen(&inferior_cmdline[1]);		
+			}
 		}
 		DbgOut("Run: \r\n\tinferior: ");
 		DbgOut(inferior_filename);
 		DbgOut("\r\n\targs: ");
-		DbgOut(inferior_cmdline);
+		DbgOut(&inferior_cmdline[1]);
 		DbgOut(newline);
 		return RUN;
 	}
@@ -1621,13 +1627,13 @@ int HandleOptions(int argc, char** argv)
 	int result = 0;
 	loadInferiorRequested = false;
 	com_method[0] = 0;
-	char *inferior_args = inferior_cmdline;
-	inferior_args[0] = 0;
+	char *inferior_args = inferior_cmdline + 1;
+	inferior_cmdline[0] = 0;
+	inferior_cmdline[1] = 0;
+	inferior_filename[0] = 0;
 	if (argc <= 1)
 	{
 		DbgOut("\tNo args.\r\n");
-		inferior_filename[0] = 0;
-		inferior_cmdline[0] = 0;
 		return result;
 	}
 	for (int i = 1; i < argc; ++i)
@@ -1701,9 +1707,10 @@ int HandleOptions(int argc, char** argv)
 	{
 		loadInferiorRequested = false;	// Never load inferior directly when multi.
 	}
-	if (inferior_args != inferior_cmdline && inferior_args[-1] == ' ')
+	if (inferior_args[-1] != 0)
 	{
 		inferior_args[-1] = 0;
+		inferior_cmdline[0] = (char)strlen(&inferior_cmdline[1]);		
 	}
 
 	return result;
