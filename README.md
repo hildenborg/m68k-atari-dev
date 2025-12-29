@@ -80,6 +80,13 @@ In gdb, enter: `target remote [pc serial port]`
 You can now remotely debug your atari code with full symbols.  
 This can also be done using Visual Studio Code directly in source code, look at the "vscode_hatari" in "extras" for example of this.  
 The "gdbsrv.ttp" program can be exited by pressing F4.  
+"gdbsrv.ttp" cannot be used to debug gem programs, to do that you must rename "gdbsrv.ttp" to "gdbsrv.gtp" (gem take parameters).  
+
+## MintElf usage:
+Mintelf toolchain is supported by the gdbserver.  
+Gdbserver can be built with mintelf by running: `gdbserver/build_mintelf.sh` or just using: `make -f makefile.mintelf` in the gdbserver folder.  
+The "gdbsrv.ttp" can be found in the "build" folder.  
+There is also an example in the "extras" folder named "vscode_hatari_mintelf" that is a mintelf version of "vscode_hatari".  
 
 ## Contributing:
 All contributions are welcome through pull request.  

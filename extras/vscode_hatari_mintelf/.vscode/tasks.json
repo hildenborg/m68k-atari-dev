@@ -1,0 +1,39 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+		{
+			"type": "shell",
+			"label": "Atari ST cross compile",
+			"command": "make",
+			"args": [
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [
+				"${env:TOOLCHAIN_M68K}/bin/m68k-atari-mintelf-gcc"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		},
+		{
+			"type": "shell",
+			"label": "Copy to HD",
+			"command": "cp",
+			"args": [
+				{
+					"quoting": "strong",
+					"value": "${workspaceFolder}/build/${env:TARGET_NAME}"
+				},
+				{
+					"quoting": "strong",
+					"value": "${env:ST_HD_PATH}/${env:TARGET_NAME}.prg"
+				},
+			],
+		},
+    ]
+}

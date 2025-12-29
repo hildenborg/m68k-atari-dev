@@ -1,0 +1,59 @@
+#	Copyright (C) 2025 Mikael Hildenborg
+#	SPDX-License-Identifier: MIT
+
+.DEFAULT_GOAL := all
+
+TARGET_NAME := gdbsrv
+BUILD_DIR := build
+SRC_DIR := $(dir $(realpath $(lastword $(MAKEFILE_LIST))))
+SOURCES := main.c server.c exceptions.c bios_calls.c context.c file_io.c clib.c comm.c comm_mfp_scc.s target_xml.c
+
+# Project build architecture settings
+CPU := 68000
+TOOLKIT	?= $(HOME)/gnu-tools/m68000
+
+# Use m68k-atari-mintelf toolchain
+# Toolkit executables, libraries and directories settings
+TOOLKIT_BIN	:= $(TOOLKIT)/bin
+CC := $(TOOLKIT_BIN)/m68k-atari-mintelf-gcc
+AS := $(TOOLKIT_BIN)/m68k-atari-mintelf-as
+LD := $(TOOLKIT_BIN)/m68k-atari-mintelf-gcc
+ELFTOPRG := $(TOOLKIT_BIN)/m68k-atari-mintelf-prg
+
+CFLAGS := -Wall -Os -g -m$(CPU) -DMINTELF_TOOLCHAIN
+ASFLAGS := -g --register-prefix-optional -mcpu=$(CPU)
+CPU_ASFLAGS := -g --register-prefix-optional -mcpu=68030 -m68882
+LDFLAGS := 
+
+# Defining target name
+TARGET_ELF := $(BUILD_DIR)/$(TARGET_NAME).ttp
+
+# Building object list
+OBJS := $(foreach source,$(SOURCES),$(BUILD_DIR)/$(basename $(source)).o)
+
+# Make elf target
+$(TARGET_ELF): $(OBJS) $(BUILD_DIR)/critical.o
+	$(LD) $(LDFLAGS) $^ -o $@
+
+# assembly
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.s
+	$(AS) $(ASFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/critical.o: $(SRC_DIR)/critical.s
+	$(AS) $(CPU_ASFLAGS) -c $< -o $@
+
+# c source
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Create build directory
+$(BUILD_DIR): $(shell mkdir -p $(BUILD_DIR))
+
+all:	$(BUILD_DIR) $(TARGET_ELF)
+
+clean:
+	$(shell rm -r $(BUILD_DIR))
+
+install:
+	$(shell yes | cp -rf $(TARGET_ELF) $(TOOLKIT_BIN)/$(TARGET_NAME).ttp)
+	

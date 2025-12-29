@@ -1,0 +1,23 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "2.0.0",
+    "configurations": [
+        {
+            "type": "gdb",
+            "request": "attach",
+            "name": "Attach to gdbserver",
+            "preLaunchTask": "Copy to HD",
+            "executable": "${workspaceFolder}/build/${env:TARGET_NAME}",
+            "gdbpath": "${env:TOOLCHAIN_M68K}/bin/m68k-atari-mintelf-gdb",
+            "target": "${env:GDB_COM_PORT}",
+            "remote": true,
+            "stopAtEntry": true,
+            "autorun": [
+            ],
+            "cwd": "${workspaceRoot}",
+            "valuesFormatting": "parseText"
+        }
+    ]
+}

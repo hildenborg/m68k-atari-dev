@@ -1,0 +1,20 @@
+{
+    "configurations": [
+        {
+            "name": "m68k",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": [
+            ],
+            "windowsSdkVersion": "10.0.18362.0",
+            "compilerPath": "${env:TOOLCHAIN_M68K}/bin/m68k-atari-mintelf-gcc",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "${default}",
+            "compilerArgs": [
+            ]
+        }
+    ],
+    "version": 4
+}

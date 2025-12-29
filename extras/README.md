@@ -23,3 +23,6 @@ In VsCode: press "F5" to debug program.
 After debugging, do not forget to click disconnect on the debugging menu, or you won't be able to start debugging again.  
 Sometimes the connection becomes bad between Hatari and VsCode. A reset in Hatari usually solves it.  
 
+## vscode_hatari_mintelf:
+This example is the same as vscode_hatari but uses the mintelf toolchain.
+

@@ -43,6 +43,8 @@
 #include "clib.h"
 #include "comm.h"
 
+#define MINTELF_RESERVED 0x454c4628
+
 typedef enum
 {
 	LISTEN_TO_GDB,
@@ -80,6 +82,7 @@ volatile struct BasePage*		inferiorBasePage = NULL;		// basepage for debugged ex
 volatile InferiorState	inferiorState = NOT_LOADED;		// To know if we have an inferior and if we have started it or not.
 volatile bool			extendedMode = false;			// gdb extended-remote option
 volatile bool			loadInferiorRequested = false;	// Set when an action wants to load an inferior.
+volatile bool			inferior_is_mintelf = false;	// If set then the inferior loaded is of mintelf executable format.
 
 char	inferior_filename[MAX_PATH_LEN] __attribute__((aligned(2)));	// The filename of the inferior being debugged. Can be empty if nothing is loaded.
 char	inferior_cmdline[MAX_PATH_LEN] __attribute__((aligned(2)));		// Command line args to debugged inferior.
@@ -260,6 +263,21 @@ void OutputCrashInfo(void)
 	ConOutVal("Server _start: ", (unsigned int)serverBasePage->p_tbase);
 }
 
+bool CheckIfMintElf(const char* fileName)
+{
+	unsigned int reserved_long_word;
+	int fd = Fopen(fileName, VFILE_O_RDONLY);
+	if (fd < 0)
+	{
+		// File not found, but let the caller handle that problem.
+		return false;
+	}
+	Fseek(18,(unsigned short)fd, 0);	// position of reserved long word
+	Fread((unsigned short)fd, 4, &reserved_long_word);
+	Fclose((unsigned short)fd);
+	return reserved_long_word == MINTELF_RESERVED;
+}
+
 int LoadInferior(const char* fileName, const char* cmdLine, const char* environment)
 {
 	DbgOut("LoadInferior: ");
@@ -267,6 +285,8 @@ int LoadInferior(const char* fileName, const char* cmdLine, const char* environm
 	// Check that we doesn't already have an inferior loaded.
 	if (inferiorState == NOT_LOADED)
 	{
+		inferior_is_mintelf = CheckIfMintElf(fileName);
+
 		// Load inferior
 		loadres = Pexec(PE_LOAD, fileName, cmdLine, environment);
 		if (loadres > 0)
@@ -923,19 +943,24 @@ void CmdQuery(void)
 	short vNameEnd;
 	if (StringCompare("qOffsets", inPacket) > 0)
 	{
-		/*
-		As Gdb works with the elf file, and we have a prg file, the text and data segments do not match.
-		However, we assume that the code was linked with one of the toolchains linker script.
-		And then we can assume that the address of the __start symbol is the offset we need to tell gdb
-		to make all symbols work.
-		It just so happens that the __start symbol is always at inferiorBasePage->p_tbase, so all becomes easy.
-		*/
 		if (inferiorBasePage != NULL)	// Return empty if no inferior
 		{
-			unsigned int offset = (unsigned int)(inferiorBasePage->p_tbase);
-			WriteNameAndLong("TextSeg", offset);
+			unsigned int textoffset = (unsigned int)(inferiorBasePage->p_tbase);
+			unsigned int dataoffset = (unsigned int)(inferiorBasePage->p_dbase);
+			WriteNameAndLong("TextSeg", textoffset);
 			WriteSemiColon();
-			WriteNameAndLong("DataSeg", offset);
+			if (inferior_is_mintelf)
+			{
+				// m68k-atari-mintelf toolchain produces data symbols that use the
+				// data segment as base.
+				WriteNameAndLong("DataSeg", dataoffset);
+			}
+			else
+			{
+				// m68k-atari-elf toolchain produces data symbols that uses the same 
+				// base as the text segment.
+				WriteNameAndLong("DataSeg", textoffset);
+			}
 		}
 	}
 	else if (StringCompare("qSupported", inPacket) > 0)

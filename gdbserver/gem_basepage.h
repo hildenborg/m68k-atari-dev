@@ -49,6 +49,9 @@ struct BasePage
 	char p_cmdlin[128];			// This area contains a copy of the 128 byte command line string.
 };
 
+#ifdef MINTELF_TOOLCHAIN
+#define _BasePage _base;
+#endif
 extern struct BasePage* _BasePage;
 
 #ifdef __cplusplus
