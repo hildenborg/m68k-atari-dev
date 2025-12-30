@@ -20,17 +20,18 @@
 
 size_t strlen(const char* s)
 {
-	size_t len = 0;
+	register size_t len asm ("d0") = 0;
 	__asm__ volatile (
-		"move.l	%1, %0\n\t"
+		"move.l	%1, %%a0\n\t"
+		"move.l	%%a0, %0\n\t"
 		"1:\n\t"
-		"tst.b	%1@+\n\t"
+		"tst.b	%%a0@+\n\t"
 		"bne.s	1b\n\t"
-		"sub.l	%1, %0\n\t"		// -(len + 1)
-		"not.l	%0\n\t"			// !(-(len + 1)) = len
+		"sub.l	%%a0, %0\n\t"		// -(len + 1)
+		"not.l	%0\n\t"				// !(-(len + 1)) = len
 		: "=d" (len)
-		: "a" (s)
-		:);
+		: "g" (s)
+		: "a0", "cc");
 	return len;
 }
 
@@ -39,13 +40,16 @@ void* memset(void *ptr, int value, size_t num)
 	if (num > 0)
 	{
 	__asm__ volatile (
+		"move.l	%0, %%a0\n\t"
+		"move.w	%1, %%d1\n\t"
+		"move.l	%2, %%d0\n\t"
 		"1:\n\t"
-		"move.b	%1, %0@+\n\t"
-		"subq.l #1, %2\n\t"
+		"move.b	%%d1, %%a0@+\n\t"
+		"subq.l #1, %%d0\n\t"
 		"bne.s	1b\n\t"
 		:
-		: "a" (ptr), "d" (value), "d" (num)
-		:);
+		: "g" (ptr), "g" (value), "g" (num)
+		: "a0", "d0", "d1", "cc", "memory");
 	}
 	return ptr;
 }
