@@ -10,7 +10,7 @@
 extern "C" {
 #endif
 
-char* GetTargetXml(unsigned int* length);
+unsigned int GetTargetXml(const char* parts[]);
 
 #ifdef __cplusplus
 }

@@ -1013,11 +1013,14 @@ void CmdQuery(void)
 		if (GetAddressAndLength(vNameEnd, false, &addr, &len) > 0)
 		{
 			unsigned int offset = (unsigned int)addr;
-			unsigned int xml_len;
-			char* xml = GetTargetXml(&xml_len);
 			
-			if ((offset + len) >= xml_len)
+			const char* xmls[5];
+			unsigned int xml_len = GetTargetXml(xmls);
+			
+			unsigned int maxRead = (PACKET_SIZE - 20);	// max packet size - some room for response
+			if ((offset + len) > xml_len)
 			{
+				// This transfer ends the xml transfer
 				WriteChar('l');
 				if (offset >= xml_len || len == 0)
 				{
@@ -1027,11 +1030,32 @@ void CmdQuery(void)
 			}
 			else
 			{
+				// Too much for one packet, only send a part of it.
 				WriteChar('m');
+				len = maxRead;
 			}
-			for (unsigned int i = 0; i < len; ++i)
+
+			const char* xml;
+			int ix = 0;
+			while ((xml = xmls[ix++]) != 0 && len != 0)
 			{
-				WriteChar(xml[offset + i]);
+				unsigned int slen = strlen(xml);
+				if (offset >= slen)
+				{
+					offset -= slen;
+				}
+				else
+				{
+					char c;
+					unsigned int i = offset;
+					while ((c = xml[i]) != 0 && len != 0)
+					{
+						WriteChar(c);
+						++i;
+						--len;
+					}
+					offset = 0;
+				}
 			}
 		}
 	}
