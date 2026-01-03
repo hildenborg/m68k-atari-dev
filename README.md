@@ -2,7 +2,8 @@
 A development system providing cross compiling and remote debugging for Atari TOS computers.
 
 ## Key features:
-* Standard C and C++ libraries using newlib [m68k-atari-elf](https://sourceware.org/git/?p=newlib-cygwin.git;a=commit;h=cac47030fb003570295582606f158609f626347f) target.
+* Standard C and C++ libraries using newlib "m68k-atari-elf".
+* TOS, AES and VDI libraries.
 * Elf to prg converter that keeps binary segments unchanged for symbol compatibility.
 * A gdbserver specifically written from the ground up for Atari TOS computers.
 * Editing, building and debugging can all be integrated in Visual Studio Code.
@@ -57,6 +58,14 @@ The symbol: "_stksize" defines how much memory that is reserved for stack **and*
    * SIZE >= 4: then SIZE memory is reserved.
    * SIZE == -1, then all available memory is reserved (for mintlib compatibillity).
    * SIZE < -1, then -SIZE memory is reserved (for mintlib compatibillity).
+
+## Atari libraries:
+TOS and GEM specific functions are included and follows original Atari GEM specifications.  
+While considerable testing have been done, there may still be bugs in rarely used functions. Please report any findings!  
+The libraries and headers:  
+* TOS - library: "libtos.a", header file: "tos.h".
+* AES - library: "libaes.a", header file: "aes.h".
+* VDI - library: "libvdi.a", header file: "vdi.h".
 
 ## Elf to prg technical:
 Conversion from elf to prg is done in two separate steps: link time and post link time.  

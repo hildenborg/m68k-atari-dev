@@ -32,8 +32,9 @@ NEWLIB_PATH="$PWD/build/newlib-cygwin"
 
 # Versions to download and build.
 BINUTIL_VERSION="2.44"
-GCC_VERSION="15.1.0"
+GCC_VERSION="15.2.0"
 NEWLIB_HASH="9fac993ba74bd6ab3fc638a169ffdc92b78bd679"
+ATARI_LIB_HASH=29c2d2f9379fe6114eacebcd0a5ac4578df3741f
 
 # Detect system
 unameOut="$(uname -s)"
@@ -104,6 +105,17 @@ if [ ! -d newlib-cygwin ]; then
 #	echo "Patching: newlib"
 	# Fixing specs will hopefully be integrated in newlib in future.
 	yes | cp -rf $PATCHES/newlib/$SPECS_FILE libgloss/m68k/atari/atari-tos.specs
+	cd ..
+fi
+
+# Get atari-libs sources
+if [ ! -d atari-libs ]; then
+	echo "Downloading: atari-libs"
+	git clone https://github.com/hildenborg/atari-libs.git
+	# We checkout the specific stable commit.
+	cd atari-libs
+	echo "Checking out: atari-libs hash $ATARI_LIB_HASH"
+	git checkout $ATARI_LIB_HASH
 	cd ..
 fi
 
@@ -179,7 +191,15 @@ if [ ! -d b-newlib ]; then
 	make -j$BUILD_THREADS
 	make install
 	cd ..
+fi
 
+# build atari-libs
+if [ ! -d b-atari-libs ]; then
+	echo "Building: atari-libs"
+	mkdir -p b-atari-libs
+	cd atari-libs
+	./build.sh $PREFIX $TARGET ../b-atari-libs $BUILD_THREADS
+	cd ..
 fi
 
 # Build m68k-atari-elf-prg (elf to prg converter)
