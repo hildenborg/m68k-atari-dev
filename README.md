@@ -3,15 +3,16 @@ A development system providing cross compiling and remote debugging for Atari TO
 
 ## Key features:
 * Standard C and C++ libraries using newlib "m68k-atari-elf".
-* TOS, AES and VDI libraries.
-* Elf to prg converter that keeps binary segments unchanged for symbol compatibility.
+* Aims to stay up to date with the latest gcc, newlib and binutils versions.
+* TOS, AES, VDI and NVDI libraries.
+* Elf to prg converter that keeps binary sections unchanged for symbol compatibility.
 * A gdbserver specifically written from the ground up for Atari TOS computers.
 * Editing, building and debugging can all be integrated in Visual Studio Code.
 
 ## Setup for Linux (Recommended! Tested on Ubuntu):
 1. Open a terminal.
 2. Enter: `sudo apt update`
-3. Enter: `sudo apt install build-essential texinfo flex bison libgmp-dev libmpfr-dev libmpc-dev gdb-multiarch`
+3. Enter: `sudo apt install build-essential texinfo flex bison libgmp-dev libmpfr-dev libmpc-dev gdb-multiarch python3`
 4. Enter: `git clone https://github.com/hildenborg/m68k-atari-dev.git` to download m68k-atari-dev.
 5. Enter: `cd m68k-atari-elf`
 6. Enter: `./build.sh`
@@ -37,7 +38,7 @@ All binaries will be installed in (UserHome)/toolchain/m68k-atari-elf.
 5. Enter: `cd m68k-atari-elf`
 6. Enter: `./build.sh`
    
-Depending on your system, the last line may take minutes or hours.  
+The build takes 15 minutes on a AMD Ryzen 7 with 8 cores 3.2Ghz and 100MB internet connection, but will vary on your specific system.  
 All binaries will be installed in (UserHome)/toolchain/m68k-atari-elf.  
 
 ## Examples:
@@ -60,8 +61,7 @@ The symbol: "_stksize" defines how much memory that is reserved for stack **and*
    * SIZE < -1, then -SIZE memory is reserved (for mintlib compatibillity).
 
 ## Atari libraries:
-TOS and GEM specific functions are included and follows original Atari GEM specifications.  
-While considerable testing have been done, there may still be bugs in rarely used functions. Please report any findings!  
+TOS, AES, VDI and NVDI specific functions are included.  
 The libraries and headers:  
 * TOS - library: "libtos.a", header file: "tos.h".
 * AES - library: "libaes.a", header file: "aes.h".
@@ -72,9 +72,9 @@ Conversion from elf to prg is done in two separate steps: link time and post lin
 Link time is done through a link script included in newlib, installed in "toolchain/m68k-atari-elf/m68k-atari-elf/lib/atari-tos.ld".  
 Post link time is done by the binary "m68k-atari-elf-prg" which is built from the sources in "elf-prg".  
 The link script will:  
-Collect all relevant sections and bunch them together in the three segments atari prg files support: ".text", ".data" and ".bss".  
-The ".text" segment will start at address 0 and the ".data" and ".bss" segments will follow accordingly.  
-A segment called ".prgheader" containing all correct data will be included in the elf file.  
+Collect all relevant sections and bunch them together in the three sections atari prg files support: ".text", ".data" and ".bss".  
+The ".text" section will start at address 0 and the ".data" and ".bss" sections will follow accordingly.  
+A section called ".prgheader" containing all correct data will be included in the elf file.  
 The "m68k-atari-elf-prg" will:  
 Extract ".prgheader", ".text", ".data" and ".bss" in that order and add a fixup table for relocation data.  
 **The main benefit of doing it in two steps is that the elf file and prg file will be _binary address compatible_.**  

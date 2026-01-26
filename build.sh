@@ -15,26 +15,29 @@
 # So either disable lto, or disable multilib and select a default cpu that suits you.
 
 # LTO: enable/disable link time optimizing.
-CONF_LTO=--enable-lto
+CONF_LTO=--disable-lto
 # Multilib: enable/disable building of libraries for single or multiple motorola cpus.
-CONF_MULTILIB=--disable-multilib
+CONF_MULTILIB=--enable-multilib
+# Coldfire: enable/disable when multilib enabled.
+CONF_COLDFIRE=disable
 # Default cpu when using gcc.
 CONF_DEFAULT_CPU=68000
 # Toolchain install dir.
 CONF_INSTALL=$HOME/toolchain
+
+# Versions to download and build.
+BINUTIL_VERSION="2.45"
+GCC_VERSION="15.2.0"
+NEWLIB_VERSION="4.6.0.20260123"
+ATARI_LIB_HASH=29c2d2f9379fe6114eacebcd0a5ac4578df3741f
 
 # Target specific settings
 TARGET=m68k-atari-elf
 PREFIX="$CONF_INSTALL/$TARGET"
 PATH=$PATH:$PREFIX/bin
 PATCHES="$PWD/patches"
-NEWLIB_PATH="$PWD/build/newlib-cygwin"
+NEWLIB_PATH="$PWD/build/newlib-$NEWLIB_VERSION"
 
-# Versions to download and build.
-BINUTIL_VERSION="2.44"
-GCC_VERSION="15.2.0"
-NEWLIB_HASH="9fac993ba74bd6ab3fc638a169ffdc92b78bd679"
-ATARI_LIB_HASH=29c2d2f9379fe6114eacebcd0a5ac4578df3741f
 
 # Detect system
 unameOut="$(uname -s)"
@@ -88,21 +91,21 @@ if [ ! -d gcc-$GCC_VERSION ]; then
 	cd gcc-$GCC_VERSION
 	echo "Downloading: gcc prerequisites"
 	./contrib/download_prerequisites
-	echo "Patching: gcc"
-	yes | cp -rf $PATCHES/gcc-$GCC_VERSION/t-atari gcc/config/m68k/t-atari
-	patch gcc/config.gcc $PATCHES/gcc-$GCC_VERSION/config.gcc.diff
+	if [ "$CONF_COLDFIRE" == "disable" ]; then
+		echo "Patching: gcc"
+		yes | cp -rf $PATCHES/gcc/t-atari gcc/config/m68k/t-atari
+		patch gcc/config.gcc $PATCHES/gcc/config.gcc.diff
+	fi
 	cd ..
 fi
 
 # Get newlib sources
-if [ ! -d newlib-cygwin ]; then
+if [ ! -d newlib-$NEWLIB_VERSION ]; then
 	echo "Downloading: newlib"
-	git clone https://sourceware.org/git/newlib-cygwin.git
-	# We checkout the specific commit that our patch is made for.
-	cd newlib-cygwin
-	echo "Checking out: newlib hash $NEWLIB_HASH"
-	git checkout $NEWLIB_HASH
-#	echo "Patching: newlib"
+	curl --output newlib-$NEWLIB_VERSION.tar.gz "ftp://sourceware.org/pub/newlib/newlib-$NEWLIB_VERSION.tar.gz"
+	echo "Extracting: newlib"
+	tar -xmf newlib-$NEWLIB_VERSION.tar.gz
+	cd newlib-$NEWLIB_VERSION
 	# Fixing specs will hopefully be integrated in newlib in future.
 	yes | cp -rf $PATCHES/newlib/$SPECS_FILE libgloss/m68k/atari/atari-tos.specs
 	cd ..
@@ -115,7 +118,7 @@ if [ ! -d atari-libs ]; then
 	# We checkout the specific stable commit.
 	cd atari-libs
 	echo "Checking out: atari-libs hash $ATARI_LIB_HASH"
-	git checkout $ATARI_LIB_HASH
+	#git checkout $ATARI_LIB_HASH
 	cd ..
 fi
 
@@ -161,8 +164,6 @@ if [ ! -d b-gcc ]; then
 	--with-headers=$NEWLIB_PATH/newlib/libc/include
 	make -j$BUILD_THREADS
 	make install-strip
-	# --with-headers copies headers to sys-include during gcc build but do not remove them after build, so we have to do it.
-	# Thanks to Thorsten Otto for pointing that out.
 	rm -rf $PREFIX/$TARGET/sys-include
 	
 	# Check if we have built for lto (check if lto plugin exists).
@@ -179,7 +180,7 @@ if [ ! -d b-newlib ]; then
 	echo "Building: newlib"
 	mkdir -p b-newlib
 	cd b-newlib
-	../newlib-cygwin/configure --prefix=$PREFIX --target=$TARGET \
+	../newlib-$NEWLIB_VERSION/configure --prefix=$PREFIX --target=$TARGET \
 	$SYSTEM_SPECIFIC_FLAGS \
 	--with-float=soft \
 	$CONF_LTO \
