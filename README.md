@@ -17,7 +17,7 @@ A development system providing cross compiling and remote debugging for Atari TO
 5. Enter: `cd m68k-atari-elf`
 6. Enter: `./build.sh`
    
-Depending on your system, the last line may take minutes or hours.  
+The build takes 15 minutes on a AMD Ryzen 7 with 8 cores 3.2Ghz and 100MB internet connection, but will vary on your specific system.  
 All binaries will be installed in (UserHome)/toolchain/m68k-atari-elf.  
 
 ## Setup for Macos (debugging currently not supported):
@@ -38,7 +38,7 @@ All binaries will be installed in (UserHome)/toolchain/m68k-atari-elf.
 5. Enter: `cd m68k-atari-elf`
 6. Enter: `./build.sh`
    
-The build takes 15 minutes on a AMD Ryzen 7 with 8 cores 3.2Ghz and 100MB internet connection, but will vary on your specific system.  
+Depending on your system, the last line may take minutes or hours.  
 All binaries will be installed in (UserHome)/toolchain/m68k-atari-elf.  
 
 ## Examples:
