@@ -20,7 +20,7 @@ A development system providing cross compiling and remote debugging for Atari TO
 The build takes 15 minutes on a AMD Ryzen 7 with 8 cores 3.2Ghz and 100MB internet connection, but will vary on your specific system.  
 All binaries will be installed in (UserHome)/toolchain/m68k-atari-elf.  
 
-## Setup for Macos (debugging currently not supported):
+## Setup for Macos (debugging not supported, blame apple):
 1. Open a terminal.
 2. Enter: `xcode-select --install` to install all xcode command line tools.
 3. Enter: `git clone https://github.com/hildenborg/m68k-atari-dev.git` to download m68k-atari-dev.
@@ -30,10 +30,10 @@ All binaries will be installed in (UserHome)/toolchain/m68k-atari-elf.
 Depending on your system, the last line may take minutes or hours.  
 All binaries will be installed in (UserHome)/toolchain/m68k-atari-elf.  
 
-## Setup for Windows (not recently tested, expect problems):
+## Setup for Windows:
 1. Install msys and mingw by following instructions on [www.msys2.org](https://www.msys2.org/)
 2. From start menu, start `MSYS2 UCRT64`.
-3. Enter: `pacman -S --needed base-devel mingw-w64-ucrt-x86_64-toolchain cpio gmp-devel mpfr-devel mpc-devel git mingw-w64-ucrt-x86_64-gdb-multiarch`
+3. Enter: `pacman -S --needed base-devel mingw-w64-ucrt-x86_64-toolchain cpio gmp-devel mpfr-devel mpc-devel git mingw-w64-ucrt-x86_64-gdb-multiarch mingw-w64-x86_64-python`
 4. Enter: `git clone https://github.com/hildenborg/m68k-atari-dev.git` to download m68k-atari-dev.
 5. Enter: `cd m68k-atari-elf`
 6. Enter: `./build.sh`
