@@ -61,7 +61,7 @@ The symbol: "_stksize" defines how much memory that is reserved for stack **and*
    * SIZE < -1, then -SIZE memory is reserved (for mintlib compatibillity).
 
 ## Atari libraries:
-TOS, AES, VDI and NVDI specific functions are included.  
+TOS, AES, VDI and NVDI specific functions are supported using the [atari-libs project](https://github.com/hildenborg/atari-libs).  
 The libraries and headers:  
 * TOS - library: "libtos.a", header file: "tos.h".
 * AES - library: "libaes.a", header file: "aes.h".
