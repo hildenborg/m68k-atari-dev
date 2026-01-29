@@ -37,7 +37,13 @@ All binaries will be installed in (UserHome)/toolchain/m68k-atari-elf.
 4. Enter: `git clone https://github.com/hildenborg/m68k-atari-dev.git` to download m68k-atari-dev.
 5. Enter: `cd m68k-atari-elf`
 6. Enter: `./build.sh`
-   
+
+Building on windows have been problematic lately, and you may have to modify the build script to make it work.  
+If the build freezes for no apparent reason, try changing:  
+`CONF_MULTILIB=--enable-multilib`
+to:  
+`CONF_MULTILIB=--disable-multilib`
+
 Depending on your system, the last line may take minutes or hours.  
 All binaries will be installed in (UserHome)/toolchain/m68k-atari-elf.  
 
