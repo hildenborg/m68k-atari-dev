@@ -36,7 +36,8 @@ TARGET=m68k-atari-elf
 PREFIX="$CONF_INSTALL/$TARGET"
 PATH=$PATH:$PREFIX/bin
 PATCHES="$PWD/patches"
-NEWLIB_PATH="$PWD/build/newlib-$NEWLIB_VERSION"
+#NEWLIB_PATH="$PWD/build/newlib-$NEWLIB_VERSION"
+NEWLIB_PATH="$PWD/build/newlib-cygwin"
 
 
 # Detect system
@@ -100,12 +101,22 @@ if [ ! -d gcc-$GCC_VERSION ]; then
 fi
 
 # Get newlib sources
-if [ ! -d newlib-$NEWLIB_VERSION ]; then
+#if [ ! -d newlib-$NEWLIB_VERSION ]; then
+#	echo "Downloading: newlib"
+#	curl --output newlib-$NEWLIB_VERSION.tar.gz "ftp://sourceware.org/pub/newlib/newlib-$NEWLIB_VERSION.tar.gz"
+#	echo "Extracting: newlib"
+#	tar -xmf newlib-$NEWLIB_VERSION.tar.gz
+#	cd newlib-$NEWLIB_VERSION
+#	# Fixing specs will hopefully be integrated in newlib in future.
+#	yes | cp -rf $PATCHES/newlib/$SPECS_FILE libgloss/m68k/atari/atari-tos.specs
+#	cd ..
+#fi
+if [ ! -d newlib-cygwin ]; then
 	echo "Downloading: newlib"
-	curl --output newlib-$NEWLIB_VERSION.tar.gz "ftp://sourceware.org/pub/newlib/newlib-$NEWLIB_VERSION.tar.gz"
-	echo "Extracting: newlib"
-	tar -xmf newlib-$NEWLIB_VERSION.tar.gz
-	cd newlib-$NEWLIB_VERSION
+	git clone https://sourceware.org/git/newlib-cygwin.git
+	cd newlib-cygwin
+	echo "Patching: newlib"
+	git apply $PATCHES/newlib/0001-Opening-files-now-care-about-the-binary-flag.patch
 	# Fixing specs will hopefully be integrated in newlib in future.
 	yes | cp -rf $PATCHES/newlib/$SPECS_FILE libgloss/m68k/atari/atari-tos.specs
 	cd ..
@@ -180,7 +191,8 @@ if [ ! -d b-newlib ]; then
 	echo "Building: newlib"
 	mkdir -p b-newlib
 	cd b-newlib
-	../newlib-$NEWLIB_VERSION/configure --prefix=$PREFIX --target=$TARGET \
+#	../newlib-$NEWLIB_VERSION/configure --prefix=$PREFIX --target=$TARGET \
+	../newlib-cygwin/configure --prefix=$PREFIX --target=$TARGET \
 	$SYSTEM_SPECIFIC_FLAGS \
 	--with-float=soft \
 	$CONF_LTO \
