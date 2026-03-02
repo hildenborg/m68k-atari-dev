@@ -120,6 +120,7 @@ if [ ! -d newlib-cygwin ]; then
 	git checkout $NEWLIB_HASH	
 	echo "Patching: newlib"
 	git apply $PATCHES/newlib/0001-newlib-m68k-atari-elf-Correct-handling-of-CRLF-in-st.patch
+	git apply $PATCHES/newlib/0002-newlib-reconfigure.patch
 	cd ..
 fi
 

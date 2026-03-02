@@ -1,25 +1,30 @@
-From 3605af85d1434b5d622d302202c65b40c2f744c1 Mon Sep 17 00:00:00 2001
+From 173f295cd29ce24207659d9dc05f705db04d1e06 Mon Sep 17 00:00:00 2001
 From: Mikael Hildenborg <micael@hildenborg.com>
 Date: Mon, 2 Mar 2026 16:59:34 +0100
-Subject: [PATCH 1/1] newlib - m68k-atari-elf: Correct handling of CRLF in
+Subject: [PATCH 1/2] newlib - m68k-atari-elf: Correct handling of CRLF in
  stdio.
 
 ---
  libgloss/m68k/Makefile.in                 |  2 +-
- libgloss/m68k/atari/atari-open.c          | 37 ++++++------
- libgloss/m68k/atari/atari-setmode.c       | 74 +++++++++++++++++++++++
+ libgloss/m68k/atari/atari-open.c          | 37 +++++----
+ libgloss/m68k/atari/atari-setmode.c       | 74 ++++++++++++++++++
  libgloss/m68k/atari/atari-tos.ld          |  2 +-
  libgloss/m68k/atari/atari-tos.specs       |  3 +
- libgloss/m68k/atari/atari-write.c         | 61 +------------------
+ libgloss/m68k/atari/atari-write.c         | 61 +--------------
  newlib/configure.host                     |  6 +-
  newlib/libc/acinclude.m4                  |  1 +
  newlib/libc/stdio/flags.c                 |  2 +-
- newlib/libc/stdio/stdio.c                 |  4 ++
- newlib/libc/sys/atari/include/io.h        | 31 ++++++++++
- newlib/libc/sys/atari/include/sys/fcntl.h | 11 ++++
- newlib/libc/sys/atari/include/sys/stdio.h | 33 ++++++++++
- 13 files changed, 186 insertions(+), 81 deletions(-)
+ newlib/libc/stdio/stdio.c                 |  4 +
+ newlib/libc/sys/Makefile.inc              |  3 +
+ newlib/libc/sys/atari/Makefile.inc        |  1 +
+ newlib/libc/sys/atari/filemode.c          | 94 +++++++++++++++++++++++
+ newlib/libc/sys/atari/include/io.h        | 30 ++++++++
+ newlib/libc/sys/atari/include/sys/fcntl.h | 11 +++
+ newlib/libc/sys/atari/include/sys/stdio.h | 33 ++++++++
+ 16 files changed, 283 insertions(+), 81 deletions(-)
  create mode 100644 libgloss/m68k/atari/atari-setmode.c
+ create mode 100644 newlib/libc/sys/atari/Makefile.inc
+ create mode 100644 newlib/libc/sys/atari/filemode.c
  create mode 100644 newlib/libc/sys/atari/include/io.h
  create mode 100644 newlib/libc/sys/atari/include/sys/fcntl.h
  create mode 100644 newlib/libc/sys/atari/include/sys/stdio.h
@@ -343,12 +348,133 @@ index 6347949db..e3abdb0ce 100644
    return 0;
  #endif
  }
+diff --git a/newlib/libc/sys/Makefile.inc b/newlib/libc/sys/Makefile.inc
+index 9f8758934..97ce59a36 100644
+--- a/newlib/libc/sys/Makefile.inc
++++ b/newlib/libc/sys/Makefile.inc
+@@ -7,6 +7,9 @@ endif
+ if HAVE_LIBC_SYS_ARM_DIR
+ include %D%/arm/Makefile.inc
+ endif
++if HAVE_LIBC_SYS_ATARI_DIR
++include %D%/atari/Makefile.inc
++endif
+ if HAVE_LIBC_SYS_D10V_DIR
+ include %D%/d10v/Makefile.inc
+ endif
+diff --git a/newlib/libc/sys/atari/Makefile.inc b/newlib/libc/sys/atari/Makefile.inc
+new file mode 100644
+index 000000000..5ca8259ee
+--- /dev/null
++++ b/newlib/libc/sys/atari/Makefile.inc
+@@ -0,0 +1 @@
++libc_a_SOURCES += %D%/filemode.c
+diff --git a/newlib/libc/sys/atari/filemode.c b/newlib/libc/sys/atari/filemode.c
+new file mode 100644
+index 000000000..ea8ff7455
+--- /dev/null
++++ b/newlib/libc/sys/atari/filemode.c
+@@ -0,0 +1,94 @@
++/*
++	Copyright (C) 2026 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
++#include <_ansi.h>
++#include <sys/reent.h>
++#include <stdio.h>
++#include <sys/fcntl.h>
++#include <sys/lock.h>
++#include <errno.h>
++#include "../../stdio/local.h"
++
++
++/*
++	Thread safety in case support for MultiTOS or MagiC is added in the future.
++*/
++#ifndef __SINGLE_THREAD__
++__LOCK_INIT(static, __setmode_mutex);
++#endif
++
++short setmode_fd;
++FILE* setmode_fp;
++
++int setmode_helper(struct _reent *ptr, FILE *f)
++{
++	/*
++		We call __sfileno instead of fileno, as the latter tries to lock the filepointer.
++		And the filepointer is already locked if we came from fopen etc.
++	*/
++	if (setmode_fd == __sfileno(f))
++	{
++		setmode_fp = f;
++	}
++	return 0;
++}
++
++FILE* GetFilePointer(short fd)
++{
++#ifndef __SINGLE_THREAD__
++	__lock_acquire(__setmode_mutex);
++#endif
++	setmode_fd = fd;
++	setmode_fp = 0;
++	_fwalk_sglue (_GLOBAL_REENT, setmode_helper, &__sglue);
++	FILE* fp = setmode_fp;
++#ifndef __SINGLE_THREAD__
++	__lock_release(__setmode_mutex);
++#endif
++	return fp;
++}
++
++extern int atari_setmode(short f, int mode);
++extern int atari_istext_for_stdio(short fd);
++
++int _setmode (short fd, int mode)
++{
++	if (fd < 0)
++	{
++		errno = EBADF;
++		return -1;
++	}
++
++/*
++	We need to make sure that stdio is set up, as this function most likely will be called before any file operations.
++	The second parameter in the CHECK_INIT should be a file pointer, but paradoxically enough we cannot have one
++	before setting up stdio.
++	This is not a problem however as the file pointer never is used by the macro, so we set it to NULL.
++*/
++	CHECK_INIT(_REENT, NULL);
++
++	FILE* fp = GetFilePointer(fd);
++	if (fp == 0)
++	{
++		errno = EBADF;
++		return -1;
++	}
++
++	int oldmode = atari_setmode(fd, mode);
++
++	/*
++		Set or clear __SCLE for correct CRLF handling.
++	*/
++	if (atari_istext_for_stdio(fd) != 0)
++	{
++		fp->_flags |= __SCLE;
++	}
++	else
++	{
++		fp->_flags &= ~__SCLE;
++	}
++
++	return oldmode;
++}
 diff --git a/newlib/libc/sys/atari/include/io.h b/newlib/libc/sys/atari/include/io.h
 new file mode 100644
-index 000000000..2c83442c4
+index 000000000..027ff1626
 --- /dev/null
 +++ b/newlib/libc/sys/atari/include/io.h
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,30 @@
 +/*
 +	Copyright (C) 2026 Mikael Hildenborg
 +	SPDX-License-Identifier: BSD-2-Clause
@@ -362,18 +488,17 @@ index 000000000..2c83442c4
 +#endif
 +
 +/*
-+	Extern functions is in libgloss atari-setmode.c
++	fmode functions is in libgloss atari-setmode.c
 +*/
 +extern int atari_set_fmode(int mode);
 +extern int atari_get_fmode(int* mode);
-+extern int atari_setmode(short f, int mode);
++extern int _setmode(short f, int mode);
 +
 +#define _set_fmode(mode) atari_set_fmode((mode))
 +#define _get_fmode(mode) atari_get_fmode((mode))
-+#define _setmode(f, mode) atari_setmode((f), (mode))
 +#define set_fmode(mode) atari_set_fmode((mode))
 +#define get_fmode(mode) atari_get_fmode((mode))
-+#define setmode(f, mode) atari_setmode((f), (mode))
++#define setmode(f, mode) _setmode((f), (mode))
 +
 +#ifdef __cplusplus
 +}
