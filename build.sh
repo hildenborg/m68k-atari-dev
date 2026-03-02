@@ -28,8 +28,9 @@ CONF_INSTALL=$HOME/toolchain
 # Versions to download and build.
 BINUTIL_VERSION="2.45"
 GCC_VERSION="15.2.0"
-NEWLIB_VERSION="4.6.0.20260123"
-ATARI_LIB_HASH=29c2d2f9379fe6114eacebcd0a5ac4578df3741f
+#NEWLIB_VERSION="4.6.0.20260123"
+NEWLIB_HASH="6d049c54c3314da31d9ffac133a6a2f2dfecaac2"
+ATARI_LIB_HASH="29c2d2f9379fe6114eacebcd0a5ac4578df3741f"
 
 # Target specific settings
 TARGET=m68k-atari-elf
@@ -115,10 +116,10 @@ if [ ! -d newlib-cygwin ]; then
 	echo "Downloading: newlib"
 	git clone https://sourceware.org/git/newlib-cygwin.git
 	cd newlib-cygwin
+	echo "Checking out: newlib hash $NEWLIB_HASH"
+	git checkout $NEWLIB_HASH	
 	echo "Patching: newlib"
-	git apply $PATCHES/newlib/0001-Opening-files-now-care-about-the-binary-flag.patch
-	# Fixing specs will hopefully be integrated in newlib in future.
-	yes | cp -rf $PATCHES/newlib/$SPECS_FILE libgloss/m68k/atari/atari-tos.specs
+	git apply $PATCHES/newlib/0001-newlib-m68k-atari-elf-Correct-handling-of-CRLF-in-st.patch
 	cd ..
 fi
 
@@ -204,6 +205,8 @@ if [ ! -d b-newlib ]; then
 	make -j$BUILD_THREADS
 	make install
 	cd ..
+	# We override the specs file with one that uses stuff outside of newlib. 
+	yes | cp -rf $PATCHES/newlib/$SPECS_FILE libgloss/m68k/atari/atari-tos.specs
 fi
 
 # build atari-libs
