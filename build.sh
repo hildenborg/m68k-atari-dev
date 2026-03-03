@@ -206,8 +206,8 @@ if [ ! -d b-newlib ]; then
 	make -j$BUILD_THREADS
 	make install
 	cd ..
-	# We override the specs file with one that uses stuff outside of newlib. 
-	yes | cp -rf $PATCHES/newlib/$SPECS_FILE libgloss/m68k/atari/atari-tos.specs
+	# We override the specs file with one that uses stuff outside of newlib.
+	yes | cp -rf $PATCHES/newlib/$SPECS_FILE $PREFIX/lib/gcc/$TARGET/specs
 fi
 
 # build atari-libs
