@@ -1,4 +1,4 @@
-From 173f295cd29ce24207659d9dc05f705db04d1e06 Mon Sep 17 00:00:00 2001
+From 9bdcc5cc83e70fd2da5db494d190b1cc0550347f Mon Sep 17 00:00:00 2001
 From: Mikael Hildenborg <micael@hildenborg.com>
 Date: Mon, 2 Mar 2026 16:59:34 +0100
 Subject: [PATCH 1/2] newlib - m68k-atari-elf: Correct handling of CRLF in
@@ -195,7 +195,7 @@ index 6bbecc261..a2f0b7625 100644
  		SHORT(0);									/*  0 = Relocation info present */
  	}
 diff --git a/libgloss/m68k/atari/atari-tos.specs b/libgloss/m68k/atari/atari-tos.specs
-index 02037132c..67dbe9fe1 100644
+index 02037132c..232afc3e8 100644
 --- a/libgloss/m68k/atari/atari-tos.specs
 +++ b/libgloss/m68k/atari/atari-tos.specs
 @@ -8,3 +8,6 @@
@@ -204,7 +204,7 @@ index 02037132c..67dbe9fe1 100644
  + -latari-tos
 +
 +*cpp:
-++ -D__M68K_ATARI_ELF__
+++ -D__M68K_ATARI_ELF__ -D__atari_os__
 diff --git a/libgloss/m68k/atari/atari-write.c b/libgloss/m68k/atari/atari-write.c
 index 9d6e59ed8..eba45038b 100644
 --- a/libgloss/m68k/atari/atari-write.c
@@ -309,7 +309,7 @@ index 960cca215..3c30bf8a7 100644
  	;;
    mcore-*-*)
 diff --git a/newlib/libc/acinclude.m4 b/newlib/libc/acinclude.m4
-index 52a6c57cf..576b7ce71 100644
+index a1040386b..c70a4aebb 100644
 --- a/newlib/libc/acinclude.m4
 +++ b/newlib/libc/acinclude.m4
 @@ -13,6 +13,7 @@ AM_CONDITIONAL(HAVE_UNIX_DIR, test x${unix_dir} != x)
