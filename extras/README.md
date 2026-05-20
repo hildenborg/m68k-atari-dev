@@ -22,6 +22,9 @@ In VsCode: press "Ctrl-LShift-B" to build program.
 In VsCode: press "F5" to debug program.  
 After debugging, do not forget to click disconnect on the debugging menu, or you won't be able to start debugging again.  
 Sometimes the connection becomes bad between Hatari and VsCode. A reset in Hatari usually solves it.  
+### Falcon:
+Hatari needs to be configured to use SCC communication for Falcon.  
+The script: "vscode-falcon.sh" should be used instead of: "vscode.sh" when developing for Falcon.  
 
 ## vscode_hatari_mintelf:
 This example is the same as vscode_hatari but uses the mintelf toolchain.

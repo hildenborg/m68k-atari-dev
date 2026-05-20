@@ -19,6 +19,22 @@ void ExitMfpAux(void);
 void InitSccAux(_CommException CommException);
 void ExitSccAux(void);
 
+int SccBcostat(void);
+int SccBconout(void);
+int SccBconin(void);
+int SccBconstat(void);
+
+unsigned short sccTmpData;
+
+void LogOut(const char* txt)
+{
+	int len = 0;
+	while (txt[len] != 0) 
+	{
+		Bconout(DEV_CONSOLE, txt[len]);
+		++len;
+	}
+}
 
 bool Mfp_IsMyDevice(const char *comString)
 {
@@ -34,12 +50,8 @@ int Mfp_Init(const char *comString, _CommException CommException)
 {
 	InitMfpAux(CommException);
 
-	/*
-		Don't do any serial configuration.
-		It is better to leave that to external apps like serial.cpx
-	*/
 	// Set serial conf
-	// Rsconf(BAUD_9600, FLOW_HARD, RS_CLK16 | RS_1STOP | RS_8BITS, RS_INQUIRE, RS_INQUIRE, RS_INQUIRE);
+	 Rsconf(BAUD_9600, FLOW_HARD, RS_CLK16 | RS_1STOP | RS_8BITS, RS_INQUIRE, RS_INQUIRE, RS_INQUIRE);
 	// Empty serial buffer
 	while (Bconstat(DEV_AUX) != 0)
 	{
@@ -93,7 +105,6 @@ int Mfp_ReceiveByte(void)
 		return COMM_ERR_NOT_READY;
 	}
 	return Bconin(DEV_AUX) & 0xff;
-
 }
 
 
@@ -126,18 +137,7 @@ bool Scc_IsMyDevice(const char *comString)
 int Scc_Init(const char *comString, _CommException CommException)
 {
 	InitSccAux(CommException);
-
-	/*
-		Don't do any serial configuration.
-		It is better to leave that to external apps like serial.cpx
-	*/
-	// Set serial conf
-	// Rsconf(BAUD_9600, FLOW_HARD, RS_CLK16 | RS_1STOP | RS_8BITS, RS_INQUIRE, RS_INQUIRE, RS_INQUIRE);
-	// Empty serial buffer
-	while (Bconstat(DEV_AUX) != 0)
-	{
-		Bconin(DEV_AUX);
-	}
+	
 	return 0;
 }
 
@@ -146,17 +146,15 @@ void Scc_Exit(void)
 	ExitSccAux();
 }
 
-
 bool Scc_IsConnected(void)
 {
-	return true;
-//	return (Scc_StatusRegister & 0x08) != 0;
+	return (Scc_StatusRegister & 0x08) != 0;
 }
 
 
 int Scc_TransmitByte(unsigned char byte)
 {
-	if (Bcostat(DEV_AUX) == 0)
+	if (SccBcostat() == 0)
 	{
 		if (!Scc_IsConnected())
 		{
@@ -164,14 +162,14 @@ int Scc_TransmitByte(unsigned char byte)
 		}
 		return COMM_ERR_NOT_READY;
 	}
-	Bconout(DEV_AUX, (unsigned short)byte);
+	sccTmpData = (unsigned short)byte;
+	Supexec(SccBconout);
 	return 0;
 }
 
-
 int Scc_ReceiveByte(void)
 {
-	if (Bconstat(DEV_AUX) == 0)
+	if (SccBconstat() == 0)
 	{
 		if (!Scc_IsConnected())
 		{
@@ -179,7 +177,8 @@ int Scc_ReceiveByte(void)
 		}
 		return COMM_ERR_NOT_READY;
 	}
-	return Bconin(DEV_AUX) & 0xff;
+	Supexec(SccBconin);
+	return sccTmpData;
 }
 
 void CreateSccSerial(comm* com)
@@ -208,13 +207,7 @@ int InitComm(const char *comString, comm* com)
 	}
 	else if (Scc_IsMyDevice(comString))
 	{
-		// Falcon, modem1 connected to SCC.
-		/*
-			There is some confusion in documentation regarding com ports for the Falcon.
-			Some name the lan port as modem1 and serial port as modem2, while
-			others name lan port as lan port and serial port as modem1...
-			This software choose to follow the serial.cpx naming.
-		*/
+		// Falcon, modem2 dsub9 port connected to SCC.
 		CreateSccSerial(com);
 		return 0;
 	}
