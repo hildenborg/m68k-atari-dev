@@ -26,16 +26,6 @@ int SccBconstat(void);
 
 unsigned short sccTmpData;
 
-void LogOut(const char* txt)
-{
-	int len = 0;
-	while (txt[len] != 0) 
-	{
-		Bconout(DEV_CONSOLE, txt[len]);
-		++len;
-	}
-}
-
 bool Mfp_IsMyDevice(const char *comString)
 {
 	if ((Cookie_MCH >> 16) < 3 && StringCompare("AUX", comString) >= 0)

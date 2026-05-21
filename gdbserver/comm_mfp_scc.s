@@ -6,8 +6,10 @@
 	.global Mfp_ActiveEdgeRegister
 	.global CtrlC_enable
 	.global sccTmpData
+	.global sccDelayCount
 
-	.equ	SccBufferLength, 16
+	.equ	SccBufferLength, 0x400
+	.equ	SccBufferMask, 0x3ff
 
 	.text
 
@@ -163,10 +165,12 @@ SccCalcDelay:
 	divu	#10000, d1		| will give us loop count for 0.5us
 	and.l	#0xffff, d1
 	bne.s	2f
-	moveq	#1, d1
+	| don't need a delay loop.
+	move.w	rtsinst, SccDelay
 2:
 	move.l	d1, sccDelayCount
 	move.l	(a7)+, d1
+rtsinst:
 	rts
 
 /*
@@ -191,8 +195,7 @@ SccStatus:
 	rte
 
 SccSerialRX:
-	move.l	d0, -(a7)
-	move.l	d1, -(a7)
+	movem.l d0-d1/a0, -(a7)
 
 	move.b	0xffff8c85.w, Scc_StatusRegister
 	jbsr	SccDelay
@@ -209,30 +212,27 @@ SccSerialRX:
 	clr.w	CtrlC_enable	| Clear CtrlC_enable so we don't handle that while the server context is running. 
 	moveq	#0x30, d0
 	jbsr	SccClearIrq
-	move.l	(a7)+, d1
-	move.l	(a7)+, d0
+	movem.l (a7)+, d0-d1/a0
 SccSerialExceptionCall:
 	jmp		0x12345678
 SccSerialReceive:
-	| store d1 in serial input buffer
+	| store d1 in serial input fifo
 	move.w	sccInputCount, d0
 	cmp.w	#SccBufferLength, d0
-	jeq		SccSerialRXExit		| Buffer overflow, data lost
-	move.l	a0, -(a7)
+	jeq		SccSerialRXExit		| Fifo overflow, data lost
+	add.w	sccInputPos, d0
+	and.w	#SccBufferMask, d0
 	lea		sccInputBuffer, a0
 	move.b	d1, (a0, d0.w)
-	addq.w	#1, d0
-	move.w	d0, sccInputCount
-	move.l	(a7)+, a0
+	add.w	#1, sccInputCount
 SccSerialRXExit:
 	moveq	#0x30, d0
 	jbsr	SccClearIrq
-	move.l	(a7)+, d1
-	move.l	(a7)+, d0
+	movem.l (a7)+, d0-d1/a0
 	rte
 
 SccSerialTX:
-	move.l	d0, -(a7)
+	movem.l d0/a0, -(a7)
 	moveq	#0x28, d0
 	jbsr	SccClearIrq
 
@@ -243,22 +243,16 @@ SccSerialTX:
 	move.w	sccOutputCount, d0
 	jeq		SccSerialTXExit		| No data to send
 
-	move.l	a0, -(a7)
+	move.w	sccOutputPos, d0
 	lea		sccOutputBuffer, a0
-	move.b	(a0), 0xffff8c87.w
-	jbsr	SccDelay
-	move.w	sccOutputCount, d0
-	jra		2f
-3:
-	move.b	1(a0), (a0)+
-2:
-	subq.w	#1, d0
-	jne		3b
+	move.b	(a0, d0.w), 0xffff8c87.w
+	addq.w	#1, d0
+	and.w	#SccBufferMask, d0
+	move.w	d0, sccOutputPos
 	sub.w	#1, sccOutputCount
-	move.l	(a7)+, a0
-
+	jbsr	SccDelay
 SccSerialTXExit:
-	move.l	(a7)+, d0
+	movem.l (a7)+, d0/a0
 	rte
 
 SccClearIrq:
@@ -284,12 +278,12 @@ SccBconout:
 	ori.w	#0x700, sr
 	move.b	0xffff8c85.w, Scc_StatusRegister
 	jbsr	SccDelay
+	move.w	sccTmpData, d0
 	move.w	sccOutputCount, d1
 	jne		1f
 	btst	#2, Scc_StatusRegister
 	jeq		1f
 	| Send immediately
-	move.w	sccTmpData, d0
 	move.b	d0, 0xffff8c87.w
 	jbsr	SccDelay
 	jbra	2f
@@ -302,12 +296,12 @@ SccBconout:
 	cmp.w	#SccBufferLength, d1
 	jeq		3b
 	ori.w	#0x700, sr
+	add.w	sccOutputPos, d1
+	and.w	#SccBufferMask, d1
 	move.l	a0, -(a7)
 	lea		sccOutputBuffer, a0
-	move.w	sccTmpData, d0
 	move.b	d0, (a0, d1.w)
-	addq.w	#1, d1
-	move.w	d1, sccOutputCount
+	add.w	#1, sccOutputCount
 	move.l	(a7)+, a0
 2:
 	move.w	(a7)+, sr
@@ -326,18 +320,16 @@ SccBconin:
 
 	move.l	a0, -(a7)
 	move.l	d1, -(a7)
+	move.w	sccInputPos, d0
 	lea		sccInputBuffer, a0
-	moveq	#0, d0
-	move.b	(a0), d0
-	move.w	d0, sccTmpData
-	move.w	sccInputCount, d1
-	jra		2f
-3:
-	move.b	1(a0), (a0)+
-2:
-	subq.w	#1, d1
-	jne		3b
+	moveq	#0, d1
+	move.b	(a0, d0.w), d1
+	move.w	d1, sccTmpData
+	addq.w	#1, d0
+	and.w	#SccBufferMask, d0
+	move.w	d0, sccInputPos
 	sub.w	#1, sccInputCount
+	jbsr	SccDelay
 	move.l	(a7)+, d1
 	move.l	(a7)+, a0
 	move.w	(a7)+, sr
@@ -360,18 +352,21 @@ SccInit:
 	.dc.b 0x04, 0x44	| x16 clock mode, 1 stop bit asynchronous mode.
 	.dc.b 0x0a, 0x00	|
 	.dc.b 0x03, 0xe0	| Disable RX, auto enable CTS, 8 bit
+|	.dc.b 0x03, 0xc0	| Disable RX, 8 bit
 	.dc.b 0x05, 0xe2	| Disable TX, DTR and RTS enabled, 8 bit
 	.dc.b 0x0f, 0x01	| Select prime D7
 	.dc.b 0x07, 0x00	| Set prime D7
 	.dc.b 0x0f, 0x08	| Select non prime D7 and turn on DCD interrupts
+|	.dc.b 0x0f, 0x28	| Select non prime D7 and turn on CTS, DCD interrupts
 	.dc.b 0x07, 0x00	| Set non prime D7
 	.dc.b 0x06, 0x00	|
-	.dc.b 0x0e, 0x02	| Disable baud generator
+	.dc.b 0x0e, 0x02	| Disable BRG, set BRG source
 	.dc.b 0x0b, 0x50	| Clock mode
 	.dc.b 0x0c, 0x18	| Lower divisor
 	.dc.b 0x0d, 0x00	| Upper divisor
-	.dc.b 0x0e, 0x03	| Enable baud generator
+	.dc.b 0x0e, 0x03	| Enable BRG
 	.dc.b 0x03, 0xe1	| Enable RX, auto enable CTS, 8 bit
+|	.dc.b 0x03, 0xc1	| Enable RX, 8 bit
 	.dc.b 0x05, 0xea	| Enable TX, DTR and RTS enabled, 8 bit
 	.dc.b 0x00, 0x10	| Reset external status interrupt
 	.dc.b 0x00, 0x10	| Reset external status interrupt
@@ -382,7 +377,9 @@ SccInitEnd:
 	.bss
 	.lcomm	sccVectors, 4*4
 	.lcomm	sccDelayCount, 4
+	.lcomm	sccInputPos, 2
 	.lcomm	sccInputCount, 2
+	.lcomm	sccOutputPos, 2
 	.lcomm	sccOutputCount, 2
 	.lcomm	sccInputBuffer, SccBufferLength
 	.lcomm	sccOutputBuffer, SccBufferLength
