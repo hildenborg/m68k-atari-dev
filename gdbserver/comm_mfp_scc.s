@@ -8,8 +8,8 @@
 	.global sccTmpData
 	.global sccDelayCount
 
-	.equ	SccBufferLength, 0x400
-	.equ	SccBufferMask, 0x3ff
+	.equ	SccBufferLength, 0x100	| factor of two numbers only
+	.equ	SccBufferMask, SccBufferLength - 1
 
 	.text
 
@@ -219,12 +219,23 @@ SccSerialReceive:
 	| store d1 in serial input fifo
 	move.w	sccInputCount, d0
 	cmp.w	#SccBufferLength, d0
-	jeq		SccSerialRXExit		| Fifo overflow, data lost
+	jeq		SccSerialRXExit		| Fifo overflow, data lost (should not happen if RTS is handled properly).
 	add.w	sccInputPos, d0
 	and.w	#SccBufferMask, d0
 	lea		sccInputBuffer, a0
 	move.b	d1, (a0, d0.w)
 	add.w	#1, sccInputCount
+	move.w	sccInputCount, d0
+	cmp.w	#SccBufferLength, d0
+	jne		SccSerialRXExit
+/*
+	The buffer is full. Disable RTS.
+*/
+	move.b	#0x05, 0xffff8c85.w		| Select write register 5
+	jbsr	SccDelay
+	move.b	#0xe8, 0xffff8c85.w		| Disable RTS
+	jbsr	SccDelay
+
 SccSerialRXExit:
 	moveq	#0x30, d0
 	jbsr	SccClearIrq
@@ -296,6 +307,7 @@ SccBconout:
 	cmp.w	#SccBufferLength, d1
 	jeq		3b
 	ori.w	#0x700, sr
+	move.w	sccOutputCount, d1 | read again after turning off irqs
 	add.w	sccOutputPos, d1
 	and.w	#SccBufferMask, d1
 	move.l	a0, -(a7)
@@ -317,6 +329,7 @@ SccBconin:
 	jeq		1b		| Wait for data
 	move.w	sr, -(a7)
 	ori.w	#0x700, sr
+	move.w	sccInputCount, d0	| Read again after turning off irqs
 
 	move.l	a0, -(a7)
 	move.l	d1, -(a7)
@@ -328,8 +341,18 @@ SccBconin:
 	addq.w	#1, d0
 	and.w	#SccBufferMask, d0
 	move.w	d0, sccInputPos
+	move.w	sccInputCount, d0
 	sub.w	#1, sccInputCount
+	cmp.w	#SccBufferLength, d0
+	jne		1f
+/*
+	The buffer is no longer full. We can enable RTS.
+*/
+	move.b	#0x05, 0xffff8c85.w		| Select write register 5
 	jbsr	SccDelay
+	move.b	#0xea, 0xffff8c85.w		| Enable RTS
+	jbsr	SccDelay
+1:
 	move.l	(a7)+, d1
 	move.l	(a7)+, a0
 	move.w	(a7)+, sr
@@ -351,13 +374,11 @@ SccInit:
 	.dc.b 0x02, 0x60	| Vector register
 	.dc.b 0x04, 0x44	| x16 clock mode, 1 stop bit asynchronous mode.
 	.dc.b 0x0a, 0x00	|
-	.dc.b 0x03, 0xe0	| Disable RX, auto enable CTS, 8 bit
-|	.dc.b 0x03, 0xc0	| Disable RX, 8 bit
+	.dc.b 0x03, 0xc0	| Disable RX, 8 bit
 	.dc.b 0x05, 0xe2	| Disable TX, DTR and RTS enabled, 8 bit
 	.dc.b 0x0f, 0x01	| Select prime D7
 	.dc.b 0x07, 0x00	| Set prime D7
 	.dc.b 0x0f, 0x08	| Select non prime D7 and turn on DCD interrupts
-|	.dc.b 0x0f, 0x28	| Select non prime D7 and turn on CTS, DCD interrupts
 	.dc.b 0x07, 0x00	| Set non prime D7
 	.dc.b 0x06, 0x00	|
 	.dc.b 0x0e, 0x02	| Disable BRG, set BRG source
@@ -366,11 +387,10 @@ SccInit:
 	.dc.b 0x0d, 0x00	| Upper divisor
 	.dc.b 0x0e, 0x03	| Enable BRG
 	.dc.b 0x03, 0xe1	| Enable RX, auto enable CTS, 8 bit
-|	.dc.b 0x03, 0xc1	| Enable RX, 8 bit
 	.dc.b 0x05, 0xea	| Enable TX, DTR and RTS enabled, 8 bit
 	.dc.b 0x00, 0x10	| Reset external status interrupt
 	.dc.b 0x00, 0x10	| Reset external status interrupt
-	.dc.b 0x01, 0x13	| Enable TX and RX interrupts
+	.dc.b 0x01, 0x13	| Enable TX, RX and EXT interrupts.
 	.dc.b 0x09, 0x09	| Master interrupt enable
 SccInitEnd:
 
