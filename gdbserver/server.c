@@ -89,7 +89,7 @@ char	inferior_cmdline[MAX_PATH_LEN] __attribute__((aligned(2)));		// Command lin
 char	inferior_workpath[MAX_PATH_LEN] __attribute__((aligned(2)));	// The work path of the inferior being debugged. Can be empty if nothing is loaded.
 char	com_method[MAX_PATH_LEN] __attribute__((aligned(2)));			// Communication method. Only supports AUX for now.
 
-comm	comDev;
+comm*	comDev;
 
 bool			option_multi = false;
 bool			run_once = false;				// If set and if extended mode, then gdbserver exits when inferior is killed.
@@ -144,6 +144,12 @@ unsigned int Cookie_FPU = 0;
 	[3,0] = falcon
 */
 unsigned int Cookie_MCH = 0;
+
+/*
+	If this cookie is set, then it will point to a comm structure with
+	all the callbacks necessary for communication with gdb.
+*/
+unsigned int Cookie_SDBG = 0;
 
 /*
 	Max inPacket and outPacket size must be the same, 
@@ -410,7 +416,7 @@ int GetByte(void)
 {
 	int byte;
 
-	while ((byte = comDev.ReceiveByte()) == COMM_ERR_NOT_READY)
+	while ((byte = comDev->ReceiveByte()) == COMM_ERR_NOT_READY)
 	{
 		if (CheckServerQuitKey() < 0)
 		{
@@ -423,7 +429,7 @@ int GetByte(void)
 
 void PutByte(char ch)
 {
-	while (comDev.TransmitByte(ch) == COMM_ERR_NOT_READY)
+	while (comDev->TransmitByte(ch) == COMM_ERR_NOT_READY)
 	{
 	}
 }
@@ -441,7 +447,7 @@ void ReceivePacket(void)
 		DbgRemOut("\tWaiting...\r\n");
 		
 		// Wait for connection.
-		while (!comDev.IsConnected())
+		while (!comDev->IsConnected())
 		{
 			// Check keypress
 			// If we do not have any connection yet, then we cannot have any running inferiors, which means that we cannot be in supervisor mode.
@@ -558,7 +564,7 @@ void ReceivePacket(void)
 		{
 			waitForPacket = false;
 		}
-		if (!comDev.IsConnected())
+		if (!comDev->IsConnected())
 		{
 			DbgRemOut("\r\n\tConnection dropped!\r\n");
 			inPacketLength = 1;
@@ -574,7 +580,7 @@ void TransmitPacket(bool skipAck)
 	outPacket[outPacketLength] = 0;
 	DbgRemOut(outPacket);
 
-	if (!comDev.IsConnected())
+	if (!comDev->IsConnected())
 	{
 		// Connection dropped...
 		DbgRemOut("\r\n\tConnection dropped!\r\n");
@@ -1356,7 +1362,7 @@ void ServerCommandLoop(int si_signo, int si_code)
 	DbgOutVal("si_code", (unsigned int)si_code);
 
 	LoopState loopState = LISTEN_TO_GDB;
-	comDev.EnableCtrlC(false); // We don't want any Ctrl-C breaking now.
+	comDev->EnableCtrlC(false); // We don't want any Ctrl-C breaking now.
 
 	// Send response to GDB if needed.
 	outPacketLength = 0;
@@ -1560,7 +1566,7 @@ void ServerCommandLoop(int si_signo, int si_code)
 			We can only get here with inferiorState as LOADED or RUNNING.
 			CmdContinue will handle inferiorState NOT_LOADED.
 		*/
-		comDev.EnableCtrlC(true);	// So we can break with Ctrl-C
+		comDev->EnableCtrlC(true);	// So we can break with Ctrl-C
 		if (inferiorState == LOADED)
 		{
 			int return_code = 0;
@@ -1641,6 +1647,10 @@ int GetCookies(void)
 				case COOKIE_NAME('_', 'M', 'C', 'H'):
 					Cookie_MCH = _p_cookies->value;
 					DbgOutVal("\t_MCH", Cookie_MCH);
+					break;
+				case COOKIE_NAME('S', 'D', 'B', 'G'):
+					Cookie_SDBG = _p_cookies->value;
+					DbgOutVal("\tSDBG", Cookie_SDBG);
 					break;
 			}
 			++_p_cookies;
@@ -1788,18 +1798,20 @@ int ServerMain(int argc, char** argv)
 	{
 		numOfCpuRegisters = 29;
 	}
-	if (InitComm(com_method, &comDev) < 0)
+	comDev = InitComm(com_method); 
+	if (comDev == 0)
 	{
 		ConOut("Failed creating communication method.");
 		return -1;
 	}
-	comDev.EnableCtrlC(false); // Init as off
+	comDev->EnableCtrlC(false); // Init as off
 
 	if (CreateServerContext() < 0)
 	{
 		ConOut("Could not create server context.");
 		return -1;
 	}
+	DbgOut(comDev->DeviceName());
 	
 	InitFileIO();
 

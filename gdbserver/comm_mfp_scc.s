@@ -82,7 +82,7 @@ InitSccAux:
 	move.l	#SccStatus, 0x188.w
 	move.l	#SccSerialRX, 0x190.w
 	move.l	#SccSerialRX, 0x198.w
-
+/*
 	| Make sure all TX data is finished sending.
 	| Wait for at most ten milliseconds.
 	move.w	#10000, d2
@@ -110,9 +110,14 @@ InitSccAux:
 	jbsr	SccDelay
 	move.b	#0x30, 0xffff8c85.w
 	jbsr	SccDelay
-
+*/
 	| Load registers to set 9600 8N1 and interrupts enabled
 	lea		SccInit, a0
+	move.b	(a0)+, 0xffff8c85.w
+	jbsr	SccDelay
+	move.b	(a0)+, 0xffff8c85.w
+	jbsr	SccDelay
+	jbsr	SccDelay
 1:
 	move.b	(a0)+, 0xffff8c85.w
 	jbsr	SccDelay
@@ -369,28 +374,29 @@ SccBconstat:
 
 	.data
 SccInit:
-	.dc.b 0x09, 0x01	| Master interrupt disable
-	.dc.b 0x01, 0x00	| Disable RX and TX interrupts
-	.dc.b 0x02, 0x60	| Vector register
+	.dc.b 0x09, 0x41	| Reset channel b and turn off interrupts
 	.dc.b 0x04, 0x44	| x16 clock mode, 1 stop bit asynchronous mode.
-	.dc.b 0x0a, 0x00	|
 	.dc.b 0x03, 0xc0	| Disable RX, 8 bit
 	.dc.b 0x05, 0xe2	| Disable TX, DTR and RTS enabled, 8 bit
-	.dc.b 0x0f, 0x01	| Select prime D7
-	.dc.b 0x07, 0x00	| Set prime D7
-	.dc.b 0x0f, 0x08	| Select non prime D7 and turn on DCD interrupts
-	.dc.b 0x07, 0x00	| Set non prime D7
-	.dc.b 0x06, 0x00	|
+
+	.dc.b 0x02, 0x60	| Vector register
+
 	.dc.b 0x0e, 0x02	| Disable BRG, set BRG source
 	.dc.b 0x0b, 0x50	| Clock mode
 	.dc.b 0x0c, 0x18	| Lower divisor
 	.dc.b 0x0d, 0x00	| Upper divisor
 	.dc.b 0x0e, 0x03	| Enable BRG
-	.dc.b 0x03, 0xe1	| Enable RX, auto enable CTS, 8 bit
-	.dc.b 0x05, 0xea	| Enable TX, DTR and RTS enabled, 8 bit
-	.dc.b 0x00, 0x10	| Reset external status interrupt
-	.dc.b 0x00, 0x10	| Reset external status interrupt
+
+	.dc.b 0x0f, 0x01	| Select prime D7
+	.dc.b 0x07, 0x00	| Clear prime D7
+	.dc.b 0x0f, 0x08	| Select non prime D7 and turn on DCD interrupts
 	.dc.b 0x01, 0x13	| Enable TX, RX and EXT interrupts.
+
+	.dc.b 0x03, 0xc1	| Enable RX, auto enable CTS, 8 bit
+	.dc.b 0x05, 0xea	| Enable TX, DTR and RTS enabled, 8 bit
+
+	.dc.b 0x00, 0x10	| Reset external status interrupt
+	.dc.b 0x00, 0x10	| Reset external status interrupt
 	.dc.b 0x09, 0x09	| Master interrupt enable
 SccInitEnd:
 
@@ -403,3 +409,4 @@ SccInitEnd:
 	.lcomm	sccOutputCount, 2
 	.lcomm	sccInputBuffer, SccBufferLength
 	.lcomm	sccOutputBuffer, SccBufferLength
+	.even

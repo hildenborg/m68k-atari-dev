@@ -22,10 +22,13 @@ typedef int		(*_TransmitByte)(unsigned char byte);
 typedef int		(*_ReceiveByte)(void);
 typedef bool	(*_IsConnected)(void);
 typedef void	(*_EnableCtrlC)(bool);
+typedef const char*	(*_DeviceName)(void);
 
 typedef struct _comm
 {
+	unsigned int APIversion;	// 1 for now	
 	_IsMyDevice IsMyDevice;
+	_DeviceName DeviceName;
 	_Init Init;					// Always called in supervisor mode
 	_Exit Exit;					// Always called in supervisor mode
 	_TransmitByte TransmitByte;
@@ -34,6 +37,6 @@ typedef struct _comm
 	_EnableCtrlC EnableCtrlC;
 } comm;
 
-int InitComm(const char *comString, comm* com);
+comm* InitComm(const char *comString);
 
 #endif // COMM_DEFINED

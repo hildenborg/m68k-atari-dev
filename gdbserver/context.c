@@ -32,13 +32,13 @@ void RestoreVectors(unsigned int* vectors);
 void StoreMemoryRegisters(unsigned int* longs, unsigned char* bytes);
 void RestoreMemoryRegisters(unsigned int* longs, unsigned char* bytes);
 
-extern comm	comDev;
+extern comm*	comDev;
 extern char	com_method[];
 
 int CreateServerContext_super(void)
 {
 	InitExceptions();
-	if (comDev.Init(com_method, CtrlCException) < 0)
+	if (comDev->Init(com_method, CtrlCException) < 0)
 	{
 		return -1;
 	}
@@ -57,7 +57,7 @@ int CreateServerContext(void)
 
 int DestroyServerContext_super(void)
 {
-	comDev.Exit();
+	comDev->Exit();
 	RestoreExceptions();
     return 0;
 }

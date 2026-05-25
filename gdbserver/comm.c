@@ -7,11 +7,14 @@
 #include "bios_calls.h"
 #include "server.h"
 
+extern unsigned int Cookie_SDBG;
+
 extern short StringCompare(const char* str_a, const char* str_b);
 
 volatile short CtrlC_enable;
 volatile unsigned char Mfp_ActiveEdgeRegister;
 volatile unsigned char Scc_StatusRegister;
+volatile unsigned short sccTmpData;
 
 void InitMfpAux(_CommException CommException);
 void ExitMfpAux(void);
@@ -24,7 +27,6 @@ int SccBconout(void);
 int SccBconin(void);
 int SccBconstat(void);
 
-unsigned short sccTmpData;
 
 bool Mfp_IsMyDevice(const char *comString)
 {
@@ -103,16 +105,27 @@ void SetCtrlCFlag(bool enable)
 	CtrlC_enable = enable ? 1 : 0;
 }
 
-
-void CreateMfpSerial(comm* com)
+const char*	Mfp_DeviceName(void)
 {
-	com->IsMyDevice = Mfp_IsMyDevice;
-	com->Init = Mfp_Init;
-	com->Exit = Mfp_Exit;
-	com->TransmitByte = Mfp_TransmitByte;
-	com->ReceiveByte = Mfp_ReceiveByte;
-	com->IsConnected = Mfp_IsConnected;
-	com->EnableCtrlC = SetCtrlCFlag;
+	return "MFP serial device.\r\n";
+}
+
+comm MfpCom =
+{
+	1,
+	Mfp_IsMyDevice,
+	Mfp_DeviceName,
+	Mfp_Init,
+	Mfp_Exit,
+	Mfp_TransmitByte,
+	Mfp_ReceiveByte,
+	Mfp_IsConnected,
+	SetCtrlCFlag
+};
+
+comm* GetMfpSerial(void)
+{
+	return &MfpCom;
 }
 
 bool Scc_IsMyDevice(const char *comString)
@@ -168,38 +181,71 @@ int Scc_ReceiveByte(void)
 		return COMM_ERR_NOT_READY;
 	}
 	Supexec(SccBconin);
+	Bconout(DEV_CONSOLE, sccTmpData);
 	return sccTmpData;
 }
 
-void CreateSccSerial(comm* com)
+const char*	Scc_DeviceName(void)
 {
-	com->IsMyDevice = Scc_IsMyDevice;
-	com->Init = Scc_Init;
-	com->Exit = Scc_Exit;
-	com->TransmitByte = Scc_TransmitByte;
-	com->ReceiveByte = Scc_ReceiveByte;
-	com->IsConnected = Scc_IsConnected;
-	com->EnableCtrlC = SetCtrlCFlag;
+	return "SCC serial device.\r\n";
 }
 
-int InitComm(const char *comString, comm* com)
+
+comm SccCom =
+{
+	1,
+	Scc_IsMyDevice,
+	Scc_DeviceName,
+	Scc_Init,
+	Scc_Exit,
+	Scc_TransmitByte,
+	Scc_ReceiveByte,
+	Scc_IsConnected,
+	SetCtrlCFlag,
+};
+
+comm* GetSccSerial(void)
+{
+	return &SccCom;
+}
+
+comm* GetPluginComm()
+{
+	return (comm*)Cookie_SDBG;
+}
+
+comm* InitComm(const char *comString)
 {
 	const char* defaultString = "AUX";
+	const char* sdbgString = "SDBG";
 	if (comString == 0 || comString[0] == 0)
 	{
+		// Set AUX to be default if none other is specified.
 		comString = defaultString;
+		if (Cookie_SDBG != 0)
+		{
+			// Set SDBG to be default if plugin cookie exists.
+			comString = sdbgString;
+		}
 	}
 	if (Mfp_IsMyDevice(comString))
 	{
 		// All computers with modem1 connected to MFP.
-		CreateMfpSerial(com);
-		return 0;
+		return GetMfpSerial();
 	}
 	else if (Scc_IsMyDevice(comString))
 	{
 		// Falcon, modem2 dsub9 port connected to SCC.
-		CreateSccSerial(com);
-		return 0;
+		return GetSccSerial();
 	}
-	return -1;
+	else
+	{
+		comm* com = GetPluginComm();
+		if (com != 0 && com->APIversion == 1 && com->IsMyDevice(comString))
+		{
+			// Plugin is compatible
+			return com;
+		}
+	}
+	return 0;
 }
