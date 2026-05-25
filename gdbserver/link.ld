@@ -52,7 +52,7 @@ SECTIONS
 		LONG(__BSS_SEGMENT__ - __DATA_SEGMENT__);	/* Length of the DATA segment */
 		LONG(__BSS_SEGMENT_END - __BSS_SEGMENT__);	/* Length of the BSS segment */
 		LONG(0);									/* Length of the symbol table */
-		LONG(0);									/* Reserved, should be 0 */
+		LONG(0x68e1f001);							/* __M68K_ATARI_ELF__ signature */
 		LONG(0);									/* Program flags */
 		SHORT(0);									/*  0 = Relocation info present */
 	}
