@@ -1452,7 +1452,7 @@ void ServerCommandLoop(int si_signo, int si_code)
 		case '?':	// Report the exception
 			if (inferiorState == NOT_LOADED)
 			{
-				if (option_multi)
+				if (option_multi && !extendedMode)
 				{
 					// Need to load and start inferior
 					loopState = RUN;
