@@ -48,7 +48,7 @@ void* memset(void *ptr, int value, size_t num)
 		"subq.l #1, %%d0\n\t"
 		"bne.s	1b\n\t"
 		:
-		: "g" (ptr), "g" (value), "g" (num)
+		: "g" (ptr), "g" ((short)value), "g" (num)
 		: "a0", "d0", "d1", "cc", "memory");
 	}
 	return ptr;
