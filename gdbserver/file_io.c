@@ -45,17 +45,17 @@ void ExitFileIO(void)
 	}
 }
 
-// Silent fail
-void AddHandle(int fd)
+int AddHandle(int fd)
 {
 	for (int i = 0; i < NUM_HANDLES; ++i)
 	{
 		if (fd_handles[i] == -1)
 		{
 			fd_handles[i] = fd;
-			break;
+			return 0;
 		}
 	}
+	return -1;
 }
 
 // Silent fail
@@ -140,7 +140,12 @@ int VfileOpen(const char *fileName, int flags, int *ioErrno)
 	}
 	else
 	{
-		AddHandle(fd);
+		if (AddHandle(fd) != 0)
+		{
+			Fclose((unsigned short)fd);
+			*ioErrno = VFILE_ERRNO_EACCES;
+			return -1;
+		}
 	}
 	return fd;
 }
