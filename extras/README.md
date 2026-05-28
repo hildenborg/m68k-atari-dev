@@ -29,3 +29,7 @@ The script: "vscode-falcon.sh" should be used instead of: "vscode.sh" when devel
 ## vscode_hatari_mintelf:
 This example is the same as vscode_hatari but uses the mintelf toolchain.
 
+## gdb-extensions
+Gdbserver communication can be extended using stand-alone program code.
+TSR (Terminate and stay resident) programs, can be run before gdbserver is started and provide with all the methods needed
+for gdbserver to communicate with gdb.
