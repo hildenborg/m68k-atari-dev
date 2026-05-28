@@ -126,6 +126,8 @@ InitSccAux:
 	move.b	0xffff8c85.w, Scc_StatusRegister
 	jbsr	SccDelay
 
+|	bset	#5, 0xffff8e0d.w	| Mega STE/TT VME IRQ routing
+
 	move.w	(a7)+, sr
 	movem.l	(a7)+, d1-d2/a0
 	moveq	#0, d0

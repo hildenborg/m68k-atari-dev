@@ -151,7 +151,14 @@ void Scc_Exit(void)
 
 bool Scc_IsConnected(void)
 {
-	return (Scc_StatusRegister & 0x08) != 0;
+	return true;
+	/*
+		DCD seems to be a bit problematic on Falcon... Or just my falcon...
+		The DCD pin implementation in hardware differs between Falcon and mega STE.
+		The mega STE have a pull upp resistor connected to the pin and the falcon do not.
+		If this is the reason why I can detect DCD on mega STE and not on falcon is worth investigating. 
+	*/
+	//return (Scc_StatusRegister & 0x08) != 0;
 }
 
 
@@ -181,7 +188,6 @@ int Scc_ReceiveByte(void)
 		return COMM_ERR_NOT_READY;
 	}
 	Supexec(SccBconin);
-	Bconout(DEV_CONSOLE, sccTmpData);
 	return sccTmpData;
 }
 

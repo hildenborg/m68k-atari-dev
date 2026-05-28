@@ -10,7 +10,6 @@
 		StoreMemoryRegisters
 		RestoreMemoryRegisters
 		InferiorContextMemoryAddress
-		
 */
 
 // The maximum path length for the system.
@@ -1452,7 +1451,7 @@ void ServerCommandLoop(int si_signo, int si_code)
 		case '?':	// Report the exception
 			if (inferiorState == NOT_LOADED)
 			{
-				if (option_multi && !extendedMode)
+				if (option_multi)
 				{
 					// Need to load and start inferior
 					loopState = RUN;
@@ -1828,6 +1827,10 @@ int ServerMain(int argc, char** argv)
 		if (loadInferiorRequested)
 		{
 			// Load inferior
+			/*
+				If inferior is an empty file, strange things happen...
+				Need some better fail safe here.
+			*/
 			if (LoadInferior(inferior_filename, inferior_cmdline, NULL) < 0)
 			{
 				DbgOut("Could not load inferior: ");
