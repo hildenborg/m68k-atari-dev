@@ -16,14 +16,8 @@
 // Legacy ST is 128, but we might need a zero at the end too.
 #define MAX_PATH_LEN	130
 
-// Disable all console or logfile output (saves about 3kb)
-//#define NO_CON_OR_LOG
-
 // Disable all exceptions. Useful when debugging packet handling.
 //#define DISABLE_EXCEPTIONS
-
-// Set --debug and --remote-debug to active.
-//#define DEBUG_OPTIONS_ON
 
 // Don't use when serial communication, it's not good enough.
 //#define QStartNoAckMode
@@ -41,6 +35,8 @@
 #include "target_xml.h"
 #include "clib.h"
 #include "comm.h"
+#include "log.h"
+#include "hex.h"
 
 #define MINTELF_RESERVED 0x454c4628
 
@@ -93,9 +89,6 @@ comm*	comDev;
 
 bool			option_multi = false;
 bool			run_once = false;				// If set and if extended mode, then gdbserver exits when inferior is killed.
-bool			log_debug = false;				// cmdline option --debug
-bool			log_debug_remote = false;		// cmdline option --debug-remote
-int 			logHandle;
 bool			noAckMode = false;				// gdb QStartNoAckMode
 unsigned short* __start_Breakpoint = NULL;		// Only set during startup of inferior, and used to break at __start.
 int				userCodeForCommandLoop = USERCODE_SILENT;	// Used as si_code when calling ServerCommandLoop.
@@ -160,89 +153,6 @@ short inPacketLength = 0;
 char	inPacket[PACKET_SIZE + 1] __attribute__((aligned(2)));
 short outPacketLength = 0;
 char	outPacket[PACKET_SIZE + 1] __attribute__((aligned(2)));
-
-const char hex[] = "0123456789abcdef";
-
-const char newline[] = "\r\n";
-
-#define NibbleToHex(nibb) hex[(nibb) & 0xf]
-
-void ConOut(const char* txt)
-{
-#ifndef NO_CON_OR_LOG
-	if (logHandle > 0)
-	{
-		Fwrite((unsigned short)logHandle, strlen(txt), txt);
-	}
-	else
-	{
-		int len = 0;
-		while (txt[len] != 0) 
-		{
-			Bconout(DEV_CONSOLE, txt[len]);
-			++len;
-		}
-	}
-#endif
-}
-
-void DbgOut(const char* txt)
-{
-#ifndef DEBUG_OPTIONS_ON
-	if (log_debug)
-#endif
-	{
-		ConOut(txt);
-	}
-}
-
-void DbgRemOut(const char* txt)
-{
-#ifndef DEBUG_OPTIONS_ON
-	if (log_debug_remote)
-#endif
-	{
-		ConOut(txt);
-	}
-}
-
-void ConOutVal(const char* name, unsigned int val)
-{
-	char buf[12];
-	int i = 8;
-	buf[i] = 0;
-	while (--i >= 0)
-	{
-		buf[i] = NibbleToHex(val);
-		val = val >> 4;
-	}
-	ConOut("\t");
-	ConOut(name);
-	ConOut(": 0x");
-	ConOut(buf);
-	ConOut(newline);
-}
-
-void DbgOutVal(const char* name, unsigned int val)
-{
-#ifndef DEBUG_OPTIONS_ON
-	if (log_debug)
-#endif
-	{
-		ConOutVal(name, val);
-	}
-}
-
-void DbgRemOutVal(const char* name, unsigned int val)
-{
-#ifndef DEBUG_OPTIONS_ON
-	if (log_debug_remote)
-#endif
-	{
-		ConOutVal(name, val);
-	}
-}
-
 
 void OutputCrashInfo(void)
 {
@@ -352,39 +262,6 @@ void __attribute__ ((noreturn)) TerminateInferior(int si_signo)
 	inferiorTerminatedByServer = true;
 	Pterm(si_signo == GDB_SIGABRT ? -1 : -32);
 	// The code execution will not continue here. It will continue after Pexec() in RunInferior().
-}
-
-char* StrCopy(const char* source, char* dest)
-{
-	char c;
-	while ((c = *source++) != 0)
-	{
-		*dest++ = c;
-	}
-	*dest = 0;
-	return dest;
-}
-
-int HexToNibble(char c)
-{
-	return (c - (c < 'A' ? '0' : ((c < 'a' ? 'A' : 'a') - 10))) & 0xf;
-}
-
-unsigned char HexToByte(char* ptr)
-{
-	return (unsigned char)((HexToNibble(ptr[0]) << 4) | HexToNibble(ptr[1]));
-}
-
-// Endian aware
-unsigned int HexToLong(char* ptr)
-{
-	unsigned int val = 0;
-	for (int i = 0; i < 4; ++i)
-	{
-		val = (val << 8 ) | HexToByte(ptr);
-		ptr += 2;
-	}
-	return val;
 }
 
 short GetHexString(short offset, char** strOut)
@@ -548,7 +425,7 @@ void ReceivePacket(void)
 		csum[1] = (char)GetByte();
 		if (!noAckMode)
 		{
-			unsigned char psum = (unsigned char)((HexToNibble(csum[0]) << 4) | HexToNibble(csum[1]));
+			unsigned char psum = HexToByte(csum);
 			waitForPacket = sum != psum;
 			PutByte(waitForPacket ? '-' : '+');
 			if (!waitForPacket)
@@ -928,23 +805,6 @@ void ReadMemory(void)
 	}
 }
 
-// Note! Compares str_a with str_b *up to the length* of str_a.
-// Returns: -1 if not equal, and length of str_a if equal.
-// Returns 0 if str_a is length 0, and as such, is a dumb string to compare.
-short StringCompare(const char* str_a, const char* str_b)
-{
-	short l = 0;
-	while (str_a[l])
-	{
-		if (str_a[l] != str_b[l])
-		{
-			return -1;
-		}
-		++l;
-	}
-	return l;
-}
-
 void CmdQuery(void)
 {
 	short vNameEnd;
@@ -1176,31 +1036,6 @@ void WriteFileResponse(int result, int ioErrno, const char* attachment)
 bool CheckFileCmdArgs(const char* cmd, short args, const char* argv0, short argc)
 {
 	return (StringCompare(cmd, argv0) > 0 && args == argc);
-}
-
-int HexConvertByteArray(char *hexArray)
-{
-	// To save memory, we just convert the array in the same buffer.
-	char* hexptr = hexArray;
-	char* byteArray = hexArray;
-	while (*hexptr != 0)
-	{
-		*byteArray++ = (char)HexToByte(hexptr);
-		hexptr += 2;
-	}
-	*byteArray = 0;
-	return byteArray - hexArray;
-}
-
-// Unknown length.
-int HexToVariable(char* ptr)
-{
-	unsigned int val = 0;
-	while (*ptr != 0)
-	{
-		val = (val << 4 ) | (unsigned int)HexToNibble(*ptr++);
-	}
-	return val;
 }
 
 LoopState CmdFileOperation(short cmdEnd)
@@ -1787,15 +1622,7 @@ int HandleOptions(int argc, char** argv)
 
 int ServerMain(int argc, char** argv)
 {
-	logHandle = -1;
-#ifndef NO_CON_OR_LOG
-	if (argc >= 2 && StringCompare("--log", argv[1]) > 0)
-	{
-		log_debug_remote = true;
-		log_debug = true;
-		logHandle = Fcreate("gdblog.txt", 0);
-	}
-#endif // NO_CON_OR_LOG
+	InitLog(argc, argv);
 	DbgOut("ServerMain: Server initing.\r\n");
 	if (HandleOptions(argc, argv) != 0)
 	{
@@ -1870,11 +1697,8 @@ int ServerMain(int argc, char** argv)
 	
 	DestroyServerContext();
 
-	if (logHandle > 0)
-	{
-		Fclose((unsigned short)logHandle);
-	}
-	else if (log_debug || log_debug_remote || ret < 0)
+	ExitLog();
+	if (log_debug || log_debug_remote || ret < 0)
 	{
 		ConOut("Press any key...");
 		// Wait for keypress

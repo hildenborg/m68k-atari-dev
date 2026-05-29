@@ -53,3 +53,33 @@ void* memset(void *ptr, int value, size_t num)
 	}
 	return ptr;
 }
+
+// Note! Compares str_a with str_b *up to the length* of str_a.
+// Returns: -1 if not equal, and length of str_a if equal.
+// Returns 0 if str_a is length 0, and as such, is a dumb string to compare.
+short StringCompare(const char* str_a, const char* str_b)
+{
+	short l = 0;
+	while (str_a[l])
+	{
+		if (str_a[l] != str_b[l])
+		{
+			return -1;
+		}
+		++l;
+	}
+	return l;
+}
+
+char* StrCopy(const char* source, char* dest)
+{
+	char c;
+	while ((c = *source++) != 0)
+	{
+		*dest++ = c;
+	}
+	*dest = 0;
+	return dest;
+}
+
+
