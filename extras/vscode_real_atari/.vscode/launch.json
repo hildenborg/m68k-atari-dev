@@ -1,0 +1,25 @@
+{
+	// Use IntelliSense to learn about possible attributes.
+	// Hover to view descriptions of existing attributes.
+	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+	"version": "2.0.0",
+	"configurations": [
+		{
+			"type": "gdbtarget",
+			"request": "attach",
+			"name": "cdt debug",
+			"preRunCommands": [
+				"print \"just a nop\""
+			],
+			"initCommands": [
+				"remote put ${workspaceFolder}/build/${env:TARGET_NAME}.prg ${env:TARGET_NAME}.prg",
+				"set remote exec-file ${env:TARGET_NAME}.prg",
+				"starti"
+			],
+			"program": "${workspaceFolder}/build/${env:TARGET_NAME}",
+			"gdb": "gdb-multiarch",
+			"cwd": "${workspaceRoot}",
+			"target": {"type": "extended-remote" ,"parameters": ["${env:GDB_COM_PORT}"]}
+		},
+	]
+}
