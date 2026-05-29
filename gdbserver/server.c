@@ -39,6 +39,7 @@
 #include "hex.h"
 
 #define MINTELF_RESERVED 0x454c4628
+#define M68K_ATARI_ELF_RESERVED 0x68e1f001	// 68e1f = haxxor 68elf. 001 is version number.
 
 typedef enum
 {
