@@ -60,9 +60,10 @@ typedef enum
 	RUNNING
 } InferiorState;
 
-#define USERCODE_SILENT	0
-#define USERCODE_REPORT	1
-#define USERCODE_ERROR	-1
+#define USERCODE_SILENT		0
+#define USERCODE_REPORT		1
+#define USERCODE_ERROR		-1
+#define USERCODE_WARNING	-2
 
 #define PACKET_SIZE 0x3ff
 const char serverFeatures[] = "PacketSize=3ff;swbreak+"
@@ -98,6 +99,7 @@ int 			logHandle;
 bool			noAckMode = false;				// gdb QStartNoAckMode
 unsigned short* __start_Breakpoint = NULL;		// Only set during startup of inferior, and used to break at __start.
 int				userCodeForCommandLoop = USERCODE_SILENT;	// Used as si_code when calling ServerCommandLoop.
+int				userCodeIfError = USERCODE_ERROR;	// Will be copied to userCodeForCommandLoop if inferior loading fails.
 
 unsigned int	numOfCpuRegisters	=	18;
 
@@ -1374,6 +1376,11 @@ void ServerCommandLoop(int si_signo, int si_code)
 			WriteError(1);
 			TransmitPacket(false);
 		}
+		else if (si_code == USERCODE_WARNING)
+		{
+			WriteString("W00");
+			TransmitPacket(false);
+		}
 		else if (si_code == USERCODE_REPORT)
 		{
 			// We end up here if we are in extended mode and have loaded an inferior using the vRun command.
@@ -1437,6 +1444,9 @@ void ServerCommandLoop(int si_signo, int si_code)
 			WriteOK();
 			break;
 		case 'H':	// Set thread number. Just return OK.
+		/*
+			gdbserver returns E01
+		*/
 			WriteOK();
 			break;
 		case 'T':	// Set active thread. Just return OK.
@@ -1451,9 +1461,10 @@ void ServerCommandLoop(int si_signo, int si_code)
 		case '?':	// Report the exception
 			if (inferiorState == NOT_LOADED)
 			{
-				if (option_multi)
+				if (option_multi && inferior_filename[0] != 0)
 				{
 					// Need to load and start inferior
+					userCodeIfError = USERCODE_WARNING;
 					loopState = RUN;
 				}
 				else
@@ -1839,7 +1850,7 @@ int ServerMain(int argc, char** argv)
 				
 				if (userCodeForCommandLoop == USERCODE_REPORT)
 				{
-					userCodeForCommandLoop = USERCODE_ERROR;
+					userCodeForCommandLoop = userCodeIfError;
 				}
 				else
 				{
@@ -1847,6 +1858,7 @@ int ServerMain(int argc, char** argv)
 					break;
 				}
 			}
+			userCodeIfError = USERCODE_ERROR;
 			loadInferiorRequested = false;
 		}
 		ServerCommandLoop(GDB_SIGUSR1, userCodeForCommandLoop);
