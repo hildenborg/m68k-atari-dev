@@ -29,6 +29,10 @@ The script: "vscode-falcon.sh" should be used instead of: "vscode.sh" when devel
 ## vscode_hatari_mintelf:
 This example is the same as vscode_hatari but uses the mintelf toolchain.
 
+## vscode_real_atari:
+This example is the same as vscode_hatari but connects to a RS232 cable connection to a Atari computer.  
+It will also transfer the executable over the RS232 connection (slow) before execution.  
+
 ## gdb-extensions
 Gdbserver communication can be extended using stand-alone program code.
 TSR (Terminate and stay resident) programs, can be run before gdbserver is started and provide with all the methods needed

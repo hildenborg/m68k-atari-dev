@@ -42,3 +42,9 @@ And if you put a "run" instead of "starti", then the debugger would run, but bre
 So by starting with "starti" which breaks at first instruction, and then doing a "print \"just a nop\"", will trick the CDT GDB extension into a state where the executable is started and then paused.  
 This allows the breakpoints to be set and execution to continue.  
 Hopefully, this hack can be removed in the future.
+
+## Faster debug
+If you have started and stopped debugging of an executable and want to do it again without transfering the executable, then just comment out the following line in "launch.json":
+´´´
+	"remote put ${workspaceFolder}/build/${env:TARGET_NAME}.prg ${env:TARGET_NAME}.prg",
+´´´
