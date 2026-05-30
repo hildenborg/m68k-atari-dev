@@ -12,13 +12,14 @@
 extern "C" {
 #endif
 
-extern unsigned int Cookie_CPU;
-extern unsigned int Cookie_VDO;
-extern unsigned int Cookie_FPU;
-extern unsigned int Cookie_MCH;
+extern char inferior_filename[];
+extern char inferior_cmdline[];
+extern char inferior_workpath[];
+extern char com_method[];
+extern bool option_multi;
+extern bool run_once;
 
-
-int ServerMain(int argc, char** argv);
+int ServerMain(bool loadRequest);
 void ServerCommandLoop(int si_signo, int si_code);
 
 // Helper macros for debugging pursposes

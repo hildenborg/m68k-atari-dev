@@ -11,6 +11,7 @@
 #include "exceptions.h"
 #include "gdb_defines.h"
 #include "target_xml.h"
+#include "cookies.h"
 
 /*
 	Max inPacket and outPacket size must be the same, 
@@ -26,7 +27,6 @@ bool	noAckMode = false;				// gdb QStartNoAckMode
 // server
 int CheckServerQuitKey(void);
 extern unsigned int numOfCpuRegisters;
-extern unsigned int Cookie_FPU;
 
 char* GetInpacketPtr(short offset)
 {

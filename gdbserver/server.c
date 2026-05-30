@@ -37,6 +37,7 @@
 #include "log.h"
 #include "hex.h"
 #include "packet.h"
+#include "cookies.h"
 
 #define MINTELF_RESERVED 0x454c4628
 #define M68K_ATARI_ELF_RESERVED 0x68e1f001	// 68e1f = haxxor 68elf. 001 is version number.
@@ -92,55 +93,6 @@ int				userCodeForCommandLoop = USERCODE_SILENT;	// Used as si_code when calling
 int				userCodeIfError = USERCODE_ERROR;	// Will be copied to userCodeForCommandLoop if inferior loading fails.
 
 unsigned int	numOfCpuRegisters	=	18;
-
-/* 
-	_CPU: 
-	0 = 68000
-	10 = 68010
-	20 = 68020
-	30 = 68030
-	40 = 68040
-	60 = 68060
-*/
-unsigned int Cookie_CPU = 0;
-/*
-	_VDO (shifter [high word, low word]):
-	[0,0] = st
-	[1,0] = ste
-	[2,0] = tt
-	[3,0] = falcon
-*/
-unsigned int Cookie_VDO = 0;
-/*
-	_FPU (float unit):
-	High word bit 0 = SFP004
-	High word bits 1 - 2 =
-		01	= 68881 or 68882
-		10	= 68881
-		11	= 68882
-	High word bit 3 = 68040 Internal
-	High word bit 4 = 68060 Internal
-
-	Note:
-	If any of the bits 1-4 is set, then we know that we have a system that can run fpu instructions directly.
-*/
-unsigned int Cookie_FPU = 0;
-/*
-	_MCH (machine [high word, low word]):
-	[0,0] = st
-	[1,0] = ste
-	[1,8] = st book
-	[1,16] mega ste
-	[2,0] = tt
-	[3,0] = falcon
-*/
-unsigned int Cookie_MCH = 0;
-
-/*
-	If this cookie is set, then it will point to a comm structure with
-	all the callbacks necessary for communication with gdb.
-*/
-unsigned int Cookie_SDBG = 0;
 
 void OutputCrashInfo(void)
 {
@@ -858,179 +810,10 @@ void ServerCommandLoop(int si_signo, int si_code)
 	DbgOut("ServerCommandLoop: exiting\r\n");
 }
 
-#pragma GCC diagnostic push
-// Remove out of bounds warning, as the cookie code will trigger false warnings.
-#pragma GCC diagnostic ignored "-Warray-bounds="
-
-// Find out what kind of system we are running on.
-int GetCookies(void)
+int ServerMain(bool loadRequest)
 {
-	DbgOut("Using system cookies:\r\n");
-	
-	struct cookie
-	{
-		unsigned int cookie;
-		unsigned int value;
-	};
-	#define COOKIE_NAME(a,b,c,d) ((a<<24)|(b<<16)|(c<<8)|(d))
-	struct cookie* _p_cookies = ((struct cookie**)0x5a0)[0];
-	if (_p_cookies != NULL)
-	{
-		while (_p_cookies->cookie != 0)
-		{
-			switch(_p_cookies->cookie)
-			{
-				case COOKIE_NAME('_', 'C', 'P', 'U'):
-					Cookie_CPU = _p_cookies->value;
-					DbgOutVal("\t_CPU", Cookie_CPU);
-					break;
-				case COOKIE_NAME('_', 'V', 'D', 'O'):
-					Cookie_VDO = _p_cookies->value;
-					DbgOutVal("\t_VDO", Cookie_VDO);
-					break;
-				case COOKIE_NAME('_', 'F', 'P', 'U'):
-					Cookie_FPU = _p_cookies->value;
-					DbgOutVal("\t_FPU", Cookie_FPU);
-					break;
-				case COOKIE_NAME('_', 'M', 'C', 'H'):
-					Cookie_MCH = _p_cookies->value;
-					DbgOutVal("\t_MCH", Cookie_MCH);
-					break;
-				case COOKIE_NAME('S', 'D', 'B', 'G'):
-					Cookie_SDBG = _p_cookies->value;
-					DbgOutVal("\tSDBG", Cookie_SDBG);
-					break;
-			}
-			++_p_cookies;
-		}
-	}
-	#undef COOKIE_NAME
-	return 0;
-}
-#pragma GCC diagnostic pop
-
-/*
-	Option handling for this server is made to follow the real gdbserver documentation.
-	However, most of the options for the real gdbserver is not applicable for us.
-
-	gdbsrv.ttp	[options] [comm] prog [args]
-
-	comm	(Default if missing: AUX)
-	prog	(Default if missing: turns on option --multi)
-		The executable you want to debug.
-	args
-		Commandline arguments for prog.
-	options:
-		--debug
-			Outputs status information to console.
-		--remote-debug
-			Outputs remote package communication to console.
-		--multi
-			Starts the server without any executable to debug.
-			Waits for gdb to connect with target extended-remote and tell us what executable to debug.
-*/
-int HandleOptions(int argc, char** argv)
-{
-	int result = 0;
-	loadInferiorRequested = false;
-	com_method[0] = 0;
-	char *inferior_args = inferior_cmdline + 1;
-	inferior_cmdline[0] = 0;
-	inferior_cmdline[1] = 0;
-	inferior_filename[0] = 0;
-	if (argc <= 1)
-	{
-		DbgOut("\tNo args.\r\n");
-		return result;
-	}
-	for (int i = 1; i < argc; ++i)
-	{
-		if (loadInferiorRequested)
-		{
-			inferior_args = StrCopy(argv[i], inferior_args);
-			*inferior_args++ = ' ';
-			DbgOut("Inferior arg: ");
-			DbgOut(argv[i]);
-			DbgOut(newline);
-		}
-		else
-		{
-			if (StringCompare("--", argv[i]) > 0)
-			{
-				if (StringCompare("--multi", argv[i]) > 0)
-				{
-					// If extended mode is not requested, then this option stops gdbsrv from exiting after killing inferior.
-					option_multi = true;
-					DbgOut("Using: --multi\r\n");
-				}
-				else if (StringCompare("--once", argv[i]) > 0)
-				{
-					run_once = true;
-					DbgOut("Using: --once\r\n");
-				}
-#ifndef NO_CON_OR_LOG
-				else if (StringCompare("--debug-remote", argv[i]) > 0)
-				{
-					log_debug_remote = true;
-					DbgOut("Using: --debug-remote\r\n");
-				}
-				else if (StringCompare("--debug", argv[i]) > 0)
-				{
-					log_debug = true;
-					DbgOut("Using: --debug\r\n");
-				}
-				else if (StringCompare("--log", argv[i]) > 0)
-				{
-					DbgOut("Using: --log\r\n");
-				}
-#endif // NO_CON_OR_LOG
-				else
-				{
-					ConOut("Unknown option: ");
-					ConOut(argv[i]);
-					ConOut(newline);
-					result = -1;
-				}
-			}
-			else if (StringCompare("COM", argv[i]) > 0)
-			{
-				StrCopy(argv[i], com_method);
-				DbgOut("Using connection: ");
-				DbgOut(argv[i]);
-				DbgOut(newline);
-			}
-			else
-			{
-				StrCopy(argv[i], inferior_filename);
-				//inferior_args = StrCopy(argv[i], inferior_args);
-				loadInferiorRequested = true;
-				DbgOut("Inferior file: ");
-				DbgOut(argv[i]);
-				DbgOut(newline);
-			}
-		}
-	}
-	if (option_multi)
-	{
-		loadInferiorRequested = false;	// Never load inferior directly when multi.
-	}
-	if (inferior_args[-1] != 0)
-	{
-		inferior_args[-1] = 0;
-		inferior_cmdline[0] = (char)strlen(&inferior_cmdline[1]);		
-	}
-
-	return result;
-}
-
-int ServerMain(int argc, char** argv)
-{
-	InitLog(argc, argv);
 	DbgOut("ServerMain: Server initing.\r\n");
-	if (HandleOptions(argc, argv) != 0)
-	{
-		return -1;
-	}
+	loadInferiorRequested = loadRequest;
 	int ret = -1;
 	// Get cookies
 	Supexec(GetCookies);
@@ -1100,7 +883,6 @@ int ServerMain(int argc, char** argv)
 	
 	DestroyServerContext();
 
-	ExitLog();
 	if (log_debug || log_debug_remote || ret < 0)
 	{
 		ConOut("Press any key...");

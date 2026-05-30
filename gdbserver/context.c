@@ -9,6 +9,7 @@
 #include "exceptions.h"
 #include "critical.h"
 #include "comm.h"
+#include "cookies.h"
 
 #define NUM_IRQ_VECTORS 8
 #define NUM_MFP_VECTORS 16

@@ -7,8 +7,8 @@
 #include "bios_calls.h"
 #include "server.h"
 #include "clib.h"
+#include "cookies.h"
 
-extern unsigned int Cookie_SDBG;
 int CheckServerQuitKey(void);
 
 volatile short CtrlC_enable;
