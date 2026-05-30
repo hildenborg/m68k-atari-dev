@@ -37,6 +37,11 @@ typedef struct _comm
 	_EnableCtrlC EnableCtrlC;
 } comm;
 
+extern comm* comDev;
+
+int GetByte(void);
+void PutByte(char ch);
+
 comm* InitComm(const char *comString);
 
 #endif // COMM_DEFINED

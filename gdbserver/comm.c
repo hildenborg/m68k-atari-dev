@@ -6,10 +6,10 @@
 #include "comm.h"
 #include "bios_calls.h"
 #include "server.h"
+#include "clib.h"
 
 extern unsigned int Cookie_SDBG;
-
-extern short StringCompare(const char* str_a, const char* str_b);
+int CheckServerQuitKey(void);
 
 volatile short CtrlC_enable;
 volatile unsigned char Mfp_ActiveEdgeRegister;
@@ -26,6 +26,30 @@ int SccBcostat(void);
 int SccBconout(void);
 int SccBconin(void);
 int SccBconstat(void);
+
+comm*	comDev = 0;
+
+int GetByte(void)
+{
+	int byte;
+
+	while ((byte = comDev->ReceiveByte()) == COMM_ERR_NOT_READY)
+	{
+		if (CheckServerQuitKey() < 0)
+		{
+			byte = COMM_ERR_KILLED;
+			break;
+		}
+	}
+	return byte;
+}
+
+void PutByte(char ch)
+{
+	while (comDev->TransmitByte(ch) == COMM_ERR_NOT_READY)
+	{
+	}
+}
 
 
 bool Mfp_IsMyDevice(const char *comString)

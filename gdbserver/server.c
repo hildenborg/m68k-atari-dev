@@ -32,11 +32,11 @@
 #include "context.h"
 #include "critical.h"
 #include "file_io.h"
-#include "target_xml.h"
 #include "clib.h"
 #include "comm.h"
 #include "log.h"
 #include "hex.h"
+#include "packet.h"
 
 #define MINTELF_RESERVED 0x454c4628
 #define M68K_ATARI_ELF_RESERVED 0x68e1f001	// 68e1f = haxxor 68elf. 001 is version number.
@@ -62,7 +62,6 @@ typedef enum
 #define USERCODE_ERROR		-1
 #define USERCODE_WARNING	-2
 
-#define PACKET_SIZE 0x3ff
 const char serverFeatures[] = "PacketSize=3ff;swbreak+"
 	#ifdef QStartNoAckMode
 	";QStartNoAckMode+"
@@ -86,11 +85,8 @@ char	inferior_cmdline[MAX_PATH_LEN] __attribute__((aligned(2)));		// Command lin
 char	inferior_workpath[MAX_PATH_LEN] __attribute__((aligned(2)));	// The work path of the inferior being debugged. Can be empty if nothing is loaded.
 char	com_method[MAX_PATH_LEN] __attribute__((aligned(2)));			// Communication method. Only supports AUX for now.
 
-comm*	comDev;
-
 bool			option_multi = false;
 bool			run_once = false;				// If set and if extended mode, then gdbserver exits when inferior is killed.
-bool			noAckMode = false;				// gdb QStartNoAckMode
 unsigned short* __start_Breakpoint = NULL;		// Only set during startup of inferior, and used to break at __start.
 int				userCodeForCommandLoop = USERCODE_SILENT;	// Used as si_code when calling ServerCommandLoop.
 int				userCodeIfError = USERCODE_ERROR;	// Will be copied to userCodeForCommandLoop if inferior loading fails.
@@ -145,15 +141,6 @@ unsigned int Cookie_MCH = 0;
 	all the callbacks necessary for communication with gdb.
 */
 unsigned int Cookie_SDBG = 0;
-
-/*
-	Max inPacket and outPacket size must be the same, 
-	and must also be set as size-1 in serverFeatures.
-*/
-short inPacketLength = 0;
-char	inPacket[PACKET_SIZE + 1] __attribute__((aligned(2)));
-short outPacketLength = 0;
-char	outPacket[PACKET_SIZE + 1] __attribute__((aligned(2)));
 
 void OutputCrashInfo(void)
 {
@@ -265,23 +252,6 @@ void __attribute__ ((noreturn)) TerminateInferior(int si_signo)
 	// The code execution will not continue here. It will continue after Pexec() in RunInferior().
 }
 
-short GetHexString(short offset, char** strOut)
-{
-	char* str = *strOut;
-	short i = offset;
-	while (i < inPacketLength && inPacket[i] != ';')
-	{
-		*str++ = (char)HexToByte(inPacket + i);
-		i += 2;
-	}
-	if (inPacket[i] == ';')
-	{
-		++i;
-	}
-	*strOut = str;
-	return i;
-}
-
 int CheckServerQuitKey(void)
 {
 	if (Bconstat(DEV_CON) != 0)
@@ -291,477 +261,22 @@ int CheckServerQuitKey(void)
 	return 0;
 }
 
-int GetByte(void)
+void SendStopCode(int si_signo, int si_code)
 {
-	int byte;
-
-	while ((byte = comDev->ReceiveByte()) == COMM_ERR_NOT_READY)
-	{
-		if (CheckServerQuitKey() < 0)
-		{
-			byte = COMM_ERR_KILLED;
-			break;
-		}
-	}
-	return byte;
-}
-
-void PutByte(char ch)
-{
-	while (comDev->TransmitByte(ch) == COMM_ERR_NOT_READY)
-	{
-	}
-}
-
-void ReceivePacket(void)
-{
-	DbgRemOut("ReceivePacket: \r\n");
-	int c;
-	bool waitForPacket = true;
-
-	while (waitForPacket)
-	{
-		unsigned char sum = 0;
-		inPacketLength = 0;
-		DbgRemOut("\tWaiting...\r\n");
-		
-		// Wait for connection.
-		while (!comDev->IsConnected())
-		{
-			// Check keypress
-			// If we do not have any connection yet, then we cannot have any running inferiors, which means that we cannot be in supervisor mode.
-			// Meaning, to peek the keycode, we need to enter supervisor mode.
-			if (CheckServerQuitKey() < 0)
-			{
-				DbgOut("\r\n\tKill Server!\r\n");
-				inPacketLength = 1;
-				inPacket[0] = 0x1a;		// Ctrl-Z
-				return;
-			}
-		}
-		DbgRemOut("\tGot connection...\r\n");
-
-		// Wait for packet start
-		while ((c = GetByte()) != '$')
-		{
-			if (c == COMM_ERR_DISCONNECTED)
-			{
-				DbgRemOut("\r\n\tConnection dropped!\r\n");
-				inPacketLength = 1;
-				inPacket[0] = (unsigned char)'k';
-				return;
-			}
-			else if (c == COMM_ERR_KILLED)
-			{
-				DbgRemOut("\r\n\tKill Server!\r\n");
-				inPacketLength = 1;
-				inPacket[0] = 0x1a;		// Ctrl-Z
-				return;
-			}
-		}
-		
-		DbgRemOut("\tGot beginning of packet.\r\n");
-		// Fetch payload
-		bool escaped = false;
-		bool error = false;
-		while (!error) 
-		{
-			c = GetByte();
-			if (c == COMM_ERR_DISCONNECTED)
-			{
-				DbgRemOut("\r\n\tConnection dropped!\r\n");
-				inPacketLength = 1;
-				inPacket[0] = (unsigned char)'k';
-				return;
-			}
-			else if (c == COMM_ERR_KILLED)
-			{
-				DbgRemOut("\r\n\tKill Server!\r\n");
-				inPacketLength = 1;
-				inPacket[0] = 0x1a;		// Ctrl-Z
-				return;
-			}
-			if (escaped)
-			{
-				sum += (unsigned char)c;
-				c ^= 0x20;
-				escaped = false;
-				inPacket[inPacketLength++] = (unsigned char)c;
-			}
-			else
-			{
-				if (c == '$')
-				{
-					// Error, wait for new packet.
-					error = true;
-					break;
-				}
-				else if (c == '#')
-				{
-					// End of packet.
-					break;
-				}
-				else if (c == 0x7d)
-				{
-					escaped = true;
-				}
-				else
-				{
-					inPacket[inPacketLength++] = (unsigned char)c;
-				}
-				sum += (unsigned char)c;
-			}
-		}
-		if (error)
-		{
-			DbgRemOut("\r\n\tError in packet, retrying.\r\n\t");
-			continue;
-		}
-		inPacket[inPacketLength] = 0;
-		DbgRemOut("\tGot end of packet.\r\n\t");
-		DbgRemOut(inPacket);
-		// Fetch checksum
-		char csum[2];
-		csum[0] = (char)GetByte();
-		csum[1] = (char)GetByte();
-		if (!noAckMode)
-		{
-			unsigned char psum = HexToByte(csum);
-			waitForPacket = sum != psum;
-			PutByte(waitForPacket ? '-' : '+');
-			if (!waitForPacket)
-			{
-				DbgRemOut("\r\n\tPacket checksum OK.\r\n");
-			}
-			else
-			{
-				DbgRemOut("\r\n\tError - Packet checksum not OK!\r\n");
-				DbgRemOutVal("Checksum", sum);
-			}
-		}
-		else
-		{
-			waitForPacket = false;
-		}
-		if (!comDev->IsConnected())
-		{
-			DbgRemOut("\r\n\tConnection dropped!\r\n");
-			inPacketLength = 1;
-			inPacket[0] = 'k';	// Kill inferior
-			return;
-		}
-	}
-}
-
-void TransmitPacket(bool skipAck)
-{
-	DbgRemOut("TransmitPacket:\r\n\t");
-	outPacket[outPacketLength] = 0;
-	DbgRemOut(outPacket);
-
-	if (!comDev->IsConnected())
-	{
-		// Connection dropped...
-		DbgRemOut("\r\n\tConnection dropped!\r\n");
-		return;
-	}
-	
-	unsigned char sum = 0;
-	// Send encoded
-	PutByte('$');	// Packets always start with $
-	for (int i = 0; i < outPacketLength; ++i)
-	{
-		char c = outPacket[i];
-		if (c == '$' || c == '#' || c == '*' || c == 0x7d)
-		{
-			PutByte(0x7d);
-			sum += 0x7d;
-			c ^= 0x20;
-		}
-		PutByte(c);
-		sum += (unsigned char)c;
-	}
-	// End with checksum
-	PutByte('#');
-	PutByte(NibbleToHex(sum >> 4));
-	PutByte(NibbleToHex(sum));
-
-	if (!noAckMode && !skipAck)
-	{
-		// Wait for ack
-		int ack = GetByte();
-		if (ack == '+')
-		{
-			DbgRemOut("\r\n\tAck OK.\r\n");
-		}
-		else if (ack < 0)
-		{
-			// Connection dropped...
-			DbgRemOut("\r\n\tConnection dropped!\r\n");
-		}
-		else
-		{
-			DbgRemOut("\r\n\tError - Ack not OK!\r\n");
-		}
-	}
-	else
-	{
-		DbgRemOut("\r\n");
-	}
-}
-
-#define WriteChar(c) outPacket[outPacketLength++] = c
-
-void WriteByte(unsigned char c)
-{
-	WriteChar(NibbleToHex(c >> 4));
-	WriteChar(NibbleToHex(c));
-}
-
-// Endian aware
-void WriteLong(unsigned int val)
-{
-	for (int i = 28; i >= 0; i -= 4)
-	{
-		WriteChar(NibbleToHex(val >> i));
-	}
-}
-
-void WriteString(const char* str)
-{
-	char c;
-	while ((c = *str++) != 0)
-	{
-		WriteChar(c);
-	}
-}
-
-void WriteNameAndLong(const char* name, unsigned int v)
-{
-	WriteString(name);
-	WriteChar('=');
-	WriteLong(v);
-}
-
-#define WriteSemiColon() WriteChar(';')
-#define WriteOK() WriteString("OK")
-#define WriteEQ() WriteString("EQ")
-#define WriteNE() WriteString("NE")
-
-void WriteError(int e)
-{
-	WriteChar('E');
-	WriteByte((unsigned char)e);
-}
-
-void WriteStop(int si_signo, int si_code)
-{
+	bool start_break = false;
 	if (si_signo == GDB_SIGTRAP && si_code == TRAP_BRKPT)
 	{
 		// Software breakpoint hit.
-		WriteChar('T');
-		WriteByte((unsigned char)si_signo);
-		unsigned int* ptr = (unsigned int*)GetRegisters();
 		if ((unsigned int)__start_Breakpoint == GetRegisters()->pc)
 		{
-			// We get here the first time we start the inferior.
-			// Take the opportunity of capturing the inferiors work directory.
-			/*
-			unsigned short drive = Dgetdrv();
-			if (Dgetpath(inferior_workpath + 3, drive) < 0 || strlen(inferior_workpath + 3) == 0)
-			{
-				inferior_workpath[3] = '.';
-				inferior_workpath[4] = 0;
-			}
-			inferior_workpath[0] = 'A' + (char)drive;
-			inferior_workpath[1] = ':';
-			inferior_workpath[2] = '\\';
-			DbgOut("Inferior work path: ");
-			DbgOut(inferior_workpath);
-			DbgOut(newline);
-			*/
+			start_break = true;
 			if (RemoveMemoryBreakpoint(__start_Breakpoint) == 0)
 			{
 				__start_Breakpoint = NULL;
 			}
 		}
-		else
-		{
-			WriteString("swbreak:;");
-		}
-		// Report fp, sp, sr, pc
-		for (unsigned char i = 14; i <= 17; ++i)
-		{
-			WriteByte(i);
-			WriteChar(':');
-			WriteLong(ptr[i]);
-			WriteChar(';');
-		}
 	}
-	else
-	{
-		WriteChar('S');
-		WriteByte((unsigned char)si_signo);
-	}
-}
-
-void ReadRegisters()
-{
-	unsigned int* ptr = (unsigned int*)GetRegisters();
-	size_t num = 18;
-	if ((Cookie_FPU & (0x1f << 16)) != 0)
-	{
-		num += (8*3) + 3;
-	}
-
-	for (size_t i = 0; i < num; ++i)
-	{
-		WriteLong(ptr[i]);
-	}
-}
-
-void WriteRegisters(void)
-{
-	if (inPacketLength != (sizeof(ExceptionRegisters) * 2) + 1)
-	{
-		WriteError(1);
-	}
-	else
-	{
-		unsigned int* ptr = (unsigned int*)GetRegisters();
-		char* buf = inPacket + 1;
-		size_t num = 18;
-		if ((Cookie_FPU & (0x1f << 16)) != 0)
-		{
-			num += (8*3) + 3;
-		}
-		for (size_t i = 0; i < num; ++i)
-		{
-			ptr[i] = HexToLong(buf);
-			buf += 8;
-		}
-		WriteOK();
-	}
-}
-
-short ReadNumber(short inOff, unsigned int* result)
-{
-	unsigned int v = 0;
-	short offset = inOff;
-
-	while (offset < inPacketLength && inPacket[offset] != '=')
-	{
-		char c = inPacket[offset];
-		if (c == '=' || c == ',' || c == ':') { break; }
-		v = (v << 4) | (unsigned int)HexToNibble(c);
-		++offset;
-	}
-	*result = v;
-
-	return (inOff == offset) ? -1 : offset;
-}
-
-void WriteRegister(void)
-{
-	unsigned int* rptr = (unsigned int*)GetRegisters();
-	short offset;
-	unsigned int idx;
-	if ((offset = ReadNumber(1, &idx)) > 0)
-	{
-		if (idx < numOfCpuRegisters)
-		{
-			if (inPacket[offset] == '=')
-			{
-				if (idx < 18)
-				{
-					rptr[idx] = HexToLong(inPacket + offset + 1);
-				}
-				else if (idx >= (18 + 8))
-				{
-					idx += 16;
-					rptr[idx] = HexToLong(inPacket + offset + 1);
-				}
-				else
-				{
-					idx = 18 + ((idx - 18) * 3);
-					rptr[idx] = HexToLong(inPacket + offset + 1);
-					rptr[idx + 1] = HexToLong(inPacket + offset + 9);
-					rptr[idx + 2] = HexToLong(inPacket + offset + 17);
-				}
-			}
-		}
-		else
-		{
-			// Just ignore.
-		}
-	}
-
-	WriteOK();
-}
-
-void ReadRegister(void)
-{
-	unsigned int* rptr = (unsigned int*)GetRegisters();
-	unsigned int idx;
-	if (ReadNumber(1, &idx) > 0)
-	{
-		if (idx < numOfCpuRegisters)
-		{
-			if (idx < 18)
-			{
-				WriteLong(rptr[idx]);
-			}
-			else if (idx >= (18 + 8))
-			{
-				idx += 16;
-				WriteLong(rptr[idx]);
-			}
-			else
-			{
-				idx = 18 + ((idx - 18) * 3);
-				WriteLong(rptr[idx]);
-				WriteLong(rptr[idx + 1]);
-				WriteLong(rptr[idx + 2]);
-			}
-		}
-		/*
-		else
-		{
-			WriteLong(0x0);
-		}
-		*/
-	}
-}
-
-short GetAddressAndLength(short offset, bool write, unsigned char** addr, unsigned int* len)
-{
-	unsigned int add;
-	if ((offset = ReadNumber(offset, &add)) > 0)
-	{
-		*addr = (unsigned char*)add;
-		if (inPacket[offset] == ',')
-		{
-			if ((offset = ReadNumber(offset + 1, len)) > 0)
-			{
-				if (write)
-				{
-					if (inPacket[offset] == ':')
-					{
-						++offset;
-						if ((offset + (short)(*len * 2)) == inPacketLength)
-						{
-							return offset;
-						}
-					}
-				}
-				else
-				{
-					return offset;
-				}
-			}
-		}
-	}
-	return -1;
+	WriteStop(si_signo, si_code, start_break);
 }
 
 void WriteMemory(void)
@@ -771,7 +286,7 @@ void WriteMemory(void)
 	short offset = GetAddressAndLength(1, true, &addr, &len);
 	if (offset > 0)
 	{
-		char* ptr = inPacket + offset;
+		char* ptr = GetInpacketPtr(offset);
 		for (unsigned int i = 0; i < len; ++i)
 		{
 			unsigned char* infAddr = InferiorContextMemoryAddress(addr + i);
@@ -809,14 +324,15 @@ void ReadMemory(void)
 void CmdQuery(void)
 {
 	short vNameEnd;
-	if (StringCompare("qOffsets", inPacket) > 0)
+	char* inptr = GetInpacketPtr(0);
+	if (StringCompare("qOffsets", inptr) > 0)
 	{
 		if (inferiorBasePage != NULL)	// Return empty if no inferior
 		{
 			unsigned int textoffset = (unsigned int)(inferiorBasePage->p_tbase);
 			unsigned int dataoffset = (unsigned int)(inferiorBasePage->p_dbase);
 			WriteNameAndLong("TextSeg", textoffset);
-			WriteSemiColon();
+			WriteChar(';');
 			if (inferior_is_mintelf)
 			{
 				// m68k-atari-mintelf toolchain produces data symbols that use the
@@ -831,17 +347,17 @@ void CmdQuery(void)
 			}
 		}
 	}
-	else if (StringCompare("qSupported", inPacket) > 0)
+	else if (StringCompare("qSupported", inptr) > 0)
 	{
 		// We don't care about what the gdb client supports, we just report back what we support.
 		WriteString(serverFeatures);
 	}
-	else if (StringCompare("QStartNoAckMode", inPacket) > 0)
+	else if (StringCompare("QStartNoAckMode", inptr) > 0)
 	{
 		noAckMode = true;
 		WriteOK();
 	}
-	else if ((vNameEnd = StringCompare("QSetWorkingDir:", inPacket)) > 0)
+	else if ((vNameEnd = StringCompare("QSetWorkingDir:", inptr)) > 0)
 	{
 		char buf[130];
 		char *ptr = buf;
@@ -874,60 +390,11 @@ void CmdQuery(void)
 			Dsetpath(ptr);
 		}
 	}
-	else if ((vNameEnd = StringCompare("qXfer:features:read:target.xml:", inPacket)) > 0)
+	else if ((vNameEnd = StringCompare("qXfer:features:read:target.xml:", inptr)) > 0)
 	{
-		unsigned char* addr;
-		unsigned int len;
-		if (GetAddressAndLength(vNameEnd, false, &addr, &len) > 0)
-		{
-			unsigned int offset = (unsigned int)addr;
-			
-			const char* xmls[5];
-			unsigned int xml_len = GetTargetXml(xmls);
-			
-			unsigned int maxRead = (PACKET_SIZE - 20);	// max packet size - some room for response
-			if ((offset + len) > xml_len)
-			{
-				// This transfer ends the xml transfer
-				WriteChar('l');
-				if (offset >= xml_len || len == 0)
-				{
-					return;
-				}
-				len = xml_len - offset;
-			}
-			else
-			{
-				// Too much for one packet, only send a part of it.
-				WriteChar('m');
-				len = maxRead;
-			}
-
-			const char* xml;
-			int ix = 0;
-			while ((xml = xmls[ix++]) != 0 && len != 0)
-			{
-				unsigned int slen = strlen(xml);
-				if (offset >= slen)
-				{
-					offset -= slen;
-				}
-				else
-				{
-					char c;
-					unsigned int i = offset;
-					while ((c = xml[i]) != 0 && len != 0)
-					{
-						WriteChar(c);
-						++i;
-						--len;
-					}
-					offset = 0;
-				}
-			}
-		}
+		WriteTargetXML(vNameEnd);
 	}
-	else if ((vNameEnd = StringCompare("qXfer:features:read:", inPacket)) > 0)
+	else if ((vNameEnd = StringCompare("qXfer:features:read:", inptr)) > 0)
 	{
 		WriteError(0);
 	}
@@ -939,7 +406,8 @@ void CmdSetBreakpoint(void)
 	unsigned char* addr;
 	unsigned int len;
 	short offset = GetAddressAndLength(3, false, &addr, &len);
-	if (offset > 0 && inPacket[1] == '0')
+	char *inptr = GetInpacketPtr(1);
+	if (offset > 0 && *inptr == '0')
 	{
 		if (InsertMemoryBreakpoint((unsigned short*)addr) == 0)
 		{
@@ -958,7 +426,8 @@ void CmdClearBreakpoint(void)
 	unsigned char* addr;
 	unsigned int len;
 	short offset = GetAddressAndLength(3, false, &addr, &len);
-	if (offset > 0 && inPacket[1] == '0')
+	char *inptr = GetInpacketPtr(1);
+	if (offset > 0 && *inptr == '0')
 	{
 		RemoveMemoryBreakpoint((unsigned short*)addr);
 		WriteOK();
@@ -993,47 +462,6 @@ LoopState CmdContinue(bool trace)
 	return CONTINUE_EXECUTION;
 }
 
-void WriteVariable(int val)
-{
-	if (val < 0)
-	{
-		WriteChar('-');
-		val = -val;
-	}
-	int v = val >> 4;
-	int l = 0;
-	while (v != 0)
-	{
-		l += 4;
-		v >>= 4;
-	}
-
-	for (int i = l; i >= 0; i -= 4)
-	{
-		WriteChar(NibbleToHex(val >> i));
-	}
-}
-
-void WriteFileResponse(int result, int ioErrno, const char* attachment)
-{
-	WriteChar('F');
-	WriteVariable(result);
-	if (result < 0)
-	{
-		WriteChar(',');
-		WriteVariable(ioErrno);
-	}
-	if (attachment != 0)
-	{
-		WriteChar(';');
-		for (int i = 0; i < result; ++i)
-		{
-			WriteChar(attachment[i]);
-			//WriteByte(attachment[i]);
-		}
-	}
-}
-
 bool CheckFileCmdArgs(const char* cmd, short args, const char* argv0, short argc)
 {
 	return (StringCompare(cmd, argv0) > 0 && args == argc);
@@ -1047,21 +475,10 @@ LoopState CmdFileOperation(short cmdEnd)
 
 	// Find operand and arguments and end all with 0
 	char* argv[4];
-	char *ptr = inPacket + cmdEnd;
-	char *ptrend = inPacket + inPacketLength;
-	short argc = 0;
-	do
-	{
-		argv[argc++] = ptr;
-		while (*ptr != 0 && *ptr != ',' && *ptr != ':')
-		{
-			++ptr;
-		}
-		if (*ptr != 0)
-		{
-			*ptr++ = 0;
-		}
-	} while (argc < 4 && ptr != ptrend);
+	short argc = GetFileArgs(cmdEnd, argv);
+
+	char* inptr = GetInpacketPtr(0);
+
 	if (CheckFileCmdArgs("open", 4, argv[0], argc))
 	{
 		HexConvertByteArray(argv[1]);
@@ -1082,15 +499,15 @@ LoopState CmdFileOperation(short cmdEnd)
 		int count = HexToVariable(argv[2]);
 		int offset = HexToVariable(argv[3]);
 		/*
-			We have decoded everything in the inPacket, so we can use it as a read buffer.
+			We have decoded everything in the inPacket (inptr), so we can use it as a read buffer.
 			We need to estimate how many hex encoded bytes we can read.
 		*/
 		int maxRead = (PACKET_SIZE - 20);	// max packet size - some room for response
 		if (count > maxRead) {count = maxRead;}
-		result = VfileRead(fd, inPacket, offset, count, &ioErrno);
+		result = VfileRead(fd, inptr, offset, count, &ioErrno);
 		if (result >= 0)
 		{
-			attachment = inPacket;
+			attachment = inptr;
 		}
 	}
 	else if (CheckFileCmdArgs("pwrite", 4, argv[0], argc))
@@ -1098,13 +515,13 @@ LoopState CmdFileOperation(short cmdEnd)
 		int fd = HexToVariable(argv[1]);
 		int offset = HexToVariable(argv[2]);
 		char *data = argv[3];
-		int count = (int)((inPacket + inPacketLength) - data);
+		int count = (int)((GetInpacketPtr(GetInPacketLength())) - data);
 		result = VfileWrite(fd, data, offset, count, &ioErrno);
 	}
 	else if (CheckFileCmdArgs("fstat", 2, argv[0], argc))
 	{
 		int fd = HexToVariable(argv[1]);
-		vfile_stat* stat = (vfile_stat*)inPacket;	// Use inPacket as a buffer.
+		vfile_stat* stat = (vfile_stat*)inptr;	// Use inPacket (inptr) as a buffer.
 		result = VfileFstat(fd, stat, &ioErrno);
 		if (result >= 0)
 		{
@@ -1116,7 +533,7 @@ LoopState CmdFileOperation(short cmdEnd)
 		HexConvertByteArray(argv[1]);
 		char *filename = argv[1];
 		VfileFixPath(filename);
-		vfile_stat* stat = (vfile_stat*)inPacket;	// Use inPacket as a buffer.
+		vfile_stat* stat = (vfile_stat*)inptr;	// Use inPacket (inptr) as a buffer.
 		result = VfileStat(filename, stat, &ioErrno);
 		if (result >= 0)
 		{
@@ -1143,8 +560,9 @@ LoopState CmdFileOperation(short cmdEnd)
 LoopState CmdFlexible(void)
 {
 	short vNameEnd;
+	char* inptr = GetInpacketPtr(0);
 
-	if ((vNameEnd = StringCompare("vRun;",  inPacket)) > 0)
+	if ((vNameEnd = StringCompare("vRun;",  inptr)) > 0)
 	{
 		if (inferiorState != NOT_LOADED)
 		{
@@ -1155,24 +573,7 @@ LoopState CmdFlexible(void)
 
 		// Get filename and command line arguments
 		// If filename is empty, then restart previous inferior.
-		char* strOut = inferior_filename;
-		inferior_cmdline[0] = 0;	// length
-		inferior_cmdline[1] = 0;
-		short args = GetHexString(vNameEnd, &strOut);	// Will not replace old filename if no new exists
-		if (args > vNameEnd)
-		{
-			strOut = inferior_cmdline + 1;
-			while (args < inPacketLength)
-			{
-				args = GetHexString(args, &strOut);
-				*strOut++ = ' ';
-			}
-			if (inferior_cmdline[1] != 0)
-			{
-				strOut[-1] = 0;
-				inferior_cmdline[0] = (char)strlen(&inferior_cmdline[1]);		
-			}
-		}
+		GetInferiorNameAndArgs(vNameEnd, inferior_filename, inferior_cmdline);
 		DbgOut("Run: \r\n\tinferior: ");
 		DbgOut(inferior_filename);
 		DbgOut("\r\n\targs: ");
@@ -1180,11 +581,11 @@ LoopState CmdFlexible(void)
 		DbgOut(newline);
 		return RUN;
 	}
-	else if ((vNameEnd = StringCompare("vKill;",  inPacket)) > 0)
+	else if ((vNameEnd = StringCompare("vKill;",  inptr)) > 0)
 	{
 		return KILL;
 	}
-	else if ((vNameEnd = StringCompare("vFile:",  inPacket)) > 0)
+	else if ((vNameEnd = StringCompare("vFile:",  inptr)) > 0)
 	{
 		return CmdFileOperation(vNameEnd);
 	}
@@ -1202,7 +603,7 @@ void ServerCommandLoop(int si_signo, int si_code)
 	comDev->EnableCtrlC(false); // We don't want any Ctrl-C breaking now.
 
 	// Send response to GDB if needed.
-	outPacketLength = 0;
+	ClearOutPacket();
 	if (si_signo == GDB_SIGUSR1)
 	{
 		// We come here when called from ServerMain.
@@ -1240,7 +641,7 @@ void ServerCommandLoop(int si_signo, int si_code)
 			loopState = KILL;
 		}
 		// Write stop packet to gdb.
-		WriteStop(si_signo, si_code);
+		SendStopCode(si_signo, si_code);
 		TransmitPacket(false);
 	}
 
@@ -1248,16 +649,17 @@ void ServerCommandLoop(int si_signo, int si_code)
 	while (loopState == LISTEN_TO_GDB)
 	{
 		bool skipAck = false;
-		outPacketLength = 0;	// Keep track of the outPacket count and write pos
+		ClearOutPacket();	// Keep track of the outPacket count and write pos
 		ReceivePacket();
-		switch (inPacket[0])
+		char* inptr = GetInpacketPtr(0);
+		switch (inptr[0])
 		{
 		case 0x03:	// Ctrl-C. 
 			// The user have requested to pause execution of inferior, but we are already paused or not even running...
 			if (inferiorState == RUNNING)
 			{
 				// Just repeat the last stop code.
-				WriteStop(si_signo, si_code);
+				SendStopCode(si_signo, si_code);
 			}
 			else
 			{
@@ -1320,7 +722,7 @@ void ServerCommandLoop(int si_signo, int si_code)
 			else if (inferiorState == RUNNING)
 			{
 				// We have indeed a running inferior and it have cast an exception.
-				WriteStop(si_signo, si_code);
+				SendStopCode(si_signo, si_code);
 			}
 			else if (inferiorState == LOADED)
 			{
@@ -1420,7 +822,7 @@ void ServerCommandLoop(int si_signo, int si_code)
 			{
 				// Inferior terminated itself. 
 				// Report process exit and inferior return code to gdb.
-				outPacketLength = 0;
+				ClearOutPacket();
 				WriteChar('W');
 				WriteByte((unsigned char)return_code);
 				TransmitPacket(true);	// We don't expect any answer.
