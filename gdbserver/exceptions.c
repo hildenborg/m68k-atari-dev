@@ -8,6 +8,7 @@
 #include "exceptions.h"
 #include "server.h"
 #include "critical.h"
+#include "inferior.h"
 
 #define BREAKPOINT	0x4e40		// Trap #0
 #define NUM_MEMPOINTS 128		// Max number of breakpoints handled by this code.
@@ -21,8 +22,6 @@ typedef struct
 } MemBreak;
 
 MemBreak mempoints[NUM_MEMPOINTS];
-
-extern volatile struct BasePage*	inferiorBasePage;
 
 extern void DbgOutVal(const char* name, unsigned int val);
 

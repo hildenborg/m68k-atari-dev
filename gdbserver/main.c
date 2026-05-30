@@ -17,6 +17,7 @@
 #include "server.h"
 #include "log.h"
 #include "clib.h"
+#include "inferior.h"
 
 /*
 	Option handling for this server is made to follow the real gdbserver documentation.

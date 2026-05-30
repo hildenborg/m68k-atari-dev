@@ -12,9 +12,10 @@
 extern "C" {
 #endif
 
-extern char inferior_filename[];
-extern char inferior_cmdline[];
-extern char inferior_workpath[];
+// The maximum path length for the system.
+// Legacy ST is 128, but we might need a zero at the end too.
+#define MAX_PATH_LEN	130
+
 extern char com_method[];
 extern bool option_multi;
 extern bool run_once;
