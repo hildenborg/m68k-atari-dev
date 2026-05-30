@@ -15,14 +15,14 @@ Extended-remote enables us to make a connection to gdbserver without automatical
 
 The way this is done from VsCode is defined in the ".vscode/launch.json" file.  
 The line:  
-´´´
+```
 "target": {"type": "extended-remote" ,"parameters": ["${env:GDB_COM_PORT}"]}
-´´´
+```
 Defines that we want "extended-remote" and that the connection should be whatever is in the "GDB_COM_PORT" environment variable that is set in the "vscode.sh" script.  
   
 The settings that transmits the file and starts debugging is a bit of a hack...  
 It feels like the CDT GDB extension is missing some functions, but the following lines makes it work:
-´´´
+```
 "preRunCommands": [
 	"print \"just a nop\""
 ],
@@ -31,7 +31,7 @@ It feels like the CDT GDB extension is missing some functions, but the following
 	"set remote exec-file ${env:TARGET_NAME}.prg",
 	"starti"
 ],
-´´´
+```
 "initCommands" are GDB commands that are run after a connection have been established.  
 Those commands will transmit the executable to the Atari, set the executable name to be debugged, and finally start execution but stop at the very first instruction.  
 "preRunCommands" are GDB commands that are run before the debugged executable starts.  
@@ -45,6 +45,7 @@ Hopefully, this hack can be removed in the future.
 
 ## Faster debug
 If you have started and stopped debugging of an executable and want to do it again without transfering the executable, then just comment out the following line in "launch.json":
-´´´
+```
 	"remote put ${workspaceFolder}/build/${env:TARGET_NAME}.prg ${env:TARGET_NAME}.prg",
-´´´
+```
+
