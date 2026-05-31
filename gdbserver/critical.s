@@ -27,6 +27,7 @@
 	.equ	o_to_fp_status,	172
 	.equ	o_to_fp_iaddr,	176
 
+	.equ	FPU_FRAME_SIZE, 256
 
 	.macro HookVector name
 	move.l	n\name, o\name + 2
@@ -120,7 +121,8 @@ InitExceptions:
 	HookVector FPSignalingNAN
 	HookVector FPUnimplemented
 	fmove.l	fpcr, d0
-	or.w	#0xf0, d0	| fpu exception, enable all exceptions.
+	move.l	d0, fpucr_save
+	or.w	#0xff00, d0	| fpu exception, enable all exceptions.
 	fmove.l	d0, fpcr
 1:
 	move.w	(a7)+, sr
@@ -149,6 +151,8 @@ RestoreExceptions:
 	swap	d0
 	and.w	#0x1e, d0
 	jeq		1f
+	move.l	fpucr_save, d0
+	fmove.l	d0, fpcr
 	UnHookVector FPUnordered
 	UnHookVector FPInexact
 	UnHookVector FPDivideZero
@@ -226,6 +230,17 @@ SaveStateAndSwitchContext:
     cmp.l   #20, Cookie_CPU
 	jmi		1f
 	| Got fpu and a 020+ cpu
+	cmp.w	#0x6, d0
+	jmi		3f
+	lea		internal_fpu_state + FPU_FRAME_SIZE, a0
+	fsave	-(a0)
+	move.l	a0, internal_fpu_state_frame
+	move.b	(a0), d0
+	jeq		3f
+	moveq	#0, d0
+	move.b	1(a0), d0
+	bset	#3, (a0, d0.w)
+3:
 	fmovem.x	fp0-fp7, registers + o_to_fp0
 	fmove.l		fpcr, registers + o_to_fp_control
 	fmove.l		fpsr, registers + o_to_fp_status
@@ -286,6 +301,11 @@ RestoreStateAndSwitchContext:
 	fmove.l		registers + o_to_fp_control, fpcr
 	fmove.l		registers + o_to_fp_status, fpsr
 	fmove.l		registers + o_to_fp_iaddr, fpiar
+	cmp.w	#0x6, d0
+	jmi		4f
+	move.l	internal_fpu_state_frame, a0
+	frestore	(a0)
+4:
 	jra		2f
 1:
 	btst	#0, d0
@@ -399,5 +419,8 @@ ClearInternalCaches:
 	.lcomm	exception_sr_pc,	4
 	.lcomm	saved_a7,			4
 	.lcomm	srvIrqLevel,		2
+	.lcomm	fpucr_save,			4
+	.lcomm	internal_fpu_state_frame, 4
+	.lcomm	internal_fpu_state, FPU_FRAME_SIZE
 	.even
 	
