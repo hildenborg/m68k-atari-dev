@@ -306,15 +306,14 @@ SccBconout:
 	jbsr	SccDelay
 	jbra	2f
 1:
-	| Put in buffer.
-	move.w	(a7), sr
-	| Wait for space in buffer
-3:
+	| Put in buffer if space.
 	move.w	sccOutputCount, d1
 	cmp.w	#SccBufferLength, d1
-	jeq		3b
-	ori.w	#0x700, sr
-	move.w	sccOutputCount, d1 | read again after turning off irqs
+	jne		3f
+	| No space return with failure code.
+	moveq	#-1, d0
+	jra		2f
+3:
 	add.w	sccOutputPos, d1
 	and.w	#SccBufferMask, d1
 	move.l	a0, -(a7)
@@ -322,6 +321,7 @@ SccBconout:
 	move.b	d0, (a0, d1.w)
 	add.w	#1, sccOutputCount
 	move.l	(a7)+, a0
+	moveq	#0, d0
 2:
 	move.w	(a7)+, sr
 	move.l	(a7)+, d1

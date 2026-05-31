@@ -197,7 +197,10 @@ int Scc_TransmitByte(unsigned char byte)
 		return COMM_ERR_NOT_READY;
 	}
 	sccTmpData = (unsigned short)byte;
-	Supexec(SccBconout);
+	if (Supexec(SccBconout) < 0)
+	{
+		return COMM_ERR_NOT_READY;
+	}
 	return 0;
 }
 
