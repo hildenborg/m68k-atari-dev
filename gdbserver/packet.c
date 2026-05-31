@@ -12,6 +12,9 @@
 #include "gdb_defines.h"
 #include "target_xml.h"
 #include "cookies.h"
+#include "inferior.h"
+#include "context.h"
+#include "critical.h"
 
 /*
 	Max inPacket and outPacket size must be the same, 
@@ -633,5 +636,70 @@ void WriteTargetXML(short vNameEnd)
 				offset = 0;
 			}
 		}
+	}
+}
+
+void WriteOffsets(void)
+{
+	if (inferiorBasePage != NULL)	// Return empty if no inferior
+	{
+		unsigned int textoffset = (unsigned int)(inferiorBasePage->p_tbase);
+		unsigned int dataoffset = (unsigned int)(inferiorBasePage->p_dbase);
+		WriteNameAndLong("TextSeg", textoffset);
+		WriteChar(';');
+		if (inferior_is_mintelf)
+		{
+			// m68k-atari-mintelf toolchain produces data symbols that use the
+			// data segment as base.
+			WriteNameAndLong("DataSeg", dataoffset);
+		}
+		else
+		{
+			// m68k-atari-elf toolchain produces data symbols that uses the same 
+			// base as the text segment.
+			WriteNameAndLong("DataSeg", textoffset);
+		}
+	}
+}
+
+void WriteMemory(bool isSupervisorMode)
+{
+	unsigned char* addr;
+	unsigned int len;
+	short offset = GetAddressAndLength(1, true, &addr, &len);
+	if (isSupervisorMode && offset > 0)
+	{
+		char* ptr = GetInpacketPtr(offset);
+		for (unsigned int i = 0; i < len; ++i)
+		{
+			unsigned char* infAddr = InferiorContextMemoryAddress(addr + i);
+			ExceptionSafeMemoryWrite(infAddr, HexToByte(ptr));
+			ptr += 2;
+		}
+	}
+	else
+	{
+		WriteError(1);
+	}
+}
+
+void ReadMemory(bool isSupervisorMode)
+{
+	unsigned char* addr;
+	unsigned int len;
+	short offset = GetAddressAndLength(1, false, &addr, &len);
+	if (isSupervisorMode && offset > 0)
+	{
+		for (unsigned int i = 0; i < len; ++i)
+		{
+			unsigned char* infAddr = InferiorContextMemoryAddress(addr + i);
+			unsigned char membyte;
+			ExceptionSafeMemoryRead(infAddr, &membyte);
+			WriteByte(membyte);
+		}
+	}
+	else
+	{
+		WriteError(1);
 	}
 }

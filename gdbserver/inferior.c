@@ -10,12 +10,12 @@
 #define MINTELF_RESERVED 0x454c4628
 #define M68K_ATARI_ELF_RESERVED 0x68e1f001	// 68e1f = haxxor 68elf. 001 is version number.
 
-volatile struct BasePage*		inferiorBasePage = NULL;		// basepage for debugged exectable
-volatile InferiorState	inferiorState = NOT_LOADED;		// To know if we have an inferior and if we have started it or not.
-volatile bool			inferior_is_mintelf = false;	// If set then the inferior loaded is of mintelf executable format.
+struct BasePage*	inferiorBasePage = NULL;		// basepage for debugged exectable
+InferiorState		inferiorState = NOT_LOADED;		// To know if we have an inferior and if we have started it or not.
+bool				inferior_is_mintelf = false;	// If set then the inferior loaded is of mintelf executable format.
 
 bool inferiorTerminatedByServer = false;
-unsigned short* __start_Breakpoint = NULL;		// Only set during startup of inferior, and used to break at __start.
+unsigned short* __start_Breakpoint = NULL;			// Only set during startup of inferior, and used to break at __start.
 char	inferior_filename[MAX_PATH_LEN] __attribute__((aligned(2)));	// The filename of the inferior being debugged. Can be empty if nothing is loaded.
 char	inferior_cmdline[MAX_PATH_LEN] __attribute__((aligned(2)));		// Command line args to debugged inferior.
 char	inferior_workpath[MAX_PATH_LEN] __attribute__((aligned(2)));	// The work path of the inferior being debugged. Can be empty if nothing is loaded.
@@ -48,7 +48,7 @@ int LoadInferior(const char* fileName, const char* cmdLine, const char* environm
 		loadres = Pexec(PE_LOAD, fileName, cmdLine, environment);
 		if (loadres > 0)
 		{
-			inferiorBasePage = (volatile struct BasePage*)loadres;
+			inferiorBasePage = (struct BasePage*)loadres;
 			// Set one time breakpoint at _start.
 			__start_Breakpoint = (unsigned short*)(inferiorBasePage->p_tbase);
 			if (InsertMemoryBreakpoint(__start_Breakpoint) != 0)

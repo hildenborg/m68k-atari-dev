@@ -12,9 +12,6 @@
 		InferiorContextMemoryAddress
 */
 
-// Disable all exceptions. Useful when debugging packet handling.
-//#define DISABLE_EXCEPTIONS
-
 // Don't use when serial communication, it's not good enough.
 //#define QStartNoAckMode
 
@@ -26,7 +23,6 @@
 #include "server.h"
 #include "exceptions.h"
 #include "context.h"
-#include "critical.h"
 #include "file_io.h"
 #include "clib.h"
 #include "comm.h"
@@ -62,15 +58,13 @@ const char serverFeatures[] = "PacketSize=3ff;swbreak+"
 /*
 	Global states.
 */
-volatile bool			extendedMode = false;			// gdb extended-remote option
-volatile bool			loadInferiorRequested = false;	// Set when an action wants to load an inferior.
-
-char	com_method[MAX_PATH_LEN] __attribute__((aligned(2)));			// Communication method. Only supports AUX for now.
-
-bool			option_multi = false;
-bool			run_once = false;				// If set and if extended mode, then gdbserver exits when inferior is killed.
-int				userCodeForCommandLoop = USERCODE_SILENT;	// Used as si_code when calling ServerCommandLoop.
-int				userCodeIfError = USERCODE_ERROR;	// Will be copied to userCodeForCommandLoop if inferior loading fails.
+bool	extendedMode = false;									// gdb extended-remote option
+bool	loadInferiorRequested = false;							// Set when an action wants to load an inferior.
+char	com_method[MAX_PATH_LEN] __attribute__((aligned(2)));	// Communication method. Only supports AUX for now.
+bool	option_multi = false;
+bool	run_once = false;										// If set and if extended mode, then gdbserver exits when inferior is killed.
+int		userCodeForCommandLoop = USERCODE_SILENT;				// Used as si_code when calling ServerCommandLoop.
+int		userCodeIfError = USERCODE_ERROR;						// Will be copied to userCodeForCommandLoop if inferior loading fails.
 
 unsigned int	numOfCpuRegisters	=	18;
 
@@ -119,45 +113,37 @@ void SendStopCode(int si_signo, int si_code)
 	WriteStop(si_signo, si_code, start_break);
 }
 
-void WriteMemory(void)
+void CmdSetWorkingDir(short vNameEnd)
 {
-	unsigned char* addr;
-	unsigned int len;
-	short offset = GetAddressAndLength(1, true, &addr, &len);
-	if (offset > 0)
+	char buf[130];
+	char *ptr = buf;
+	char *endptr = buf;
+	GetHexString(vNameEnd, &endptr);
+	unsigned int len = endptr - ptr;
+	*endptr = 0;
+	if (len == 0)
 	{
-		char* ptr = GetInpacketPtr(offset);
-		for (unsigned int i = 0; i < len; ++i)
+		// Reset to inferiors original working dir.
+		ptr = inferior_workpath;
+		len = strlen(ptr);
+	}
+	if (len >= 2 && ptr[1] == ':')
+	{
+		// Set drive
+		unsigned short drive = ((unsigned char*)ptr)[0];
+		drive -= drive >= 'a' ? 'a' : 'A';
+		Dsetdrv(drive);
+		ptr += 2;
+		len -= 2;
+	}
+	if (len > 0)
+	{
+		// Set path, but make sure we make all / to \ first.
+		for (char *p = ptr; *p != 0; ++p)
 		{
-			unsigned char* infAddr = InferiorContextMemoryAddress(addr + i);
-			ExceptionSafeMemoryWrite(infAddr, HexToByte(ptr));
-			ptr += 2;
+			if (*p == '/') {*p = '\\';}
 		}
-	}
-	else
-	{
-		WriteError(1);
-	}
-}
-
-void ReadMemory(void)
-{
-	unsigned char* addr;
-	unsigned int len;
-	short offset = GetAddressAndLength(1, false, &addr, &len);
-	if (offset > 0)
-	{
-		for (unsigned int i = 0; i < len; ++i)
-		{
-			unsigned char* infAddr = InferiorContextMemoryAddress(addr + i);
-			unsigned char membyte;
-			ExceptionSafeMemoryRead(infAddr, &membyte);
-			WriteByte(membyte);
-		}
-	}
-	else
-	{
-		WriteError(1);
+		Dsetpath(ptr);
 	}
 }
 
@@ -167,25 +153,7 @@ void CmdQuery(void)
 	char* inptr = GetInpacketPtr(0);
 	if (StringCompare("qOffsets", inptr) > 0)
 	{
-		if (inferiorBasePage != NULL)	// Return empty if no inferior
-		{
-			unsigned int textoffset = (unsigned int)(inferiorBasePage->p_tbase);
-			unsigned int dataoffset = (unsigned int)(inferiorBasePage->p_dbase);
-			WriteNameAndLong("TextSeg", textoffset);
-			WriteChar(';');
-			if (inferior_is_mintelf)
-			{
-				// m68k-atari-mintelf toolchain produces data symbols that use the
-				// data segment as base.
-				WriteNameAndLong("DataSeg", dataoffset);
-			}
-			else
-			{
-				// m68k-atari-elf toolchain produces data symbols that uses the same 
-				// base as the text segment.
-				WriteNameAndLong("DataSeg", textoffset);
-			}
-		}
+		WriteOffsets();
 	}
 	else if (StringCompare("qSupported", inptr) > 0)
 	{
@@ -199,36 +167,7 @@ void CmdQuery(void)
 	}
 	else if ((vNameEnd = StringCompare("QSetWorkingDir:", inptr)) > 0)
 	{
-		char buf[130];
-		char *ptr = buf;
-		char *endptr = buf;
-		GetHexString(vNameEnd, &endptr);
-		unsigned int len = endptr - ptr;
-		*endptr = 0;
-		if (len == 0)
-		{
-			// Reset to inferiors original working dir.
-			ptr = inferior_workpath;
-			len = strlen(ptr);
-		}
-		if (len >= 2 && ptr[1] == ':')
-		{
-			// Set drive
-			unsigned short drive = ((unsigned char*)ptr)[0];
-			drive -= drive >= 'a' ? 'a' : 'A';
-			Dsetdrv(drive);
-			ptr += 2;
-			len -= 2;
-		}
-		if (len > 0)
-		{
-			// Set path, but make sure we make all / to \ first.
-			for (char *p = ptr; *p != 0; ++p)
-			{
-				if (*p == '/') {*p = '\\';}
-			}
-			Dsetpath(ptr);
-		}
+		CmdSetWorkingDir(vNameEnd);
 	}
 	else if ((vNameEnd = StringCompare("qXfer:features:read:target.xml:", inptr)) > 0)
 	{
@@ -432,22 +371,60 @@ LoopState CmdFlexible(void)
 	return LISTEN_TO_GDB;
 }
 
-// We can get here in usermode, so should we make sure it is in supervisor, or check all calls we make?
-void ServerCommandLoop(int si_signo, int si_code)
+LoopState CmdReportStopReason(int si_signo, int si_code, bool* skipAck)
 {
-	DbgOut("ServerCommandLoop: \r\n");
-	DbgOutVal("si_signo", (unsigned int)si_signo);
-	DbgOutVal("si_code", (unsigned int)si_code);
-
 	LoopState loopState = LISTEN_TO_GDB;
-	comDev->EnableCtrlC(false); // We don't want any Ctrl-C breaking now.
+	if (inferiorState == NOT_LOADED)
+	{
+		if (option_multi && inferior_filename[0] != 0)
+		{
+			// Need to load and start inferior
+			userCodeIfError = USERCODE_WARNING;
+			loopState = RUN;
+		}
+		else
+		{
+			// gdbserver returns W00, and so do we.
+			WriteString("W00");	// Means that pcrocess 00 have exited.
+			if (!extendedMode)
+			{
+				// GDB expects us to exit gdbserver now.
+				loopState = KILL;
+				// Send packet also...
+				TransmitPacket(*skipAck);
+			}
+			*skipAck = true; // Even for extended mode?				
+		}
+	}
+	else if (inferiorState == RUNNING)
+	{
+		// We have indeed a running inferior and it have cast an exception.
+		SendStopCode(si_signo, si_code);
+	}
+	else if (inferiorState == LOADED)
+	{
+		// Need to start the inferior to deliver the resonse.
+		loopState = CONTINUE_EXECUTION;
+	}
+	else
+	{
+		// Don't even know how to get here... Well, return OK anyway just to make the code look good.
+		WriteOK();
+	}
+	return loopState;
+}
 
-	// Send response to GDB if needed.
-	ClearOutPacket();
+LoopState HandleBreakResponse(int si_signo, int si_code, bool* isSupervisorMode)
+{
+	LoopState loopState = LISTEN_TO_GDB;
 	if (si_signo == GDB_SIGUSR1)
 	{
-		// We come here when called from ServerMain.
-		// This is the only time when ServerCommandLoop isn't run in supervisor mode.
+		/*
+			We get here only if ServerCommandLoop have been called from ServerMain.
+			This means that we are in user mode and no inferior is being executed.
+			There may still be an inferior loaded into memory.
+		*/
+		*isSupervisorMode = false;		
 		if (si_code == USERCODE_ERROR)
 		{
 			WriteError(1);
@@ -468,8 +445,16 @@ void ServerCommandLoop(int si_signo, int si_code)
 	}
 	else
 	{
-		// An exception have occured.
-		// We are in supervisor mode now.
+		/*
+			We get here if any of the following have happened:
+				An exception have occured.
+				A breakpoint have been reached.
+				CTRL-C have been pressed.
+			All of those cases means that we have come here from an interrupt or exception.
+			So we know for a fact that we are in supervisor mode.
+			This also means that we must have an inferior being executed (but paused now).
+		*/
+		*isSupervisorMode = true;		
 		if (IsServerException())
 		{
 			// Exception in gdbserver code!
@@ -484,146 +469,11 @@ void ServerCommandLoop(int si_signo, int si_code)
 		SendStopCode(si_signo, si_code);
 		TransmitPacket(false);
 	}
+	return loopState;
+}
 
-	// Command loop, get packet from gdb and transmit response.
-	while (loopState == LISTEN_TO_GDB)
-	{
-		bool skipAck = false;
-		ClearOutPacket();	// Keep track of the outPacket count and write pos
-		ReceivePacket();
-		char* inptr = GetInpacketPtr(0);
-		switch (inptr[0])
-		{
-		case 0x03:	// Ctrl-C. 
-			// The user have requested to pause execution of inferior, but we are already paused or not even running...
-			if (inferiorState == RUNNING)
-			{
-				// Just repeat the last stop code.
-				SendStopCode(si_signo, si_code);
-			}
-			else
-			{
-				// Undefined area... Just return OK.
-				WriteOK();
-			}
-			break;
-		case 0x1a:	// Ctrl-Z. 
-			// Shut down the server and exit.
-			run_once = true;
-			option_multi = false;
-			loadInferiorRequested = false;
-			loopState = KILL;
-			break;
-		case '!':	// Asks if we are a target-remote-extended server. Returning OK places us in extended mode.
-			extendedMode = true;
-			WriteOK();
-			break;
-		case 'D':	// Detach. Quit debugging but continue running inferior. Unhook exceptions?
-			WriteOK();
-			break;
-		case 'H':	// Set thread number. Just return OK.
-		/*
-			gdbserver returns E01
-		*/
-			WriteOK();
-			break;
-		case 'T':	// Set active thread. Just return OK.
-			WriteOK();
-			break;
-		case 'R':	// Restart inferior.
-			loopState = RUN;
-			break;
-		case 'v':	// Flexibillity packets. Like file handling, continuing, running...
-			loopState = CmdFlexible();
-			break;
-		case '?':	// Report the exception
-			if (inferiorState == NOT_LOADED)
-			{
-				if (option_multi && inferior_filename[0] != 0)
-				{
-					// Need to load and start inferior
-					userCodeIfError = USERCODE_WARNING;
-					loopState = RUN;
-				}
-				else
-				{
-					// gdbserver returns W00, and so do we.
-					WriteString("W00");	// Means that pcrocess 00 have exited.
-					if (!extendedMode)
-					{
-						// GDB expects us to exit gdbserver now.
-						loopState = KILL;
-						// Send packet also...
-						TransmitPacket(skipAck);
-					}
-					skipAck = true; // Even for extended mode?				
-				}
-			}
-			else if (inferiorState == RUNNING)
-			{
-				// We have indeed a running inferior and it have cast an exception.
-				SendStopCode(si_signo, si_code);
-			}
-			else if (inferiorState == LOADED)
-			{
-				// Need to start the inferior to deliver the resonse.
-				loopState = CONTINUE_EXECUTION;
-			}
-			else
-			{
-				// Don't even know how to get here... Well, return OK anyway just to make the code look good.
-				WriteOK();
-			}
-			break;
-		case 'g':	// Get register values
-			ReadRegisters();
-			break;
-		case 'G':	// Set register values
-			WriteRegisters();
-			break;
-		case 'm':	// Read from memory
-			ReadMemory();
-			break;
-		case 'M':	// Write to memory
-			WriteMemory();
-			break;
-		case 'p':	// Get specific register
-			ReadRegister();
-			break;
-		case 'P':	// Set specific register
-			WriteRegister();
-			break;
-		case 's':	// Step
-			loopState = CmdContinue(true); 
-			break;
-		case 'c':	// Continue
-			loopState = CmdContinue(false); 
-			break;
-		case 'k':	// Kill
-			loopState = KILL;
-			break;
-		case 'q':	// Query
-			CmdQuery();
-			break;
-		case 'Q':	// Query set
-			CmdQuery();
-			break;
-		case 'z':	// Clear breakpoint
-			CmdClearBreakpoint();
-			break;
-		case 'Z':	// Set breakpoint
-			CmdSetBreakpoint();
-			break;
-		default:
-			DbgRemOut("\tNot supported, ignoring...\r\n");
-			break;
-		}
-		if (loopState == LISTEN_TO_GDB)
-		{
-			TransmitPacket(skipAck);
-		}
-	}
-	
+void HandleCommandLoopExit(LoopState loopState, int si_signo)
+{
 	if (loopState == KILL)
 	{
 		// If we have an inferior, we need to terminate it properly.
@@ -704,6 +554,128 @@ void ServerCommandLoop(int si_signo, int si_code)
 			TerminateInferior(si_signo);	// no-return function! Code execution continues in RunInferior.
 		}
 	}
+}
+
+void ServerCommandLoop(int si_signo, int si_code)
+{
+	/*
+		CTRL-C should have been disabled already by the comm extension, but do it again just to be safe.
+	*/
+	comDev->EnableCtrlC(false);
+
+	DbgOut("ServerCommandLoop: \r\n");
+	DbgOutVal("si_signo", (unsigned int)si_signo);
+	DbgOutVal("si_code", (unsigned int)si_code);
+
+	ClearOutPacket();
+	bool isSupervisorMode = false;
+	LoopState loopState = HandleBreakResponse(si_signo, si_code, &isSupervisorMode);
+
+	// Command loop, get packet from gdb and transmit response.
+	while (loopState == LISTEN_TO_GDB)
+	{
+		bool skipAck = false;
+		ClearOutPacket();	// Keep track of the outPacket count and write pos
+		ReceivePacket();
+		char* inptr = GetInpacketPtr(0);
+		switch (inptr[0])
+		{
+		case 0x03:	// Ctrl-C. 
+			// The user have requested to pause execution of inferior, but we are already paused or not even running...
+			if (inferiorState == RUNNING)
+			{
+				// Just repeat the last stop code.
+				SendStopCode(si_signo, si_code);
+			}
+			else
+			{
+				// Undefined area... Just return OK.
+				WriteOK();
+			}
+			break;
+		case 0x1a:	// Ctrl-Z. 
+			// Shut down the server and exit.
+			run_once = true;
+			option_multi = false;
+			loadInferiorRequested = false;
+			loopState = KILL;
+			break;
+		case '!':	// Asks if we are a target-remote-extended server. Returning OK places us in extended mode.
+			extendedMode = true;
+			WriteOK();
+			break;
+		case 'D':	// Detach. Quit debugging but continue running inferior. Unhook exceptions?
+			WriteOK();
+			break;
+		case 'H':	// Set thread number. Just return OK.
+			/*
+				gdbserver returns E01
+			*/
+			WriteOK();
+			break;
+		case 'T':	// Set active thread. Just return OK.
+			WriteOK();
+			break;
+		case 'R':	// Restart inferior.
+			loopState = RUN;
+			break;
+		case 'v':	// Flexibillity packets. Like file handling, continuing, running...
+			loopState = CmdFlexible();
+			break;
+		case '?':	// Report the exception
+			loopState = CmdReportStopReason(si_signo, si_code, &skipAck);
+			break;
+		case 'g':	// Get register values
+			ReadRegisters();
+			break;
+		case 'G':	// Set register values
+			WriteRegisters();
+			break;
+		case 'm':	// Read from memory
+			ReadMemory(isSupervisorMode);
+			break;
+		case 'M':	// Write to memory
+			WriteMemory(isSupervisorMode);
+			break;
+		case 'p':	// Get specific register
+			ReadRegister();
+			break;
+		case 'P':	// Set specific register
+			WriteRegister();
+			break;
+		case 's':	// Step
+			loopState = CmdContinue(true); 
+			break;
+		case 'c':	// Continue
+			loopState = CmdContinue(false); 
+			break;
+		case 'k':	// Kill
+			loopState = KILL;
+			break;
+		case 'q':	// Query
+			CmdQuery();
+			break;
+		case 'Q':	// Query set
+			CmdQuery();
+			break;
+		case 'z':	// Clear breakpoint
+			CmdClearBreakpoint();
+			break;
+		case 'Z':	// Set breakpoint
+			CmdSetBreakpoint();
+			break;
+		default:
+			DbgRemOut("\tNot supported, ignoring...\r\n");
+			break;
+		}
+		if (loopState == LISTEN_TO_GDB)
+		{
+			TransmitPacket(skipAck);
+		}
+	}
+	
+	HandleCommandLoopExit(loopState, si_signo);
+
 	DbgOut("ServerCommandLoop: exiting\r\n");
 }
 

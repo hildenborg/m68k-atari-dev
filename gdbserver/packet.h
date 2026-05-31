@@ -40,6 +40,9 @@ void WriteRegisters(void);
 void WriteRegister(void);
 void ReadRegister(void);
 void WriteTargetXML(short vNameEnd);
+void WriteOffsets(void);
+void WriteMemory(bool isSupervisorMode);
+void ReadMemory(bool isSupervisorMode);
 
 #define WriteOK() WriteString("OK")
 #define WriteEQ() WriteString("EQ")

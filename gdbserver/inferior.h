@@ -6,6 +6,8 @@
 #ifndef INFERIOR_DEFINED
 #define INFERIOR_DEFINED
 
+#include "gem_basepage.h"
+
 typedef enum
 {
 	NOT_LOADED,
@@ -13,9 +15,9 @@ typedef enum
 	RUNNING
 } InferiorState;
 
-extern volatile InferiorState inferiorState;
-extern volatile struct BasePage* inferiorBasePage;
-extern volatile bool inferior_is_mintelf;
+extern InferiorState inferiorState;
+extern struct BasePage* inferiorBasePage;
+extern bool inferior_is_mintelf;
 extern char inferior_filename[];
 extern char inferior_cmdline[];
 extern char inferior_workpath[];

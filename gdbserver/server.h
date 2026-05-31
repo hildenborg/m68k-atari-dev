@@ -3,8 +3,8 @@
 	SPDX-License-Identifier: MIT
 */
 
-#ifndef DBG_DEFINED
-#define DBG_DEFINED
+#ifndef SERVER_DEFINED
+#define SERVER_DEFINED
 
 #include "gem_basepage.h"
 
@@ -31,4 +31,4 @@ void ServerCommandLoop(int si_signo, int si_code);
 }
 #endif
 
-#endif // DBG_DEFINED
+#endif // SERVER_DEFINED
