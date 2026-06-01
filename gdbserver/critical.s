@@ -230,11 +230,12 @@ SaveStateAndSwitchContext:
     cmp.l   #20, Cookie_CPU
 	jmi		1f
 	| Got fpu and a 020+ cpu
-	cmp.w	#0x6, d0
-	jmi		3f
 	lea		internal_fpu_state + FPU_FRAME_SIZE, a0
 	fsave	-(a0)
 	move.l	a0, internal_fpu_state_frame
+	cmp.w	#0x6, d0
+	jmi		3f
+	| 68882 and internal needs to set BIU flag in IDLE frame.
 	move.b	(a0), d0
 	jeq		3f
 	moveq	#0, d0
@@ -301,11 +302,8 @@ RestoreStateAndSwitchContext:
 	fmove.l		registers + o_to_fp_control, fpcr
 	fmove.l		registers + o_to_fp_status, fpsr
 	fmove.l		registers + o_to_fp_iaddr, fpiar
-	cmp.w	#0x6, d0
-	jmi		4f
 	move.l	internal_fpu_state_frame, a0
 	frestore	(a0)
-4:
 	jra		2f
 1:
 	btst	#0, d0
