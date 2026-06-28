@@ -206,20 +206,22 @@ Calc68000Stack:
 	jpl		Calc68010Stack
 	cmp.w	#4, exception_num
 	bge.s	2f
+	| Address or bus error.
 	lea		14(a0), a1		| 7 word stack frame
+	lea		8(a0), a0		| 68000 pushes pc + sr first.
 	rts
 2:
 	lea		6(a0), a1		| 3 word stack frame
 	rts
 Calc68010Stack:
-	cmp.w	#4, exception_num
-	bge.s	2f
-	lea		58(a0), a1		| 29 word stack frame
+	| Get stack size from format code
+	move.w	6(a0), d1
+	rol.w	#5, d1
+	and.w	#0x1e, d1
+	lea		stackframe_sizes, a1
+	move.w	(a1, d1.w), d1
+	lea		(a0, d1.w), a1
 	rts
-2:
-	lea		8(a0), a1		| 4 word stack frame
-	rts
-
 
 SaveStateAndSwitchContext:
 	movem.l	d0-d7/a0-a6, registers
@@ -409,6 +411,13 @@ ClearInternalCaches:
 1:
     rts
 	.endfunc
+
+	.data
+stackframe_sizes:
+	.dc.w	8, 58, 12, 8
+	.dc.w	8, 8, 8, 8
+	.dc.w	58, 8, 32, 92
+	.dc.w	8, 8, 8, 8
 
 	.bss
 	.lcomm	exception_a7,		4
