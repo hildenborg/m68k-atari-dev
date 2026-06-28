@@ -604,8 +604,9 @@ void ServerCommandLoop(int si_signo, int si_code)
 			extendedMode = true;
 			WriteOK();
 			break;
-		case 'D':	// Detach. Quit debugging but continue running inferior. Unhook exceptions?
-			WriteOK();
+		case 'D':	// Detach. Most gdb MI clients seem to expect us to kill the inferior here.
+			//WriteOK();
+			loopState = KILL;
 			break;
 		case 'H':	// Set thread number. Just return OK.
 			/*
