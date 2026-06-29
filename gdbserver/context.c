@@ -60,6 +60,8 @@ int DestroyServerContext_super(void)
 {
 	comDev->Exit();
 	RestoreExceptions();
+    RestoreMemoryRegisters(serverLongs, serverBytes);
+	ClearInternalCaches();
     return 0;
 }
 
@@ -86,6 +88,17 @@ void SwitchToServerContext(void)
     RestoreVectors(serverVectors);
     RestoreMemoryRegisters(serverLongs, serverBytes);
 	ClearInternalCaches();
+}
+
+int SetServerContext_super(void)
+{
+	SwitchToServerContext();
+	return 0;
+}
+
+void SetServerContext(void)
+{
+	Supexec(SetServerContext_super);
 }
 
 #pragma GCC diagnostic push

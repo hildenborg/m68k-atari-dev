@@ -472,7 +472,7 @@ LoopState HandleBreakResponse(int si_signo, int si_code, bool* isSupervisorMode)
 	return loopState;
 }
 
-void HandleCommandLoopExit(LoopState loopState, int si_signo)
+void HandleCommandLoopExit(LoopState loopState, int si_signo, bool* isSupervisorMode)
 {
 	if (loopState == KILL)
 	{
@@ -510,7 +510,9 @@ void HandleCommandLoopExit(LoopState loopState, int si_signo)
 			int return_code = 0;
 			if (!RunInferior(&return_code))	// Returns after inferior is terminated.
 			{
-				// Inferior terminated itself. 
+				*isSupervisorMode = false;		
+				// Inferior terminated itself.
+				SetServerContext();
 				// Report process exit and inferior return code to gdb.
 				ClearOutPacket();
 				WriteChar('W');
@@ -675,7 +677,7 @@ void ServerCommandLoop(int si_signo, int si_code)
 		}
 	}
 	
-	HandleCommandLoopExit(loopState, si_signo);
+	HandleCommandLoopExit(loopState, si_signo, &isSupervisorMode);
 
 	DbgOut("ServerCommandLoop: exiting\r\n");
 }

@@ -20,6 +20,10 @@ void SwitchToInferiorContext(void);
 // Needs IRQ off and supervisor mode!
 void SwitchToServerContext(void);
 
+// Enters server context from user mode and unloaded inferior.
+// This saves inferior context anyway, as unloaded inferiors might leave garbage that crashes later.
+void SetServerContext(void);
+
 // Returns a pointer to either the same address or a shadow address containing the inferior data.
 unsigned char* InferiorContextMemoryAddress(unsigned char* address);
 
