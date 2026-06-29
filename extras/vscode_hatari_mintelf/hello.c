@@ -14,12 +14,12 @@ static char buffer[100];
 
 void print_hello(void)
 {
-	printf (buffer);
+	printf ("%s", buffer);
 }
 
 int main (int argc, char **argv)
 {
-	strcpy(buffer, hello);
+	snprintf(buffer, sizeof(buffer), "%s", hello);
 	print_hello();
 	return 0;
 }
