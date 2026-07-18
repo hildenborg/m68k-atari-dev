@@ -33,7 +33,12 @@ This example is the same as vscode_hatari but uses the mintelf toolchain.
 This example is the same as vscode_hatari but connects to a RS232 cable connection to a Atari computer.  
 It will also transfer the executable over the RS232 connection (slow) before execution.  
 
-## gdb-extensions
+## gdb-extensions:
 Gdbserver communication can be extended using stand-alone program code.
 TSR (Terminate and stay resident) programs, can be run before gdbserver is started and provide with all the methods needed
 for gdbserver to communicate with gdb.
+
+## hwinf:
+A more advanced program that uses both TOS functions and hardware state analysis using demo-scene code, to determine the state of the hardware the software runs on.  
+This example will produce a test image showing a stable jitter free vbl interrupt and wakestate detection.
+

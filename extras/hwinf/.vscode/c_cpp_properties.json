@@ -1,0 +1,25 @@
+{
+    "configurations": [
+        {
+            "name": "m68k",
+            "includePath": [
+                "${workspaceFolder}/**",
+				"${env:TOOLKIT}/m68k-atari-elf/include"
+            ],
+            "defines": [
+            ],
+            "windowsSdkVersion": "10.0.18362.0",
+            "compilerPath": "${env:TOOLKIT}/bin/m68k-atari-elf-gcc",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "${default}",
+            "compilerArgs": [
+                "-m68000",
+                "-std=c++17",
+                "-fno-exceptions",
+                "-fno-rtti"
+            ]
+        }
+    ],
+    "version": 4
+}
