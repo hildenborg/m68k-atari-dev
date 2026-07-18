@@ -17,8 +17,7 @@ The E clock timing is done in the function: "analyze_hardware_state" in "hw_dete
 If we are running on STE, then we are done now. But if we are running on the older ST, then we also have to take care of wakestates.  
 Wakestates are a quirk in the ST hardware where the GLUE and the SHIFTER have four combined states that they can start up in. This is completely random and cannot be affected in any way, and it affects how the E clock is measured and how the jitter is removed.  
 Detecting wakestates is a too big of a topic to describe here, and a lot of people have spent a lot of time researching it. See references below for further information.  
-When we know the wakestate and the jitter position of the E clock, then for every VBL we want to stabilize, we just need to delay a known number of memory cycles and update the jitter position. In the example code, this looks like this:  
-"hw_detect.s:"  
+When we know the wakestate and the jitter position of the E clock, then for every VBL we want to stabilize, we just need to delay a known number of memory cycles and update the jitter position. In the example code, this looks like this in "hw_detect.s":  
 ```
 vbl_irq:
 	move.w	#0x2700, sr
@@ -60,9 +59,9 @@ vbl_irq:
 ```
 
 ## References:
-[Atari-Forum thread](https://www.atari-forum.com/viewtopic.php?f=16&t=24855&start=147)
-[Troed - Atari ST wakestate detection](https://codeberg.org/troed/WSDETECT)
-[OSSC visibility tests on Atari ST/e](https://ae.dhs.nu/hatari_overscan/)
-[Atari-Wiki ST_STE_Scanlines](https://www.atari-wiki.com/?title=ST_STE_Scanlines)
+[Atari-Forum thread](https://www.atari-forum.com/viewtopic.php?f=16&t=24855&start=147)  
+[Troed - Atari ST wakestate detection](https://codeberg.org/troed/WSDETECT)  
+[OSSC visibility tests on Atari ST/e](https://ae.dhs.nu/hatari_overscan/)  
+[Atari-Wiki ST_STE_Scanlines](https://www.atari-wiki.com/?title=ST_STE_Scanlines)  
 
 
