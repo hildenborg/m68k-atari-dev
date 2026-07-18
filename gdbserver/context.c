@@ -16,7 +16,7 @@
 #define NUM_VDO_LONGS 8
 #define NUM_SYS_LONGS 1
 #define NUM_VDO_BYTES 6
-#define NUM_MFP_BYTES 18
+#define NUM_MFP_BYTES 4
 
 // Server context
 unsigned int serverVectors[NUM_IRQ_VECTORS + NUM_MFP_VECTORS];
@@ -28,10 +28,11 @@ unsigned int inferiorVectors[NUM_IRQ_VECTORS + NUM_MFP_VECTORS];
 unsigned int inferiorLongs[NUM_VDO_LONGS + NUM_SYS_LONGS];
 unsigned char inferiorBytes[NUM_VDO_BYTES + NUM_MFP_BYTES] __attribute__((aligned(2)));
 
+unsigned short GetMfpChangedMask(void);
 void StoreVectors(unsigned int* vectors);
 void RestoreVectors(unsigned int* vectors);
 void StoreMemoryRegisters(unsigned int* longs, unsigned char* bytes);
-void RestoreMemoryRegisters(unsigned int* longs, unsigned char* bytes);
+void RestoreMemoryRegisters(unsigned int* longs, unsigned char* bytes, unsigned short mfpMask);
 
 extern comm*	comDev;
 extern char	com_method[];
@@ -60,7 +61,7 @@ int DestroyServerContext_super(void)
 {
 	comDev->Exit();
 	RestoreExceptions();
-    RestoreMemoryRegisters(serverLongs, serverBytes);
+    RestoreMemoryRegisters(serverLongs, serverBytes, 0xffff);
 	ClearInternalCaches();
     return 0;
 }
@@ -75,7 +76,7 @@ void SwitchToInferiorContext(void)
 {
     // Restore inferior context that was stored in SwitchToServerContext
     RestoreVectors(inferiorVectors);
-    RestoreMemoryRegisters(inferiorLongs, inferiorBytes);
+    RestoreMemoryRegisters(inferiorLongs, inferiorBytes, 0xffff);
 	ClearInternalCaches();
 }
 
@@ -85,8 +86,9 @@ void SwitchToServerContext(void)
     StoreVectors(inferiorVectors);
     StoreMemoryRegisters(inferiorLongs, inferiorBytes);
     // Restore original server context.
+	unsigned short mfpMask = GetMfpChangedMask();
     RestoreVectors(serverVectors);
-    RestoreMemoryRegisters(serverLongs, serverBytes);
+    RestoreMemoryRegisters(serverLongs, serverBytes, mfpMask);
 	ClearInternalCaches();
 }
 
@@ -99,6 +101,21 @@ int SetServerContext_super(void)
 void SetServerContext(void)
 {
 	Supexec(SetServerContext_super);
+}
+
+unsigned short GetMfpChangedMask(void)
+{
+	unsigned int* serverMfpVecs = &serverVectors[NUM_IRQ_VECTORS];
+	unsigned int* inferiorMfpVecs = &inferiorVectors[NUM_IRQ_VECTORS];
+	unsigned short mask = 0;
+	for (short i = 0; i < 16; ++i)
+	{
+		if (serverMfpVecs[i] == inferiorMfpVecs[i])
+		{
+			mask |= (unsigned short)(1 << i);
+		}
+	}
+	return mask;
 }
 
 #pragma GCC diagnostic push
@@ -138,11 +155,11 @@ void StoreMemoryRegisters(unsigned int* longs, unsigned char* bytes)
 	unsigned int* sysLongs = longs;
 	unsigned int* vdoLongs = longs + NUM_SYS_LONGS;
 	unsigned char* vdoChars = bytes;
-	//unsigned char* mfpChars = bytes + NUM_VDO_BYTES;
+	unsigned char* mfpChars = bytes + NUM_VDO_BYTES;
 	#define SYS_LONG(address) *sysLongs++ = *((unsigned int*)address)
 	#define VDO_LONG(address) *vdoLongs++ = *((unsigned int*)address)
 	#define VDO_CHAR(address) *vdoChars++ = *((unsigned char*)address)
-	//#define MFP_CHAR(address) *mfpChars++ = *((unsigned char*)address)
+	#define MFP_CHAR(address) *mfpChars++ = *((unsigned char*)address)
 
 	if ((Cookie_MCH >> 16) <= 1)
 	{
@@ -163,35 +180,29 @@ void StoreMemoryRegisters(unsigned int* longs, unsigned char* bytes)
 			VDO_LONG(i);
 		}
 	}
-	/*
-	for (unsigned int i = 0xfffffa03; i <= 0xfffffa1d; i += 2)
-	{
-		MFP_CHAR(i);
-	}
-	for (unsigned int i = 0xfffffa1f; i <= 0xfffffa25; i += 2)
-	{
-		*mfpChars++ = CaptureMfpData((unsigned char*)i);
-	}
-	*/
+	MFP_CHAR(0xfffffa07);
+	MFP_CHAR(0xfffffa09);
+	MFP_CHAR(0xfffffa13);
+	MFP_CHAR(0xfffffa15);
 
 	SYS_LONG(0x44e);
 	
 	#undef SYS_LONG
 	#undef VDO_LONG
 	#undef VDO_CHAR
-	//#undef MFP_CHAR
+	#undef MFP_CHAR
 }
 
-void RestoreMemoryRegisters(unsigned int* longs, unsigned char* bytes)
+void RestoreMemoryRegisters(unsigned int* longs, unsigned char* bytes, unsigned short mfpMask)
 {
 	unsigned int* sysLongs = longs;
 	unsigned int* vdoLongs = longs + NUM_SYS_LONGS;
 	unsigned char* vdoChars = bytes;
-	//unsigned char* mfpChars = bytes + NUM_VDO_BYTES;
+	unsigned char* mfpChars = bytes + NUM_VDO_BYTES;
 	#define SYS_LONG(address) *((unsigned int*)address) = *sysLongs++
 	#define VDO_LONG(address) *((unsigned int*)address) = *vdoLongs++
 	#define VDO_CHAR(address) *((unsigned char*)address) = *vdoChars++
-//	#define MFP_CHAR(address) *((unsigned char*)address) = *mfpChars++
+	#define MFP_CHAR(address, mask) *((unsigned char*)address) = (*mfpChars++) & (unsigned char)(mask)
 
 	if ((Cookie_MCH >> 16) <= 1)
 	{
@@ -213,17 +224,21 @@ void RestoreMemoryRegisters(unsigned int* longs, unsigned char* bytes)
 		}
 	}
 	/*
-	for (unsigned int i = 0xfffffa03; i <= 0xfffffa25; i += 2)
-	{
-		MFP_CHAR(i);
-	}
+		mfpMask bits that are 0 should disable mfp interrupts
+		The idea is to disable all mfp interrupts that the inferior have set up.
+		This is necessary as we cannot capture the mfp state and restore it properly.
 	*/
+	MFP_CHAR(0xfffffa07, (mfpMask >> 8));
+	MFP_CHAR(0xfffffa09, (mfpMask));
+	MFP_CHAR(0xfffffa13, (mfpMask >> 8));
+	MFP_CHAR(0xfffffa15, (mfpMask));
+
 	SYS_LONG(0x44e);
 	
 	#undef SYS_LONG
 	#undef VDO_LONG
 	#undef VDO_CHAR
-//	#undef MFP_CHAR
+	#undef MFP_CHAR
 }
 
 
@@ -271,15 +286,10 @@ unsigned char* InferiorContextMemoryAddress(unsigned char* address)
 				unsigned char* inferiorVdoLongs = (unsigned char*)(inferiorLongs + NUM_SYS_LONGS);
 				return &inferiorVdoLongs[la - 0xffff8240];
 			}
-			/*
-			else if (la >= 0xfffffa03 && la <= 0xfffffa25 && ((la & 1) != 0))
-			{
-				return &((unsigned char*)inferiorMfpChars)[(la - 0xfffffa03) >> 1];
-			}
-			*/
 			else
 			{
 				unsigned char* inferiorVdoChars = (inferiorBytes);
+				unsigned char* inferiorMfpChars = &inferiorBytes[NUM_VDO_BYTES];
 				switch (la)
 				{
 					case 0xffff8201:	return &inferiorVdoChars[0];
@@ -288,6 +298,10 @@ unsigned char* InferiorContextMemoryAddress(unsigned char* address)
 					case 0xffff8260:	return &inferiorVdoChars[3];
 					case 0xffff820d:	return &inferiorVdoChars[4];
 					case 0xffff8265:	return &inferiorVdoChars[5];
+					case 0xfffffa07:	return &inferiorMfpChars[0];
+					case 0xfffffa09:	return &inferiorMfpChars[1];
+					case 0xfffffa11:	return &inferiorMfpChars[2];
+					case 0xfffffa13:	return &inferiorMfpChars[3];
 					default:			return address;
 				}
 			}
