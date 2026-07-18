@@ -80,6 +80,7 @@ bool RunInferior(int* return_code)
 	inferiorTerminatedByServer = false;
 //	*return_code = Pexec(PE_GOTHENFREE, 0, (const char*)inferiorBasePage, 0); // Requires GEMDOS 0.19 or above.
 	*return_code = Pexec(PE_GO, 0, (const char*)inferiorBasePage, 0);
+	Mfree(inferiorBasePage->p_env);
 	Mfree(inferiorBasePage);
 	// Returning from a terminated inferior
 	inferiorState = NOT_LOADED;
