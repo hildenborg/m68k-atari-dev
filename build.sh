@@ -26,10 +26,10 @@ CONF_DEFAULT_CPU=68000
 CONF_INSTALL=$HOME/toolchain
 
 # Versions to download and build.
-BINUTIL_VERSION="2.45"
-GCC_VERSION="15.2.0"
+BINUTIL_VERSION="2.46.1"
+GCC_VERSION="16.1.0"
 #NEWLIB_VERSION="4.6.0.20260123"
-NEWLIB_HASH="a1f347c0d5b85c9ddbacee0512e5c2c5200c88cb"
+NEWLIB_HASH="137e27ffb622df7e6c9bb0565182929a60db8ace"
 ATARI_LIB_HASH="29c2d2f9379fe6114eacebcd0a5ac4578df3741f"
 
 # Target specific settings
@@ -118,9 +118,9 @@ if [ ! -d newlib-cygwin ]; then
 	cd newlib-cygwin
 	echo "Checking out: newlib hash $NEWLIB_HASH"
 	git checkout $NEWLIB_HASH	
-	echo "Patching: newlib"
-	git apply $PATCHES/newlib/0001-newlib-m68k-atari-elf-Correct-handling-of-CRLF-in-st.patch
-	git apply $PATCHES/newlib/0002-autoreconf.patch
+	#echo "Patching: newlib"
+	#git apply $PATCHES/newlib/0001-newlib-m68k-atari-elf-Correct-handling-of-CRLF-in-st.patch
+	#git apply $PATCHES/newlib/0002-autoreconf.patch
 	cd ..
 fi
 
