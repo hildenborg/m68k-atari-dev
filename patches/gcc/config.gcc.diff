@@ -1,4 +1,4 @@
-2404a2405,2411
+2460a2461,2467
 > m68k-atari-elf*)
 > 	default_m68k_cpu=68000
 > 	tm_file="${tm_file} m68k/m68k-none.h m68k/m68kelf.h elfos.h newlib-stdint.h m68k/m68kemb.h m68k/m68020-elf.h"
