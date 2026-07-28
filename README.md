@@ -1,6 +1,7 @@
 # m68k-atari-dev
 A development system providing cross compiling and remote debugging for Atari TOS computers.  
 NOTE: A [wiki have been started](https://github.com/hildenborg/m68k-atari-dev/wiki) that in time will replace most of this readme.
+NOTE2: There is a "stable" branch that is kept at an always working state. If you want to use that branch, then do `git checkout stable` after cloning the repository.  
 
 ## Key features:
 * Standard C and C++ libraries using newlib "m68k-atari-elf".
