@@ -116,8 +116,8 @@ if [ ! -d newlib-cygwin ]; then
 	echo "Downloading: newlib"
 	git clone https://sourceware.org/git/newlib-cygwin.git
 	cd newlib-cygwin
-	echo "Checking out: newlib hash $NEWLIB_HASH"
-	git checkout $NEWLIB_HASH	
+	#echo "Checking out: newlib hash $NEWLIB_HASH"
+	#git checkout $NEWLIB_HASH	
 	#echo "Patching: newlib"
 	#git apply $PATCHES/newlib/0001-newlib-m68k-atari-elf-Correct-handling-of-CRLF-in-st.patch
 	#git apply $PATCHES/newlib/0002-autoreconf.patch
