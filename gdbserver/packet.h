@@ -30,7 +30,9 @@ void WriteString(const char* str);
 void WriteNameAndLong(const char* name, unsigned int v);
 short ReadNumber(short inOff, unsigned int* result);
 short GetAddressAndLength(short offset, bool write, unsigned char** addr, unsigned int* len);
-short GetFileArgs(short cmdEnd, char* argv[]);
+// Max number of arguments (including the operation name) returned by GetFileArgs.
+#define MAX_FILE_ARGS 4
+short GetFileArgs(short cmdEnd, char* argv[MAX_FILE_ARGS]);
 void GetInferiorNameAndArgs(short vNameEnd, char* inferior_filename, char* inferior_cmdline);
 void WriteVariable(int val);
 void WriteFileResponse(int result, int ioErrno, const char* attachment);

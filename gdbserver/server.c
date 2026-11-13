@@ -253,7 +253,7 @@ LoopState CmdFileOperation(short cmdEnd)
 	char *attachment = 0;
 
 	// Find operand and arguments and end all with 0
-	char* argv[4];
+	char* argv[MAX_FILE_ARGS];
 	short argc = GetFileArgs(cmdEnd, argv);
 
 	char* inptr = GetInpacketPtr(0);
@@ -362,6 +362,10 @@ LoopState CmdFlexible(void)
 	}
 	else if ((vNameEnd = StringCompare("vKill;",  inptr)) > 0)
 	{
+		// gdb expects OK as reply. The reply must be sent before killing, as
+		// killing a running inferior doesn't return here.
+		WriteOK();
+		TransmitPacket(false);
 		return KILL;
 	}
 	else if ((vNameEnd = StringCompare("vFile:",  inptr)) > 0)
@@ -608,7 +612,9 @@ void ServerCommandLoop(int si_signo, int si_code)
 			WriteOK();
 			break;
 		case 'D':	// Detach. Most gdb MI clients seem to expect us to kill the inferior here.
-			//WriteOK();
+			// gdb expects OK as reply. Send it before killing, as killing a running inferior doesn't return here.
+			WriteOK();
+			TransmitPacket(false);
 			loopState = KILL;
 			break;
 		case 'H':	// Set thread number. Just return OK.

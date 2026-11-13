@@ -196,19 +196,12 @@ void ReceivePacket(void)
 	}
 }
 
-void TransmitPacket(bool skipAck)
-{
-	DbgRemOut("TransmitPacket:\r\n\t");
-	outPacket[outPacketLength] = 0;
-	DbgRemOut(outPacket);
+// Max number of times a packet is resent when gdb answers with a nak ('-').
+#define MAX_TRANSMIT_RETRIES 10
 
-	if (!comDev->IsConnected())
-	{
-		// Connection dropped...
-		DbgRemOut("\r\n\tConnection dropped!\r\n");
-		return;
-	}
-	
+// Sends outPacket as "$<escaped data>#<checksum>".
+static void SendPacketData(void)
+{
 	unsigned char sum = 0;
 	// Send encoded
 	PutByte('$');	// Packets always start with $
@@ -228,28 +221,54 @@ void TransmitPacket(bool skipAck)
 	PutByte('#');
 	PutByte(NibbleToHex(sum >> 4));
 	PutByte(NibbleToHex(sum));
+}
 
-	if (!noAckMode && !skipAck)
+void TransmitPacket(bool skipAck)
+{
+	DbgRemOut("TransmitPacket:\r\n\t");
+	outPacket[outPacketLength] = 0;
+	DbgRemOut(outPacket);
+
+	if (!comDev->IsConnected())
 	{
+		// Connection dropped...
+		DbgRemOut("\r\n\tConnection dropped!\r\n");
+		return;
+	}
+	
+	for (int retries = 0; ; ++retries)
+	{
+		SendPacketData();
+
+		if (noAckMode || skipAck)
+		{
+			DbgRemOut("\r\n");
+			return;
+		}
+
 		// Wait for ack
 		int ack = GetByte();
 		if (ack == '+')
 		{
 			DbgRemOut("\r\n\tAck OK.\r\n");
+			return;
 		}
 		else if (ack < 0)
 		{
 			// Connection dropped...
 			DbgRemOut("\r\n\tConnection dropped!\r\n");
+			return;
+		}
+		else if (ack == '-' && retries < MAX_TRANSMIT_RETRIES)
+		{
+			// gdb got a corrupted packet and requests it to be sent again.
+			DbgRemOut("\r\n\tNak, resending.\r\n");
 		}
 		else
 		{
 			DbgRemOut("\r\n\tError - Ack not OK!\r\n");
+			return;
 		}
-	}
-	else
-	{
-		DbgRemOut("\r\n");
 	}
 }
 
@@ -360,24 +379,27 @@ short GetAddressAndLength(short offset, bool write, unsigned char** addr, unsign
 	return -1;
 }
 
-short GetFileArgs(short cmdEnd, char* argv[])
+short GetFileArgs(short cmdEnd, char* argv[MAX_FILE_ARGS])
 {
-	// Find operand and arguments and end all with 0
+	/*
+		Find operand and arguments and end all with 0.
+		Scanning stops when the last argument has been found, as it may be binary data
+		(pwrite) that can contain any byte value, including ',' and ':'.
+		The last argument is terminated by the 0 that ends inPacket.
+	*/
 	char *ptr = inPacket + cmdEnd;
 	char *ptrend = inPacket + inPacketLength;
 	short argc = 0;
-	do
+	argv[argc++] = ptr;
+	while (argc < MAX_FILE_ARGS && ptr < ptrend)
 	{
-		argv[argc++] = ptr;
-		while (*ptr != 0 && *ptr != ',' && *ptr != ':')
+		if (*ptr == ',' || *ptr == ':')
 		{
-			++ptr;
+			*ptr = 0;
+			argv[argc++] = ptr + 1;
 		}
-		if (*ptr != 0)
-		{
-			*ptr++ = 0;
-		}
-	} while (argc < 4 && ptr != ptrend);
+		++ptr;
+	}
 	return argc;
 }
 
