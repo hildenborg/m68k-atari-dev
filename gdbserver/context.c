@@ -42,6 +42,7 @@ int CreateServerContext_super(void)
 	InitExceptions();
 	if (comDev->Init(com_method, CtrlCException) < 0)
 	{
+		RestoreExceptions();
 		return -1;
 	}
 	ClearInternalCaches();
