@@ -137,15 +137,17 @@ int Fwrite(unsigned short bios_handle, int length, const void* buf)
 	return result;
 }
 
-struct DTA* Fgetdta(unsigned short bios_handle)
+int Fattrib(const char* bios_path, unsigned short bios_wflag, unsigned short bios_attrib)
 {
-	register struct DTA* result asm ("d0") = (struct DTA*)-1;
+	register int result asm ("d0") = -1;
 	__asm__ volatile (
 		TRAP_BEGIN
-		"move.w		%1, %%a7@-\n\t"
-		TRAP_FUNC(1, 0x2f)
+		"move.w		%3, %%a7@-\n\t"
+		"move.w		%2, %%a7@-\n\t"
+		"move.l		%1, %%a7@-\n\t"
+		TRAP_FUNC(1, 0x43)
 		: "=r" (result)
-		: "r" (bios_handle)
+		: "r" (bios_path), "r" (bios_wflag), "r" (bios_attrib)
 		: CLOBBER_REG);
 	return result;
 }

@@ -11,6 +11,9 @@
 
 #define NUM_HANDLES 8
 int fd_handles[NUM_HANDLES];
+// GEMDOS file attributes (FA_*) for each open handle, captured with Fattrib when the file is opened.
+// Needed by fstat, as GEMDOS cannot get the attributes from a file handle.
+unsigned char fd_attribs[NUM_HANDLES];
 
 void VfileFixPath(char *fileName)
 {
@@ -45,13 +48,14 @@ void ExitFileIO(void)
 	}
 }
 
-int AddHandle(int fd)
+int AddHandle(int fd, unsigned char attrib)
 {
 	for (int i = 0; i < NUM_HANDLES; ++i)
 	{
 		if (fd_handles[i] == -1)
 		{
 			fd_handles[i] = fd;
+			fd_attribs[i] = attrib;
 			return 0;
 		}
 	}
@@ -71,16 +75,22 @@ void RemoveHandle(int fd)
 	}
 }
 
-int IsHandle(int fd)
+// Returns index in fd_handles, or -1 if not found.
+int FindHandle(int fd)
 {
 	for (int i = 0; i < NUM_HANDLES; ++i)
 	{
 		if (fd_handles[i] == fd)
 		{
-			return 0;
+			return i;
 		}
 	}
 	return -1;
+}
+
+int IsHandle(int fd)
+{
+	return FindHandle(fd) >= 0 ? 0 : -1;
 }
 
 int gem_to_errno(int gemError)
@@ -140,7 +150,12 @@ int VfileOpen(const char *fileName, int flags, int *ioErrno)
 	}
 	else
 	{
-		if (AddHandle(fd) != 0)
+		int attrib = Fattrib(fileName, 0, 0);
+		if (attrib < 0)
+		{
+			attrib = 0;
+		}
+		if (AddHandle(fd, (unsigned char)attrib) != 0)
 		{
 			Fclose((unsigned short)fd);
 			*ioErrno = VFILE_ERRNO_EACCES;
@@ -218,55 +233,70 @@ int VfileRead(int fd, void *buf, int offset, int nbytes, int *ioErrno)
 	return numRead;
 }
 
-int VfileFstat(int fd, vfile_stat* stat, int *ioErrno)
+static void FillStat(vfile_stat* stat, int attrib, unsigned int size)
 {
 	memset(stat, 0, sizeof(vfile_stat));
-	struct DTA *dta = (struct DTA *)-1;
-	if (IsHandle(fd) == 0)
+	stat->st_mode = VFILE_S_IRUSR | VFILE_S_IRGRP | VFILE_S_IROTH;
+	stat->st_mode |= (attrib & FA_DIR) ? VFILE_S_IFDIR : VFILE_S_IFREG;
+	if ((attrib & FA_READONLY) == 0)
 	{
-		stat->st_mode = VFILE_S_IRUSR | VFILE_S_IRGRP | VFILE_S_IROTH;
-		// files
-		dta = Fgetdta((unsigned int)fd);
-		if ((int)dta >= 0)
-		{
-			// Attribs
-			stat->st_mode |= (dta->d_attrib & FA_DIR) ? VFILE_S_IFDIR : VFILE_S_IFREG;
-			if ((dta->d_attrib & FA_READONLY) != 0)
-			{
-				stat->st_mode |= VFILE_S_IWUSR | VFILE_S_IWGRP | VFILE_S_IWOTH;
-			}
-			stat->st_size = dta->d_length;
-			// st_uid, st_gid have no meaning for the st, so we ignore them.
-		}
+		stat->st_mode |= VFILE_S_IWUSR | VFILE_S_IWGRP | VFILE_S_IWOTH;
 	}
-	else
+	stat->st_size = size;
+	// st_uid, st_gid have no meaning for the st, so we ignore them.
+}
+
+int VfileFstat(int fd, vfile_stat* stat, int *ioErrno)
+{
+	int i = FindHandle(fd);
+	if (i < 0)
 	{
-		*ioErrno = VFILE_ERRNO_EINVAL;
+		*ioErrno = VFILE_ERRNO_EBADF;
 		return -1;
 	}
-	if ((int)dta < 0)
+	// Get file size by seeking to the end, then restore the file position.
+	int pos = Fseek(0, (unsigned short)fd, 1);
+	int size = (pos < 0) ? pos : Fseek(0, (unsigned short)fd, 2);
+	if (size < 0)
 	{
-		*ioErrno = gem_to_errno((int)dta);
+		*ioErrno = gem_to_errno(size);
 		return -1;
 	}
+	Fseek(pos, (unsigned short)fd, 0);
+	FillStat(stat, fd_attribs[i], (unsigned int)size);
 	return sizeof(vfile_stat);
 }
 
+/*
+	Note! The caller uses the same buffer (inPacket) for both fileName and stat,
+	so fileName must not be used after FillStat has been called.
+*/
 int VfileStat(const char *fileName, vfile_stat* stat, int *ioErrno)
 {
-	int fd = Fopen(fileName, 0);
-	if (fd > 0)
+	int attrib = Fattrib(fileName, 0, 0);
+	if (attrib < 0)
 	{
-		AddHandle(fd);
-		int err = VfileFstat(fd, stat, ioErrno);
-		Fclose(fd);
-		RemoveHandle(fd);
-		fd = err;
-	}
-	if (fd < 0)
-	{
-		*ioErrno = gem_to_errno(fd);
+		*ioErrno = gem_to_errno(attrib);
 		return -1;
 	}
+	int size = 0;
+	if ((attrib & FA_DIR) == 0)
+	{
+		// Directories can't be opened, but files must be opened to get the size.
+		int fd = Fopen(fileName, 0);
+		if (fd < 0)
+		{
+			*ioErrno = gem_to_errno(fd);
+			return -1;
+		}
+		size = Fseek(0, (unsigned short)fd, 2);
+		Fclose((unsigned short)fd);
+		if (size < 0)
+		{
+			*ioErrno = gem_to_errno(size);
+			return -1;
+		}
+	}
+	FillStat(stat, attrib, (unsigned int)size);
 	return sizeof(vfile_stat);
 }
