@@ -181,14 +181,11 @@ int VfileWrite(int fd, const void *buf, int offset, int nbytes, int *ioErrno)
 	int numWritten = -1;
 	if (IsHandle(fd) == 0)
 	{
-		if (offset > 0)
+		int new_file_pos = Fseek(offset, (unsigned short)fd, 0);
+		if (new_file_pos < 0)
 		{
-			int new_file_pos = Fseek(offset, (unsigned short)fd, 0);
-			if (new_file_pos < 0)
-			{
-				*ioErrno = gem_to_errno(new_file_pos);
-				return -1;
-			}
+			*ioErrno = gem_to_errno(new_file_pos);
+			return -1;
 		}
 		numWritten = Fwrite((unsigned short)fd, nbytes, buf);
 	}
@@ -205,14 +202,11 @@ int VfileRead(int fd, void *buf, int offset, int nbytes, int *ioErrno)
 	int numRead = -1;
 	if (IsHandle(fd) == 0)
 	{
-		if (offset > 0)
+		int new_file_pos = Fseek(offset, (unsigned short)fd, 0);
+		if (new_file_pos < 0)
 		{
-			int new_file_pos = Fseek(offset, (unsigned short)fd, 0);
-			if (new_file_pos < 0)
-			{
-				*ioErrno = gem_to_errno(new_file_pos);
-				return -1;
-			}
+			*ioErrno = gem_to_errno(new_file_pos);
+			return -1;
 		}
 		numRead = Fread((unsigned short)fd, nbytes, buf);
 	}
