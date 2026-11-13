@@ -300,8 +300,8 @@ unsigned char* InferiorContextMemoryAddress(unsigned char* address)
 					case 0xffff8265:	return &inferiorVdoChars[5];
 					case 0xfffffa07:	return &inferiorMfpChars[0];
 					case 0xfffffa09:	return &inferiorMfpChars[1];
-					case 0xfffffa11:	return &inferiorMfpChars[2];
-					case 0xfffffa13:	return &inferiorMfpChars[3];
+					case 0xfffffa13:	return &inferiorMfpChars[2];
+					case 0xfffffa15:	return &inferiorMfpChars[3];
 					default:			return address;
 				}
 			}
