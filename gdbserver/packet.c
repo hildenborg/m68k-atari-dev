@@ -472,14 +472,20 @@ void WriteStop(int si_signo, int si_code, bool start_break)
 	}
 }
 
-void ReadRegisters(void)
+size_t GetNumRegisterLongs(void)
 {
-	unsigned int* ptr = (unsigned int*)GetRegisters();
 	size_t num = 18;
 	if ((Cookie_FPU & (0x1f << 16)) != 0)
 	{
 		num += (8*3) + 3;
 	}
+	return num;
+}
+
+void ReadRegisters(void)
+{
+	unsigned int* ptr = (unsigned int*)GetRegisters();
+	size_t num = GetNumRegisterLongs();
 
 	for (size_t i = 0; i < num; ++i)
 	{
@@ -489,7 +495,8 @@ void ReadRegisters(void)
 
 void WriteRegisters(void)
 {
-	if (GetInPacketLength() != (sizeof(ExceptionRegisters) * 2) + 1)
+	size_t num = GetNumRegisterLongs();
+	if (GetInPacketLength() != (num * 8 + 1))
 	{
 		WriteError(1);
 	}
@@ -497,11 +504,6 @@ void WriteRegisters(void)
 	{
 		unsigned int* ptr = (unsigned int*)GetRegisters();
 		char* buf = GetInpacketPtr(1);
-		size_t num = 18;
-		if ((Cookie_FPU & (0x1f << 16)) != 0)
-		{
-			num += (8*3) + 3;
-		}
 		for (size_t i = 0; i < num; ++i)
 		{
 			ptr[i] = HexToLong(buf);
