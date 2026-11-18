@@ -11,4 +11,3 @@
 
 *cpp:
 + -D__M68K_ATARI_ELF__ -D__atari_os__
-
