@@ -26,6 +26,10 @@ An Atari specific gdb server supporting motorola 68000 and up to 68060 CPUs.
 - At most 32 software breakpoints (`NUM_MEMPOINTS`); more give `E01`. Memory reads return the inserted trap words (`0x4e40`), not the original words; gdb keeps its own copy of what it replaced.
 - The target description (`qXfer:features:read:target.xml`) is generated from register tables in `target_xml.c`, not stored as text, to save memory. It has no whitespace between elements, and the FPU feature is only included when `Fpu_Coprocessor` is set (29 registers instead of 18). To add or change registers, edit the tables; `WriteTargetXmlPart` writes any offset and length of the result.
 - Serial communication goes through the TOS BIOS `AUX` device for both the MFP (ST/STE/TT) and the SCC (Falcon, mapped with `Bconmap(7)`). Only the receive interrupt is hooked (`comm_mfp_scc.s`), to catch CTRL-C from gdb while the inferior runs. The SCC hook must cover both channel B receive vectors, 0x190 and 0x198: Hatari delivers received bytes through 0x198.
+- Stepping: `s`/`vCont;s` set the trace bit (`serverTraceBit`), and `vCont;r start,end` (range stepping) keeps tracing while pc is in the range. The range check is in the `Trace` handler in `critical.s`, which returns to the inferior without entering the server, so a range step costs no packets per instruction. Any exception that reaches `Exception()` ends the range.
+	- A Ctrl-C during range stepping may arrive in an OS interrupt handler, with the traced code further down the stack. `CtrlCException` then only ends the range and sets `ctrlCPending`; the next trace exception, back in the traced code, reports SIGINT.
+	- A traced instruction that raises an exception the server hooks (`trap #0`, division by zero) is traced to the first instruction of the server's handler. The `Trace` handler returns into it (pc between `ServerHooksStart` and `ServerHooksEnd`), so that handler reports the real exception instead of a crash in server code.
+- Stop replies send only `S`, or `T` with fp, sp, sr and pc for breakpoints, and gdb fetches the rest with `g`. gdb ignores the registers in a stop reply that doesn't name a thread first (`thread:1;`), and a reply with all registers is larger on the wire than `S05` plus an RLE compressed `g` reply, so it was tried and dropped.
 - GEMDOS is not reentrant. When the inferior stopped in supervisor mode outside its own text (`osMaybeBusy`), it may be inside a GEMDOS call, so the server must not call GEMDOS then (vFile, working dir, log file). BIOS and XBIOS calls are used instead where possible.
 
 ## Test
@@ -54,6 +58,7 @@ An Atari specific gdb server supporting motorola 68000 and up to 68060 CPUs.
 - GEMDOS file times are local time without time zone, so `stat` times are the host time plus the time zone offset.
 - `--conout 2` copies the console output (e.g. `ConOut` messages) to Hatari's stdout.
 - A blank floppy for drive A: (e.g. to test drive changes): `hmsa blank.st DS`, then `--disk-a blank.st`.
+- To count packets and wire bytes of a gdb session, `set remotelogfile <file>` before `target extended-remote` (it has no effect after connecting). Commands appear in the log as `c <command>` lines, so a single command can be cut out with `sed -n '/^c next/,/^c /p'`.
 - Run Python RSP clients with `python3 -u`, or their output is lost when `timeout` kills them.
 - `hatari-prg-args` passes the arguments with a leading space in the command line.
 - Addresses that give a bus error on ST/STE: `0x00f10000` and `0xffff8e00`. `0xffff8010` is a readable/bus error boundary.

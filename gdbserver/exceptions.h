@@ -37,6 +37,15 @@ ExceptionRegisters* GetRegisters(void);
 // Set when the server sets the trace bit in sr to single step the inferior.
 // The next exception then removes the bit from the reported sr.
 extern bool serverTraceBit;
+/*
+	Range stepping (vCont;r): while the server's trace bit is set and the stepped pc is in
+	[rangeStepStart, rangeStepEnd), the trace handler in critical.s continues the inferior without
+	entering the server. rangeStepEnd 0 means no range. Any exception that reaches Exception() ends it.
+*/
+extern unsigned int rangeStepStart;
+extern unsigned int rangeStepEnd;
+// Set by a Ctrl-C during range stepping. The next trace exception then reports SIGINT.
+extern unsigned short ctrlCPending;
 
 /*
 	True while the inferior is stopped somewhere that may be inside GEMDOS: in supervisor mode,

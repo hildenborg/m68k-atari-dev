@@ -280,24 +280,18 @@ void CmdBreakpoint(bool insert)
 	}
 }
 
-LoopState CmdContinue(bool trace)
+/*
+	Continues the inferior, or steps one instruction if trace is set.
+	With rangeEnd != 0, stepping goes on while the pc is in [rangeStart, rangeEnd).
+	The inferior must be loaded.
+*/
+static LoopState Resume(bool trace, unsigned int rangeStart, unsigned int rangeEnd)
 {
-	if (inferiorState == NOT_LOADED)
-	{
-		// Can't continue not existing inferior...
-		// Documentation doesn't specify what to do if continue cannot be performed.
-		// However, gdb treats an empty answer as command not supported, so we'll go for that. 
-		return LISTEN_TO_GDB;
-	}
-	
 	ExceptionRegisters* er = GetRegisters();
-	unsigned int add;
-	if (ReadNumber(1, &add) > 0)
-	{
-		// Set a new address to continue/step at.
-		er->pc = add;
-	}
 	serverTraceBit = trace && (er->sr & 0x8000) == 0;
+	// Range stepping is done by the trace handler, so the trace bit must be the server's.
+	rangeStepStart = rangeStart;
+	rangeStepEnd = serverTraceBit ? rangeEnd : 0;
 	if (trace)
 	{
 		er->sr |= 0x8000;
@@ -307,6 +301,69 @@ LoopState CmdContinue(bool trace)
 		er->sr &= ~0x8000;
 	}
 	return CONTINUE_EXECUTION;
+}
+
+// c and s, with an optional address to continue at.
+LoopState CmdContinue(bool trace)
+{
+	if (inferiorState == NOT_LOADED)
+	{
+		// Can't continue not existing inferior...
+		// Documentation doesn't specify what to do if continue cannot be performed.
+		// However, gdb treats an empty answer as command not supported, so we'll go for that. 
+		return LISTEN_TO_GDB;
+	}
+	unsigned int add;
+	if (ReadNumber(1, &add) > 0)
+	{
+		// Set a new address to continue/step at.
+		GetRegisters()->pc = add;
+	}
+	return Resume(trace, 0, 0);
+}
+
+/*
+	vCont;action[:thread-id][;action[:thread-id]]...
+	There is only one thread, and the leftmost action applies to it, so only the first action is used.
+	C and S carry a signal for the inferior, which TOS can't deliver, so they work like c and s.
+	r start,end steps while the pc is in [start, end).
+*/
+static LoopState CmdVCont(short offset)
+{
+	char action = *GetInpacketPtr(offset);
+	unsigned int start = 0;
+	unsigned int end = 0;
+	bool trace;
+	if (action == 'c' || action == 'C')
+	{
+		trace = false;
+	}
+	else if (action == 's' || action == 'S')
+	{
+		trace = true;
+	}
+	else if (action == 'r')
+	{
+		trace = true;
+		short o = ReadNumber(offset + 1, &start);
+		if (o < 0 || *GetInpacketPtr(o) != ',' || ReadNumber(o + 1, &end) < 0)
+		{
+			WriteError(1);
+			return LISTEN_TO_GDB;
+		}
+	}
+	else
+	{
+		WriteError(1);
+		return LISTEN_TO_GDB;
+	}
+	if (inferiorState == NOT_LOADED)
+	{
+		// An empty reply would make gdb stop using vCont.
+		WriteError(1);
+		return LISTEN_TO_GDB;
+	}
+	return Resume(trace, start, end);
 }
 
 // Decodes a hex encoded file name in place, and changes all / to \.
@@ -418,7 +475,17 @@ LoopState CmdFlexible(void)
 	short vNameEnd;
 	char* inptr = GetInpacketPtr(0);
 
-	if ((vNameEnd = StringCompare("vRun;",  inptr)) > 0)
+	if (StringCompare("vCont?", inptr) > 0)
+	{
+		// gdb only uses vCont if c and C are supported.
+		WriteString("vCont;c;C;s;S;r");
+		return LISTEN_TO_GDB;
+	}
+	else if ((vNameEnd = StringCompare("vCont;", inptr)) > 0)
+	{
+		return CmdVCont(vNameEnd);
+	}
+	else if ((vNameEnd = StringCompare("vRun;",  inptr)) > 0)
 	{
 		if (inferiorState != NOT_LOADED)
 		{

@@ -16,6 +16,9 @@
 
 ExceptionRegisters registers;
 bool serverTraceBit = false;
+unsigned int rangeStepStart = 0;
+unsigned int rangeStepEnd = 0;
+unsigned short ctrlCPending = 0;
 bool osMaybeBusy = false;
 
 typedef struct
@@ -120,6 +123,9 @@ void Exception(void)
 	// Ctrl-C (CtrlCException, number 1000) and any exception not listed below report SIGINT.
 	int si_signo = GDB_SIGINT;
 	int si_code = 0;
+	rangeStepEnd = 0;	// The inferior has stopped, so any range step is over.
+	bool ctrlC = ctrlCPending != 0;
+	ctrlCPending = 0;
 	if (serverTraceBit)
 	{
 		// The stacked sr still has the trace bit the server set for a step, both after the
@@ -154,8 +160,17 @@ void Exception(void)
 			si_code = ILL_PRVOPC;
 			break;
 		case 9:		// Trace
-			si_signo = GDB_SIGTRAP;
-			si_code = TRAP_TRACE;
+			if (ctrlC)
+			{
+				// Ctrl-C during range stepping, deferred to this trace exception.
+				si_signo = GDB_SIGINT;
+				si_code = 0;
+			}
+			else
+			{
+				si_signo = GDB_SIGTRAP;
+				si_code = TRAP_TRACE;
+			}
 			break;
 		case 31:	// NMI
 			si_signo = GDB_SIGBUS;

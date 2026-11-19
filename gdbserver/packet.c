@@ -426,7 +426,7 @@ short ReadNumber(short inOff, unsigned int* result)
 	while (offset < inPacketLength)
 	{
 		char c = inPacket[offset];
-		if (c == '=' || c == ',' || c == ':') { break; }
+		if (c == '=' || c == ',' || c == ':' || c == ';') { break; }
 		v = (v << 4) | (unsigned int)HexToNibble(c);
 		++offset;
 	}

@@ -69,6 +69,7 @@ o\name:
 
 	.text
 
+ServerHooksStart:
 	Hook BusError, 2
 	Hook AddressError, 3
 	Hook IllegalInstruction, 4
@@ -76,7 +77,46 @@ o\name:
 	| Hook CHK, 6
 	Hook TrapV, 7
 	Hook PrivilegeViolation, 8
-	Hijack Trace, 9
+	| Hijacked like Hijack does, but range stepping (vCont;r) is handled first.
+	.equ	nTrace, 9 * 4
+Trace:
+	/*
+		While range stepping, and the stepped pc is still inside [rangeStepStart, rangeStepEnd),
+		return to the inferior at once. The stacked sr still has the trace bit, so the next
+		instruction is traced too. The server is only entered when the pc leaves the range.
+		Every trace frame starts with sr and pc, on all CPUs.
+
+		A traced instruction that caused an exception the server hooks (trap #0 of a breakpoint,
+		division by zero...) is traced to the first instruction of the server's handler.
+		Return to that handler, which reports the exception.
+	*/
+	cmp.l	#ServerHooksStart, 2(a7)
+	blo.s	3f
+	cmp.l	#ServerHooksEnd, 2(a7)
+	blo.s	4f
+3:
+	tst.l	rangeStepEnd
+	beq.s	1f
+	move.l	d0, -(a7)
+	move.l	6(a7), d0		| Stacked pc.
+	cmp.l	rangeStepStart, d0
+	blo.s	2f
+	cmp.l	rangeStepEnd, d0
+	bhs.s	2f
+	move.l	(a7)+, d0
+4:
+	rte
+2:
+	move.l	(a7)+, d0
+1:
+	ori.w	#0x700, sr
+	move.l	a7, exception_a7
+	move.w	#9, exception_num
+	jsr		HandleException
+	move.l	exception_a7, a7
+	rte
+oTrace:
+	jmp 	0x12345678
 	Hook NMI, 31
 	Hijack BreakPoint, 32
 
@@ -88,6 +128,7 @@ o\name:
 	Hook FPOverflow, 53
 	Hook FPSignalingNAN, 54
 	Hook FPUnimplemented, 55
+ServerHooksEnd:
 
 	.global InitExceptions
 InitExceptions:
@@ -189,6 +230,18 @@ ResetFpuControl:
 	.global CtrlCException
 CtrlCException:
 	.func CtrlCException
+	/*
+		While range stepping, the interrupt may have come in an OS interrupt handler, which isn't
+		traced, with the traced inferior code further down the stack. Stopping there would leave the
+		server's trace bit in that code. Instead, end the range and stop at the next trace exception,
+		which comes when the traced code runs again.
+	*/
+	tst.l	rangeStepEnd
+	beq.s	1f
+	clr.l	rangeStepEnd
+	move.w	#1, ctrlCPending
+	rte
+1:
 	move.l	a7, exception_a7
 	move.w	#1000, exception_num	| made up ctrl-c exception num
 	jsr		HandleException
