@@ -160,9 +160,30 @@ bool Mfp_IsConnected(void)
 }
 
 
-// Sends a byte through the BIOS AUX device, which TOS maps to the MFP or SCC port.
+// Number of bytes in a TOS ring buffer.
+static short RingCount(const struct IOREC* ring)
+{
+	short count = ring->ibuftl - ring->ibufhd;
+	return count < 0 ? count + ring->ibufsiz : count;
+}
+
+/*
+	Sends a byte through the BIOS AUX device, which TOS maps to the MFP or SCC port.
+	Each BIOS call is a trap, which costs a lot per byte. So when there is room in the
+	TOS output buffer (which follows the input buffer record), Bconout is called directly,
+	as it will not block. Only a full buffer needs Bcostat and the connection check.
+*/
 static int AuxTransmitByte(unsigned char byte, _IsConnected isConnected)
 {
+	if (serialInput != 0)
+	{
+		const struct IOREC* output = serialInput + 1;
+		if (RingCount(output) < output->ibufsiz - 2)
+		{
+			Bconout(DEV_AUX, (unsigned short)byte);
+			return 0;
+		}
+	}
 	if (Bcostat(DEV_AUX) == 0)
 	{
 		if (!isConnected())
@@ -175,9 +196,31 @@ static int AuxTransmitByte(unsigned char byte, _IsConnected isConnected)
 	return 0;
 }
 
-// Receives a byte through the BIOS AUX device, which TOS maps to the MFP or SCC port.
+/*
+	Receives a byte through the BIOS AUX device, which TOS maps to the MFP or SCC port.
+	To avoid two BIOS traps per byte, the byte is read directly from our input buffer
+	while it holds less than the low water mark. TOS only does flow control (RTS) near
+	the high water mark, and above the low water mark Bconin is used, so TOS can turn
+	RTS back on. Like TOS, the head index is advanced first and then the byte is read.
+*/
 static int AuxReceiveByte(_IsConnected isConnected)
 {
+	struct IOREC* input = serialInput;
+	if (input != 0 && RingCount(input) < input->ibuflow)
+	{
+		if (input->ibufhd == input->ibuftl)
+		{
+			return isConnected() ? COMM_ERR_NOT_READY : COMM_ERR_DISCONNECTED;
+		}
+		short head = input->ibufhd + 1;
+		if (head >= input->ibufsiz)
+		{
+			head = 0;
+		}
+		unsigned char byte = input->ibuf[head];
+		input->ibufhd = head;	// Written after the read, so the interrupt can't overwrite the byte.
+		return byte;
+	}
 	if (Bconstat(DEV_AUX) == 0)
 	{
 		if (!isConnected())

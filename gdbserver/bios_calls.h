@@ -148,8 +148,8 @@ struct IOREC
 {
 	unsigned char* ibuf;			// Buffer
 	short ibufsiz;					// Buffer size in bytes
-	volatile short ibufhd;			// Head index (next read position)
-	volatile short ibuftl;			// Tail index (next write position)
+	volatile short ibufhd;			// Head index (last byte read; advanced before reading)
+	volatile short ibuftl;			// Tail index (last byte written; advanced before writing)
 	short ibuflow;					// Low water mark, for flow control
 	short ibufhi;					// High water mark, for flow control
 };
