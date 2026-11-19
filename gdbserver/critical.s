@@ -120,10 +120,14 @@ InitExceptions:
 	HookVector FPOverflow
 	HookVector FPSignalingNAN
 	HookVector FPUnimplemented
+	/*
+		Save the system FPU control register, so it can be restored on exit, and given to each new inferior.
+		FPU exception traps are left as the system has them (normally all disabled).
+		Enabling them here would make e.g. any inexact float result (like 1.0/3.0) trap in the inferior.
+		An inferior that enables traps itself will still be caught by the hooked vectors above.
+	*/
 	fmove.l	fpcr, d0
 	move.l	d0, fpucr_save
-	or.w	#0xff00, d0	| fpu exception, enable all exceptions.
-	fmove.l	d0, fpcr
 1:
 	move.w	(a7)+, sr
 	moveq	#0, d0
@@ -164,6 +168,26 @@ RestoreExceptions:
 1:
 	move.w	(a7)+, sr
 	moveq	#0, d0
+	rts
+	.endfunc
+
+/*
+	Gives a new inferior the system FPU control register and a cleared FPU status register,
+	instead of whatever a previously debugged inferior (or gdb) left in them.
+	Can be called in user mode, as fmove to/from fpcr and fpsr is not privileged.
+*/
+	.global ResetFpuControl
+ResetFpuControl:
+	.func ResetFpuControl
+	move.l	Cookie_FPU, d0
+	swap	d0
+	and.w	#0x1e, d0
+	jeq		1f
+	move.l	fpucr_save, d0
+	fmove.l	d0, fpcr
+	moveq	#0, d0
+	fmove.l	d0, fpsr
+1:
 	rts
 	.endfunc
 

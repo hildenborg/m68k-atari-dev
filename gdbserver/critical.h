@@ -22,6 +22,10 @@ int ExceptionSafeMemoryWrite(unsigned char* address, unsigned char c);
 // Supervisor mode not needed.
 int GetExceptionNum(void);
 
+// Supervisor mode not needed.
+// Sets FPU control to the system default and clears FPU status, before starting a new inferior.
+void ResetFpuControl(void);
+
 void CtrlCException(void);
 
 #endif // CRITICAL_DEFINED

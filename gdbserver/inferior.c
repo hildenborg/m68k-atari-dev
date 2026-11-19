@@ -6,6 +6,7 @@
 #include "bios_calls.h"
 #include "exceptions.h"
 #include "log.h"
+#include "critical.h"
 
 #define MINTELF_RESERVED 0x454c4628
 #define M68K_ATARI_ELF_RESERVED 0x68e1f001	// 68e1f = haxxor 68elf. 001 is version number.
@@ -78,6 +79,7 @@ bool RunInferior(int* return_code)
 	// Run inferior while saving and restoring various system properties.
 	inferiorState = RUNNING;
 	inferiorTerminatedByServer = false;
+	ResetFpuControl();	// Don't let FPU settings from a previous inferior leak into this one.
 //	*return_code = Pexec(PE_GOTHENFREE, 0, (const char*)inferiorBasePage, 0); // Requires GEMDOS 0.19 or above.
 	*return_code = Pexec(PE_GO, 0, (const char*)inferiorBasePage, 0);
 	Mfree(inferiorBasePage->p_env);
