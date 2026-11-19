@@ -144,7 +144,7 @@ int Fread(unsigned short bios_handle, int length, void* buf)
 		TRAP_FUNC(1, 0x3f)
 		: "=r" (result)
 		: "r" (bios_handle), "r" (length), "r" (buf)
-		: CLOBBER_REG);
+		: CLOBBER_REG, "memory");	// Writes to *buf.
 	return result;
 }
 
@@ -159,7 +159,7 @@ int Fwrite(unsigned short bios_handle, int length, const void* buf)
 		TRAP_FUNC(1, 0x40)
 		: "=r" (result)
 		: "r" (bios_handle), "r" (length), "r" (buf)
-		: CLOBBER_REG);
+		: CLOBBER_REG, "memory");	// Reads from *buf.
 	return result;
 }
 
@@ -240,7 +240,7 @@ int Pexec(unsigned short mode, const char* file_name, const char* cmdline, const
 		TRAP_FUNC(1, 0x4b)
 		: "=r" (result) 
 		: "r" (mode), "r" (file_name), "r" (cmdline), "r" (envstring)
-		: CLOBBER_REG);
+		: CLOBBER_REG, "memory");	// Runs the program, which may change any memory.
 	return result;
 }
 
@@ -372,6 +372,6 @@ int Supexec(int (*callback)(void))
 		TRAP_FUNC(14, 0x26)
 		: "=r" (callback_return) 
 		: "r" (callback)
-		: CLOBBER_REG);
+		: CLOBBER_REG, "memory");	// The callback may change any memory.
 	return callback_return;
 }

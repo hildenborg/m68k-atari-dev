@@ -131,6 +131,55 @@ void StoreDefaultWorkPath(void)
 	}
 }
 
+/*
+	Makes inferior_filename absolute, relative to the server's start dir (inferior_workpath).
+	QSetWorkingDir changes the current dir, and a relative name would then be looked up
+	in the inferior's working dir when it is (re)loaded.
+	Must be called after StoreDefaultWorkPath(). Names with a drive letter are left as they are.
+*/
+void MakeInferiorFilenameAbsolute(void)
+{
+	char* name = inferior_filename;
+	for (char* p = name; *p != 0; ++p)
+	{
+		if (*p == '/') {*p = '\\';}
+	}
+	if (name[0] == 0 || name[1] == ':')
+	{
+		return;
+	}
+	char buf[MAX_PATH_LEN];
+	char* out = buf;
+	char* end = buf + MAX_PATH_LEN - 1;	// Room for terminating zero.
+	if (name[0] == '\\')
+	{
+		// Absolute path on the start drive.
+		*out++ = inferior_workpath[0];
+		*out++ = ':';
+	}
+	else
+	{
+		for (const char* p = inferior_workpath; *p != 0 && out < end; ++p)
+		{
+			*out++ = *p;
+		}
+		if (out[-1] != '\\' && out < end)
+		{
+			*out++ = '\\';
+		}
+	}
+	for (const char* p = name; *p != 0; ++p)
+	{
+		if (out >= end)
+		{
+			return;	// Too long, keep the relative name.
+		}
+		*out++ = *p;
+	}
+	*out = 0;
+	StrCopy(buf, inferior_filename);
+}
+
 // Returns false if the drive or path doesn't exist.
 bool CmdSetWorkingDir(short vNameEnd)
 {
@@ -390,6 +439,7 @@ LoopState CmdFlexible(void)
 		// Get filename and command line arguments
 		// If filename is empty, then restart previous inferior.
 		GetInferiorNameAndArgs(vNameEnd, inferior_filename, inferior_cmdline);
+		MakeInferiorFilenameAbsolute();
 		DbgOut("Run: \r\n\tinferior: ");
 		DbgOut(inferior_filename);
 		DbgOut("\r\n\targs: ");
@@ -754,6 +804,7 @@ int ServerMain(bool loadRequest)
 	
 	InitFileIO();
 	StoreDefaultWorkPath();
+	MakeInferiorFilenameAbsolute();
 
 	inferiorState = NOT_LOADED;
 	
