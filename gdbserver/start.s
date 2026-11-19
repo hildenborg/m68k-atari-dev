@@ -62,6 +62,8 @@ _start:
 2:
 	subq.w	#1, d2
 	bcc.s	1b
+	tst.b	(a1)
+	beq.s	3f				| Command line starts with space, so no empty first argument.
 	move.l	a1, -(a7)
 	addq.w	#1, d0
 3:

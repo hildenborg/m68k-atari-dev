@@ -25,7 +25,8 @@
 
 	gdbsrv.ttp	[options] [comm] prog [args]
 
-	comm	(Default if missing: AUX)
+	comm	(Default if missing: AUX, or SDBG if a plugin is installed)
+		Starts with AUX, COM or SDBG, and has no '.', so it can't be confused with a program name.
 	prog	(Default if missing: turns on option --multi)
 		The executable you want to debug.
 	args
@@ -39,6 +40,18 @@
 			Starts the server without any executable to debug.
 			Waits for gdb to connect with target extended-remote and tell us what executable to debug.
 */
+static bool IsCommName(const char* arg)
+{
+	for (const char* p = arg; *p != 0; ++p)
+	{
+		if (*p == '.')
+		{
+			return false;	// Program names have an extension.
+		}
+	}
+	return StringCompare("AUX", arg) > 0 || StringCompare("COM", arg) > 0 || StringCompare("SDBG", arg) > 0;
+}
+
 int HandleOptions(int argc, char** argv)
 {
 	int result = 0;
@@ -102,7 +115,7 @@ int HandleOptions(int argc, char** argv)
 					result = -1;
 				}
 			}
-			else if (StringCompare("COM", argv[i]) > 0)
+			else if (IsCommName(argv[i]))
 			{
 				StrCopy(argv[i], com_method);
 				DbgOut("Using connection: ");
