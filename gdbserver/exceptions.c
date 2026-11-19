@@ -26,8 +26,6 @@ typedef struct
 
 MemBreak mempoints[NUM_MEMPOINTS];
 
-extern void DbgOutVal(const char* name, unsigned int val);
-
 bool IsPcInText(const struct BasePage* basePage)
 {
 	if (basePage == NULL)
@@ -119,6 +117,7 @@ int IsBreakpoint(unsigned short* addr)
 
 void Exception(void)
 {
+	// Ctrl-C (CtrlCException, number 1000) and any exception not listed below report SIGINT.
 	int si_signo = GDB_SIGINT;
 	int si_code = 0;
 	if (serverTraceBit)
@@ -146,12 +145,6 @@ void Exception(void)
 			si_signo = GDB_SIGFPE;
 			si_code = FPE_INTDIV;
 			break;
-		/*
-		case 6:		// CHK
-			si_signo = SIGFPE;
-			si_code = ;
-			break;
-		*/
 		case 7:		// TrapV
 			si_signo = GDB_SIGFPE;
 			si_code = FPE_INTOVF;
@@ -221,14 +214,6 @@ void Exception(void)
 		case 55:	// FPUnimplemented
 			si_signo = GDB_SIGFPE;
 			si_code = FPE_FLTINV;
-			break;
-		case 1000:	// CtrlCException
-			si_signo = GDB_SIGINT;
-			si_code = 0;
-			break;
-		default:	// Anything else.
-			si_signo = GDB_SIGINT;
-			si_code = 0;
 			break;
 	}
 	ServerCommandLoop(si_signo, si_code);

@@ -14,8 +14,6 @@ extern bool	noAckMode;
 
 char* GetInpacketPtr(short offset);
 short GetInPacketLength(void);
-char* GetOutpacketPtr(short offset);
-short GetOutPacketLength(void);
 void ClearOutPacket(void);
 
 void ReceivePacket(void);
@@ -51,7 +49,5 @@ void WriteMemory(bool isSupervisorMode);
 void ReadMemory(bool isSupervisorMode);
 
 #define WriteOK() WriteString("OK")
-#define WriteEQ() WriteString("EQ")
-#define WriteNE() WriteString("NE")
 
 #endif // PACKET_DEFINED

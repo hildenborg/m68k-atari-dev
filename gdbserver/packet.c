@@ -29,9 +29,6 @@ char	outPacket[PACKET_SIZE + 1] __attribute__((aligned(2)));
 
 bool	noAckMode = false;				// gdb QStartNoAckMode
 
-// server
-int CheckServerQuitKey(void);
-
 char* GetInpacketPtr(short offset)
 {
 	return &inPacket[offset];
@@ -40,16 +37,6 @@ char* GetInpacketPtr(short offset)
 short GetInPacketLength(void)
 {
 	return inPacketLength;
-}
-
-char* GetOutpacketPtr(short offset)
-{
-	return &outPacket[offset];
-}
-
-short GetOutPacketLength(void)
-{
-	return outPacketLength;
 }
 
 void ClearOutPacket(void)
@@ -636,14 +623,14 @@ void ReadRegisters(void)
 void WriteRegisters(void)
 {
 	size_t num = GetNumRegisterLongs();
-	if (GetInPacketLength() != (num * 8 + 1))
+	if (inPacketLength != (num * 8 + 1))
 	{
 		WriteError(1);
 	}
 	else
 	{
 		unsigned int* ptr = (unsigned int*)GetRegisters();
-		char* buf = GetInpacketPtr(1);
+		char* buf = inPacket + 1;
 		for (size_t i = 0; i < num; ++i)
 		{
 			ptr[i] = HexToLong(buf);

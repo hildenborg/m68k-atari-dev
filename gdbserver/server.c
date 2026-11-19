@@ -256,37 +256,27 @@ void CmdQuery(void)
 	}
 }
 
-// Only support software breakpoints
-void CmdSetBreakpoint(void)
+// Z0 and z0. Only software breakpoints are supported, other types get an empty reply.
+void CmdBreakpoint(bool insert)
 {
 	unsigned char* addr;
 	unsigned int len;
-	short offset = GetAddressAndLength(3, false, &addr, &len);
-	char *inptr = GetInpacketPtr(1);
-	if (offset > 0 && *inptr == '0')
+	if (GetAddressAndLength(3, false, &addr, &len) <= 0 || *GetInpacketPtr(1) != '0')
 	{
-		if (InsertMemoryBreakpoint((unsigned short*)addr) == 0)
-		{
-			WriteOK();
-		}
-		else
-		{
-			WriteError(1);
-		}
+		return;
 	}
-}
-
-// Only support software breakpoints
-void CmdClearBreakpoint(void)
-{
-	unsigned char* addr;
-	unsigned int len;
-	short offset = GetAddressAndLength(3, false, &addr, &len);
-	char *inptr = GetInpacketPtr(1);
-	if (offset > 0 && *inptr == '0')
+	if (!insert)
 	{
 		RemoveMemoryBreakpoint((unsigned short*)addr);
 		WriteOK();
+	}
+	else if (InsertMemoryBreakpoint((unsigned short*)addr) == 0)
+	{
+		WriteOK();
+	}
+	else
+	{
+		WriteError(1);
 	}
 }
 
@@ -476,32 +466,30 @@ LoopState CmdReportStopReason(int si_signo, int si_code, bool* skipAck)
 		}
 		else
 		{
-			// gdbserver returns W00, and so do we.
-			WriteString("W00");	// Means that pcrocess 00 have exited.
-			if (!extendedMode)
+			// gdbserver replies W00 (process exited), and so do we.
+			WriteString("W00");
+			if (extendedMode)
 			{
-				// GDB expects us to exit gdbserver now.
-				loopState = KILL;
-				// Send packet also...
-				TransmitPacket(*skipAck);
+				// The loop sends it without waiting for the ack. ReceivePacket skips a late '+'.
+				*skipAck = true;
 			}
-			*skipAck = true; // Even for extended mode?				
+			else
+			{
+				// gdb expects the server to exit now. KILL leaves the loop without transmitting, so send it here.
+				TransmitPacket(false);
+				loopState = KILL;
+			}
 		}
 	}
 	else if (inferiorState == RUNNING)
 	{
-		// We have indeed a running inferior and it have cast an exception.
+		// The running inferior is stopped by an exception.
 		SendStopCode(si_signo, si_code);
-	}
-	else if (inferiorState == LOADED)
-	{
-		// Need to start the inferior to deliver the resonse.
-		loopState = CONTINUE_EXECUTION;
 	}
 	else
 	{
-		// Don't even know how to get here... Well, return OK anyway just to make the code look good.
-		WriteOK();
+		// LOADED: the inferior must be started to stop at _start, which gives the reply.
+		loopState = CONTINUE_EXECUTION;
 	}
 	return loopState;
 }
@@ -568,46 +556,53 @@ LoopState HandleBreakResponse(int si_signo, int si_code, bool* isSupervisorMode)
 			loopState = KILL;
 			silentStop = false;
 		}
+		SendStopCode(si_signo, si_code);	// Also clears the start break.
 		if (silentStop)
 		{
-			// Restarted by the R packet, which has no reply. Handle the stop (this clears
-			// the start break), but don't transmit it. gdb asks with '?' if it wants it.
+			// Restarted by the R packet, which has no reply. Don't transmit the stop,
+			// gdb asks with '?' if it wants it.
 			silentStop = false;
-			SendStopCode(si_signo, si_code);
 			ClearOutPacket();
 		}
 		else
 		{
-			// Write stop packet to gdb.
-			SendStopCode(si_signo, si_code);
 			TransmitPacket(false);
 		}
 	}
 	return loopState;
 }
 
-void HandleCommandLoopExit(LoopState loopState, int si_signo, bool* isSupervisorMode)
+/*
+	Frees a loaded inferior, or terminates a running one. Terminating doesn't return here:
+	execution continues after Pexec in RunInferior.
+*/
+static void UnloadInferior(int si_signo)
+{
+	if (inferiorState == LOADED)
+	{
+		FreeInferior();	// Not started, so only its memory must be freed.
+	}
+	else if (inferiorState == RUNNING)
+	{
+		TerminateInferior(si_signo);
+	}
+}
+
+void HandleCommandLoopExit(LoopState loopState, int si_signo)
 {
 	if (loopState == KILL)
 	{
 		// If we have an inferior, we need to terminate it properly.
 		DbgOut("ServerCommandLoop: command KILL.\r\n");
 		DbgOutVal("\tinferiorState: ", inferiorState);
-		if (inferiorState == LOADED)
+		if (inferiorState == NOT_LOADED)
 		{
-			// Not started, so we just need to free the memory taken by it.
-			FreeInferior();
-		}
-		else if (inferiorState == RUNNING)
-		{
-			TerminateInferior(si_signo);	// no-return function! Code execution continues after RunInferior below.
-		}
-		else if (inferiorState == NOT_LOADED)
-		{
-			// If we don't have any inferior loaded and still requests to kill,
-			// then let's assume that we want to shut down the gdbserver.
-			// Meaning: end of extendedMode if set.
+			// A kill with no inferior loaded shuts down the server: end extended mode if set.
 			extendedMode = false;
+		}
+		else
+		{
+			UnloadInferior(si_signo);
 		}
 	}
 	else if(loopState == CONTINUE_EXECUTION)
@@ -634,7 +629,6 @@ void HandleCommandLoopExit(LoopState loopState, int si_signo, bool* isSupervisor
 			ResetServerContext();
 			if (!terminatedByServer)
 			{
-				*isSupervisorMode = false;
 				// Report process exit and inferior return code to gdb.
 				ClearOutPacket();
 				WriteChar('W');
@@ -677,15 +671,7 @@ void HandleCommandLoopExit(LoopState loopState, int si_signo, bool* isSupervisor
 		}
 		loadInferiorRequested = true;
 		userCodeForCommandLoop = USERCODE_RESTART;
-		if (inferiorState == LOADED)
-		{
-			// Not started, so we just need to free the memory taken by it.
-			FreeInferior();
-		}
-		else if (inferiorState == RUNNING)
-		{
-			TerminateInferior(si_signo);	// no-return function! Code execution continues in RunInferior.
-		}
+		UnloadInferior(si_signo);
 	}
 }
 
@@ -793,10 +779,8 @@ void ServerCommandLoop(int si_signo, int si_code)
 			CmdQuery();
 			break;
 		case 'z':	// Clear breakpoint
-			CmdClearBreakpoint();
-			break;
 		case 'Z':	// Set breakpoint
-			CmdSetBreakpoint();
+			CmdBreakpoint(inptr[0] == 'Z');
 			break;
 		default:
 			DbgRemOut("\tNot supported, ignoring...\r\n");
@@ -808,7 +792,7 @@ void ServerCommandLoop(int si_signo, int si_code)
 		}
 	}
 	
-	HandleCommandLoopExit(loopState, si_signo, &isSupervisorMode);
+	HandleCommandLoopExit(loopState, si_signo);
 
 	DbgOut("ServerCommandLoop: exiting\r\n");
 }

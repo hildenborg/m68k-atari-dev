@@ -9,8 +9,6 @@
 #include "clib.h"
 #include "cookies.h"
 
-int CheckServerQuitKey(void);
-
 volatile short CtrlC_enable;
 volatile unsigned char Mfp_ActiveEdgeRegister;
 

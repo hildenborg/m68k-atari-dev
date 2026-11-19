@@ -73,7 +73,7 @@ int LoadInferior(const char* fileName, const char* cmdLine, const char* environm
 	}
 	else
 	{
-			DbgOut("Error - not unloaded!\r\n");
+		DbgOut("Error - not unloaded!\r\n");
 	}
 	return loadres;
 }

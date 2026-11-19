@@ -25,10 +25,8 @@ extern bool run_once;
 
 int ServerMain(bool loadRequest);
 void ServerCommandLoop(int si_signo, int si_code);
-
-// Helper macros for debugging pursposes
-#define BREAKPOINT_OP asm ("trap #0");
-#define ILLEGAL_OP asm ("illegal");
+// Returns -1 if the user pressed the key that quits the server.
+int CheckServerQuitKey(void);
 
 #ifdef __cplusplus
 }
