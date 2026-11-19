@@ -104,6 +104,19 @@ void SetServerContext(void)
 	Supexec(SetServerContext_super);
 }
 
+int ResetServerContext_super(void)
+{
+	RestoreVectors(serverVectors);
+	RestoreMemoryRegisters(serverLongs, serverBytes, 0xffff);
+	ClearInternalCaches();
+	return 0;
+}
+
+void ResetServerContext(void)
+{
+	Supexec(ResetServerContext_super);
+}
+
 unsigned short GetMfpChangedMask(void)
 {
 	unsigned int* serverMfpVecs = &serverVectors[NUM_IRQ_VECTORS];
@@ -278,32 +291,42 @@ unsigned char* InferiorContextMemoryAddress(unsigned char* address)
 	else if (la >= 0xffff8000)
 	{
 		// 0xffff8000.w to 0xffffffff.w
+		// The MFP registers are stored on all machines.
+		unsigned char* inferiorMfpChars = &inferiorBytes[NUM_VDO_BYTES];
+		switch (la)
+		{
+			case 0xfffffa07:	return &inferiorMfpChars[0];
+			case 0xfffffa09:	return &inferiorMfpChars[1];
+			case 0xfffffa13:	return &inferiorMfpChars[2];
+			case 0xfffffa15:	return &inferiorMfpChars[3];
+			default:			break;
+		}
 		if ((Cookie_MCH >> 16) <= 1)
 		{
 			// Just handle st/ste shifter for now.
-			// It's really only necessary when we want to display anything in gdbserver... 
+			// It's really only necessary when we want to display anything in gdbserver...
 			if (la >= 0xffff8240 && la < 0xffff8260)
 			{
 				unsigned char* inferiorVdoLongs = (unsigned char*)(inferiorLongs + NUM_SYS_LONGS);
 				return &inferiorVdoLongs[la - 0xffff8240];
 			}
-			else
+			unsigned char* inferiorVdoChars = (inferiorBytes);
+			switch (la)
 			{
-				unsigned char* inferiorVdoChars = (inferiorBytes);
-				unsigned char* inferiorMfpChars = &inferiorBytes[NUM_VDO_BYTES];
+				case 0xffff8201:	return &inferiorVdoChars[0];
+				case 0xffff8203:	return &inferiorVdoChars[1];
+				case 0xffff820a:	return &inferiorVdoChars[2];
+				case 0xffff8260:	return &inferiorVdoChars[3];
+				default:			break;
+			}
+			if (Cookie_VDO == 0x10000)
+			{
+				// STE shifter registers are only stored on STE.
 				switch (la)
 				{
-					case 0xffff8201:	return &inferiorVdoChars[0];
-					case 0xffff8203:	return &inferiorVdoChars[1];
-					case 0xffff820a:	return &inferiorVdoChars[2];
-					case 0xffff8260:	return &inferiorVdoChars[3];
 					case 0xffff820d:	return &inferiorVdoChars[4];
 					case 0xffff8265:	return &inferiorVdoChars[5];
-					case 0xfffffa07:	return &inferiorMfpChars[0];
-					case 0xfffffa09:	return &inferiorMfpChars[1];
-					case 0xfffffa13:	return &inferiorMfpChars[2];
-					case 0xfffffa15:	return &inferiorMfpChars[3];
-					default:			return address;
+					default:			break;
 				}
 			}
 		}

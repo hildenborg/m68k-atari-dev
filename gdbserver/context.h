@@ -24,6 +24,11 @@ void SwitchToServerContext(void);
 // This saves inferior context anyway, as unloaded inferiors might leave garbage that crashes later.
 void SetServerContext(void);
 
+// Restores the server context fully, after the inferior has terminated.
+// While an inferior is stopped, MFP interrupts whose vectors it changed are disabled, and
+// they stay disabled after the inferior is gone unless this is called.
+void ResetServerContext(void);
+
 // Returns a pointer to either the same address or a shadow address containing the inferior data.
 unsigned char* InferiorContextMemoryAddress(unsigned char* address);
 

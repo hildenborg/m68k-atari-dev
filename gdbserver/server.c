@@ -601,11 +601,18 @@ void HandleCommandLoopExit(LoopState loopState, int si_signo, bool* isSupervisor
 		if (inferiorState == LOADED)
 		{
 			int return_code = 0;
-			if (!RunInferior(&return_code))	// Returns after inferior is terminated.
+			bool terminatedByServer = RunInferior(&return_code);	// Returns after inferior is terminated.
+			if (!terminatedByServer)
 			{
-				*isSupervisorMode = false;		
-				// Inferior terminated itself.
+				// Inferior terminated itself. Save its context, as it may have left garbage behind.
 				SetServerContext();
+			}
+			// The inferior is gone, so its vectors are no longer in use and the MFP
+			// interrupts disabled for it must be enabled again.
+			ResetServerContext();
+			if (!terminatedByServer)
+			{
+				*isSupervisorMode = false;
 				// Report process exit and inferior return code to gdb.
 				ClearOutPacket();
 				WriteChar('W');
