@@ -31,7 +31,6 @@ bool	noAckMode = false;				// gdb QStartNoAckMode
 
 // server
 int CheckServerQuitKey(void);
-extern unsigned int numOfCpuRegisters;
 
 char* GetInpacketPtr(short offset)
 {
@@ -379,7 +378,7 @@ short ReadNumber(short inOff, unsigned int* result)
 	unsigned int v = 0;
 	short offset = inOff;
 
-	while (offset < inPacketLength && inPacket[offset] != '=')
+	while (offset < inPacketLength)
 	{
 		char c = inPacket[offset];
 		if (c == '=' || c == ',' || c == ':') { break; }
@@ -518,7 +517,6 @@ void WriteFileResponse(int result, int ioErrno, const char* attachment)
 		for (int i = 0; i < result; ++i)
 		{
 			WriteChar(attachment[i]);
-			//WriteByte(attachment[i]);
 		}
 	}
 }
@@ -551,14 +549,19 @@ void WriteStop(int si_signo, int si_code, bool gdb_break)
 	}
 }
 
-size_t GetNumRegisterLongs(void)
+/*
+	gdb knows 18 CPU registers, plus 11 FPU registers when the FPU registers are saved
+	(8 data registers of 3 longs each, and 3 control registers). target.xml describes the same.
+*/
+static unsigned int GetNumRegisters(void)
 {
-	size_t num = 18;
-	if (Fpu_Coprocessor != 0)
-	{
-		num += (8*3) + 3;
-	}
-	return num;
+	return Fpu_Coprocessor != 0 ? 18 + 11 : 18;
+}
+
+// Number of longs the registers take in ExceptionRegisters, and in the g and G packets.
+static size_t GetNumRegisterLongs(void)
+{
+	return Fpu_Coprocessor != 0 ? 18 + (8 * 3) + 3 : 18;
 }
 
 void ReadRegisters(void)
@@ -596,7 +599,7 @@ void WriteRegisters(void)
 	Finds where gdb register number idx is stored in ExceptionRegisters, as an index of longs.
 	gdb numbers: 0-17 CPU registers, 18-25 FPU data registers (96 bits, 3 longs each),
 	26-28 FPU control, status and instruction address registers.
-	Returns the number of longs the register takes. idx must be below numOfCpuRegisters.
+	Returns the number of longs the register takes. idx must be below GetNumRegisters().
 */
 static short RegisterLongs(unsigned int idx, unsigned int* longIndex)
 {
@@ -620,7 +623,7 @@ void WriteRegister(void)
 	short offset;
 	unsigned int idx;
 	// Registers we don't have are ignored.
-	if ((offset = ReadNumber(1, &idx)) > 0 && idx < numOfCpuRegisters)
+	if ((offset = ReadNumber(1, &idx)) > 0 && idx < GetNumRegisters())
 	{
 		unsigned int longIndex;
 		short numLongs = RegisterLongs(idx, &longIndex);
@@ -646,7 +649,7 @@ void ReadRegister(void)
 	unsigned int* rptr = (unsigned int*)GetRegisters();
 	unsigned int idx;
 	// An empty reply for registers we don't have.
-	if (ReadNumber(1, &idx) > 0 && idx < numOfCpuRegisters)
+	if (ReadNumber(1, &idx) > 0 && idx < GetNumRegisters())
 	{
 		unsigned int longIndex;
 		short numLongs = RegisterLongs(idx, &longIndex);

@@ -15,7 +15,6 @@
 // Don't use when serial communication, it's not good enough.
 //#define QStartNoAckMode
 
-#define qXfer_features
 #include <stddef.h>
 #include <stdbool.h>
 #include "gdb_defines.h"
@@ -47,12 +46,9 @@ typedef enum
 #define USERCODE_ERROR		-1
 #define USERCODE_WARNING	-2
 
-const char serverFeatures[] = "PacketSize=3ff;swbreak+;QSetWorkingDir+"
+const char serverFeatures[] = "PacketSize=3ff;swbreak+;QSetWorkingDir+;qXfer:features:read+"
 	#ifdef QStartNoAckMode
 	";QStartNoAckMode+"
-	#endif
-	#ifdef qXfer_features
-	";qXfer:features:read+"
 	#endif
 	;
 
@@ -68,30 +64,21 @@ int		userCodeForCommandLoop = USERCODE_SILENT;				// Used as si_code when callin
 int		userCodeIfError = USERCODE_ERROR;						// Will be copied to userCodeForCommandLoop if inferior loading fails.
 bool	silentStop = false;										// Set when the next stop should not be reported, as gdb will ask with '?'.
 
-unsigned int	numOfCpuRegisters	=	18;
-
 void OutputCrashInfo(void)
 {
-	ExceptionRegisters* registers = GetRegisters();
+	// In the order of the CPU registers in ExceptionRegisters.
+	static const char* const names[18] =
+	{
+		"D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7",
+		"A0", "A1", "A2", "A3", "A4", "A5", "A6", "SP",
+		"SR", "PC"
+	};
+	const unsigned int* registers = (const unsigned int*)GetRegisters();
 	ConOut("Crash report:\r\n");
-	ConOutVal("D0", registers->d0);
-	ConOutVal("D1", registers->d1);
-	ConOutVal("D2", registers->d2);
-	ConOutVal("D3", registers->d3);
-	ConOutVal("D4", registers->d4);
-	ConOutVal("D5", registers->d5);
-	ConOutVal("D6", registers->d6);
-	ConOutVal("D7", registers->d7);
-	ConOutVal("A0", registers->a0);
-	ConOutVal("A1", registers->a1);
-	ConOutVal("A2", registers->a2);
-	ConOutVal("A3", registers->a3);
-	ConOutVal("A4", registers->a4);
-	ConOutVal("A5", registers->a5);
-	ConOutVal("A6", registers->a6);
-	ConOutVal("SP", registers->sp);
-	ConOutVal("SR", registers->sr);
-	ConOutVal("PC", registers->pc);
+	for (short i = 0; i < 18; ++i)
+	{
+		ConOutVal(names[i], registers[i]);
+	}
 	struct BasePage* serverBasePage = _BasePage; // Defined in crt0
 	ConOutVal("Server _start: ", (unsigned int)serverBasePage->p_tbase);
 }
@@ -145,10 +132,7 @@ void StoreDefaultWorkPath(void)
 void MakeInferiorFilenameAbsolute(void)
 {
 	char* name = inferior_filename;
-	for (char* p = name; *p != 0; ++p)
-	{
-		if (*p == '/') {*p = '\\';}
-	}
+	VfileFixPath(name);
 	if (name[0] == 0 || name[1] == ':')
 	{
 		return;
@@ -223,10 +207,7 @@ bool CmdSetWorkingDir(short vNameEnd)
 	if (len > 0)
 	{
 		// Set path, but make sure we make all / to \ first.
-		for (char *p = ptr; *p != 0; ++p)
-		{
-			if (*p == '/') {*p = '\\';}
-		}
+		VfileFixPath(ptr);
 		if (Dsetpath(ptr) < 0)
 		{
 			// GEMDOS keeps a current path per drive, so a failed Dsetpath has not changed any path.
@@ -340,6 +321,14 @@ LoopState CmdContinue(bool trace)
 	return CONTINUE_EXECUTION;
 }
 
+// Decodes a hex encoded file name in place, and changes all / to \.
+static char* DecodeFileName(char* hexName)
+{
+	HexConvertByteArray(hexName);
+	VfileFixPath(hexName);
+	return hexName;
+}
+
 bool CheckFileCmdArgs(const char* cmd, short args, const char* argv0, short argc)
 {
 	return (StringCompare(cmd, argv0) > 0 && args == argc);
@@ -365,9 +354,7 @@ LoopState CmdFileOperation(short cmdEnd)
 	}
 	if (CheckFileCmdArgs("open", 4, argv[0], argc))
 	{
-		HexConvertByteArray(argv[1]);
-		char *filename = argv[1];
-		VfileFixPath(filename);
+		char *filename = DecodeFileName(argv[1]);
 		int flags = HexToVariable(argv[2]);
 		//int mode = HexToVariable(argv[3]);	// Not supported on TOS
 		result = VfileOpen(filename, flags, &ioErrno);
@@ -415,9 +402,7 @@ LoopState CmdFileOperation(short cmdEnd)
 	}
 	else if (CheckFileCmdArgs("stat", 2, argv[0], argc))
 	{
-		HexConvertByteArray(argv[1]);
-		char *filename = argv[1];
-		VfileFixPath(filename);
+		char *filename = DecodeFileName(argv[1]);
 		vfile_stat* stat = (vfile_stat*)inptr;	// Use inPacket (inptr) as a buffer.
 		result = VfileStat(filename, stat, &ioErrno);
 		if (result >= 0)
@@ -427,9 +412,7 @@ LoopState CmdFileOperation(short cmdEnd)
 	}
 	else if (CheckFileCmdArgs("unlink", 2, argv[0], argc))
 	{
-		HexConvertByteArray(argv[1]);
-		char *filename = argv[1];
-		VfileFixPath(filename);
+		char *filename = DecodeFileName(argv[1]);
 		result = VfileDelete(filename, &ioErrno);
 	}
 	else if (CheckFileCmdArgs("setfs", 2, argv[0], argc))
@@ -575,13 +558,7 @@ LoopState HandleBreakResponse(int si_signo, int si_code, bool* isSupervisorMode)
 			This also means that we must have an inferior being executed (but paused now).
 		*/
 		*isSupervisorMode = true;		
-		{
-			ExceptionRegisters* er = GetRegisters();
-			bool inInferiorText = inferiorBasePage != NULL &&
-				er->pc >= (unsigned int)inferiorBasePage->p_tbase &&
-				er->pc < (unsigned int)inferiorBasePage->p_tbase + inferiorBasePage->p_tlen;
-			osMaybeBusy = (er->sr & 0x2000) != 0 && !inInferiorText;
-		}
+		osMaybeBusy = (GetRegisters()->sr & 0x2000) != 0 && !IsPcInText(inferiorBasePage);
 		if (IsServerException())
 		{
 			// Exception in gdbserver code!
@@ -765,12 +742,7 @@ void ServerCommandLoop(int si_signo, int si_code)
 			TransmitPacket(false);
 			loopState = KILL;
 			break;
-		case 'H':	// Set thread number. Just return OK.
-			/*
-				gdbserver returns E01
-			*/
-			WriteOK();
-			break;
+		case 'H':	// Set thread number. Just return OK. (gdbserver returns E01.)
 		case 'T':	// Set active thread. Just return OK.
 			WriteOK();
 			break;
@@ -815,8 +787,6 @@ void ServerCommandLoop(int si_signo, int si_code)
 			loopState = KILL;
 			break;
 		case 'q':	// Query
-			CmdQuery();
-			break;
 		case 'Q':	// Query set
 			CmdQuery();
 			break;
@@ -861,10 +831,6 @@ int ServerMain(bool loadRequest)
 	int ret = -1;
 	// Get cookies
 	Supexec(GetCookies);
-	if (Fpu_Coprocessor != 0)
-	{
-		numOfCpuRegisters = 29;
-	}
 	comDev = InitComm(com_method); 
 	if (comDev == 0)
 	{

@@ -28,13 +28,21 @@ MemBreak mempoints[NUM_MEMPOINTS];
 
 extern void DbgOutVal(const char* name, unsigned int val);
 
+bool IsPcInText(const struct BasePage* basePage)
+{
+	if (basePage == NULL)
+	{
+		return false;
+	}
+	unsigned int textStart = (unsigned int)(basePage->p_tbase);
+	unsigned int textEnd = textStart + basePage->p_tlen;
+	return textStart <= registers.pc && textEnd > registers.pc;
+}
+
 // Check pc to see if it is in server code.
 bool IsServerException(void)
 {
-	struct BasePage* serverBasePage = _BasePage; // Defined in crt0
-	unsigned int textStart = (unsigned int)(serverBasePage->p_tbase);
-	unsigned int textEnd = textStart + serverBasePage->p_tlen;
-	return textStart <= registers.pc && textEnd > registers.pc;
+	return IsPcInText(_BasePage);	// Defined in crt0
 }
 
 void DiscardAllBreakpoints(void)

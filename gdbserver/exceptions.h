@@ -25,6 +25,9 @@ typedef struct
 void Exception(void);
 void DiscardAllBreakpoints(void);
 
+struct BasePage;
+// True if the stopped pc is in the text segment of the program with this basepage. False for NULL.
+bool IsPcInText(const struct BasePage* basePage);
 bool IsServerException(void);
 int InsertMemoryBreakpoint(unsigned short* addr);
 int RemoveMemoryBreakpoint(unsigned short* addr);

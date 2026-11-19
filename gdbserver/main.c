@@ -130,7 +130,6 @@ int HandleOptions(int argc, char** argv)
 			else
 			{
 				StrCopy(argv[i], inferior_filename);
-				//inferior_args = StrCopy(argv[i], inferior_args);
 				loadRequest = true;
 				DbgOut("Inferior file: ");
 				DbgOut(argv[i]);

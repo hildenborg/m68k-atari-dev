@@ -127,19 +127,6 @@ int AddHandle(int fd, unsigned char attrib)
 	return -1;
 }
 
-// Silent fail
-void RemoveHandle(int fd)
-{
-	for (int i = 0; i < NUM_HANDLES; ++i)
-	{
-		if (fd_handles[i] == fd)
-		{
-			fd_handles[i] = -1;
-			break;
-		}
-	}
-}
-
 // Returns index in fd_handles, or -1 if not found.
 int FindHandle(int fd)
 {
@@ -153,9 +140,14 @@ int FindHandle(int fd)
 	return -1;
 }
 
-int IsHandle(int fd)
+// Silent fail
+void RemoveHandle(int fd)
 {
-	return FindHandle(fd) >= 0 ? 0 : -1;
+	int i = FindHandle(fd);
+	if (i >= 0)
+	{
+		fd_handles[i] = -1;
+	}
 }
 
 int gem_to_errno(int gemError)
@@ -278,9 +270,10 @@ int VfileDelete(const char *fileName, int *ioErrno)
 	return 0;
 }
 
-int VfileWrite(int fd, const void *buf, int offset, int nbytes, int *ioErrno)
+// Seeks to offset in a file opened through vFile. Returns 0, or -1 with ioErrno set.
+static int SeekOpenFile(int fd, int offset, int *ioErrno)
 {
-	if (IsHandle(fd) != 0)
+	if (FindHandle(fd) < 0)
 	{
 		*ioErrno = VFILE_ERRNO_EBADF;
 		return -1;
@@ -289,6 +282,15 @@ int VfileWrite(int fd, const void *buf, int offset, int nbytes, int *ioErrno)
 	if (new_file_pos < 0)
 	{
 		*ioErrno = gem_to_errno(new_file_pos);
+		return -1;
+	}
+	return 0;
+}
+
+int VfileWrite(int fd, const void *buf, int offset, int nbytes, int *ioErrno)
+{
+	if (SeekOpenFile(fd, offset, ioErrno) < 0)
+	{
 		return -1;
 	}
 	int numWritten = Fwrite((unsigned short)fd, nbytes, buf);
@@ -302,15 +304,8 @@ int VfileWrite(int fd, const void *buf, int offset, int nbytes, int *ioErrno)
 
 int VfileRead(int fd, void *buf, int offset, int nbytes, int *ioErrno)
 {
-	if (IsHandle(fd) != 0)
+	if (SeekOpenFile(fd, offset, ioErrno) < 0)
 	{
-		*ioErrno = VFILE_ERRNO_EBADF;
-		return -1;
-	}
-	int new_file_pos = Fseek(offset, (unsigned short)fd, 0);
-	if (new_file_pos < 0)
-	{
-		*ioErrno = gem_to_errno(new_file_pos);
 		return -1;
 	}
 	int numRead = Fread((unsigned short)fd, nbytes, buf);
