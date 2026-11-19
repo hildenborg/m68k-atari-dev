@@ -16,6 +16,9 @@ extern "C" {
 // Legacy ST is 128, but we might need a zero at the end too.
 #define MAX_PATH_LEN	130
 
+// Max number of argument characters in a GEMDOS command line (excluding length byte and terminator).
+#define MAX_CMDLINE_LEN	125
+
 extern char com_method[];
 extern bool option_multi;
 extern bool run_once;

@@ -15,6 +15,7 @@
 #include "inferior.h"
 #include "context.h"
 #include "critical.h"
+#include "server.h"
 
 /*
 	Max inPacket and outPacket size must be the same, 
@@ -107,7 +108,8 @@ void ReceivePacket(void)
 		// Fetch payload
 		bool escaped = false;
 		bool error = false;
-		while (!error) 
+		bool overflow = false;
+		while (!error)
 		{
 			c = GetByte();
 			if (c == COMM_ERR_DISCONNECTED)
@@ -129,7 +131,14 @@ void ReceivePacket(void)
 				sum += (unsigned char)c;
 				c ^= 0x20;
 				escaped = false;
-				inPacket[inPacketLength++] = (unsigned char)c;
+				if (inPacketLength < PACKET_SIZE)
+				{
+					inPacket[inPacketLength++] = (unsigned char)c;
+				}
+				else
+				{
+					overflow = true;
+				}
 			}
 			else
 			{
@@ -148,9 +157,13 @@ void ReceivePacket(void)
 				{
 					escaped = true;
 				}
-				else
+				else if (inPacketLength < PACKET_SIZE)
 				{
 					inPacket[inPacketLength++] = (unsigned char)c;
+				}
+				else
+				{
+					overflow = true;
 				}
 				sum += (unsigned char)c;
 			}
@@ -192,6 +205,17 @@ void ReceivePacket(void)
 			inPacketLength = 1;
 			inPacket[0] = 'k';	// Kill inferior
 			return;
+		}
+		if (overflow && !waitForPacket)
+		{
+			/*
+				Packet was larger than we can handle. It has been acked (a nak would only make gdb
+				resend the same packet), so turn it into an empty packet, which is answered with an
+				empty reply meaning "not supported".
+			*/
+			DbgRemOut("\r\n\tError - Packet too large, ignored.\r\n");
+			inPacketLength = 0;
+			inPacket[0] = 0;
 		}
 	}
 }
@@ -274,17 +298,30 @@ void TransmitPacket(bool skipAck)
 
 void WriteChar(char c)
 {
-	outPacket[outPacketLength++] = c;
+	// Safety net only. Callers must limit what they write to fit in a packet.
+	if (outPacketLength < PACKET_SIZE)
+	{
+		outPacket[outPacketLength++] = c;
+	}
 }
 
-short GetHexString(short offset, char** strOut)
+short GetHexString(short offset, char** strOut, char* strEnd)
 {
 	char* str = *strOut;
 	short i = offset;
+	while (i + 1 < inPacketLength && inPacket[i] != ';' && inPacket[i + 1] != ';')
+	{
+		// Keep parsing even if out of space, so the returned offset is still correct.
+		if (str < strEnd)
+		{
+			*str++ = (char)HexToByte(inPacket + i);
+		}
+		i += 2;
+	}
+	// Skip any malformed trailing half byte.
 	while (i < inPacketLength && inPacket[i] != ';')
 	{
-		*str++ = (char)HexToByte(inPacket + i);
-		i += 2;
+		++i;
 	}
 	if (inPacket[i] == ';')
 	{
@@ -363,7 +400,9 @@ short GetAddressAndLength(short offset, bool write, unsigned char** addr, unsign
 					if (inPacket[offset] == ':')
 					{
 						++offset;
-						if ((offset + (short)(*len * 2)) == inPacketLength)
+						// Data must be exactly len bytes (2 hex digits each). Avoid len * 2, as it may overflow.
+						unsigned int hexDigits = (unsigned int)(inPacketLength - offset);
+						if ((hexDigits & 1) == 0 && *len == hexDigits / 2)
 						{
 							return offset;
 						}
@@ -408,20 +447,32 @@ void GetInferiorNameAndArgs(short vNameEnd, char* inferior_filename, char* infer
 	char* strOut = inferior_filename;
 	inferior_cmdline[0] = 0;	// length
 	inferior_cmdline[1] = 0;
-	short args = GetHexString(vNameEnd, &strOut);	// Will not replace old filename if no new exists
+	// Will not replace old filename if no new exists
+	short args = GetHexString(vNameEnd, &strOut, inferior_filename + MAX_PATH_LEN - 1);
+	if (strOut != inferior_filename)
+	{
+		*strOut = 0;
+	}
 	if (args > vNameEnd)
 	{
-		strOut = inferior_cmdline + 1;
+		char* cmdStart = inferior_cmdline + 1;
+		char* cmdEnd = cmdStart + MAX_CMDLINE_LEN;
+		strOut = cmdStart;
 		while (args < inPacketLength)
 		{
-			args = GetHexString(args, &strOut);
-			*strOut++ = ' ';
+			args = GetHexString(args, &strOut, cmdEnd);
+			if (strOut < cmdEnd)
+			{
+				*strOut++ = ' ';
+			}
 		}
-		if (inferior_cmdline[1] != 0)
+		// Remove trailing space
+		if (strOut > cmdStart && strOut[-1] == ' ')
 		{
-			strOut[-1] = 0;
-			inferior_cmdline[0] = (char)strlen(&inferior_cmdline[1]);		
+			--strOut;
 		}
+		*strOut = 0;
+		inferior_cmdline[0] = (char)(strOut - cmdStart);
 	}
 }
 
@@ -545,7 +596,9 @@ void WriteRegister(void)
 		if (idx < numOfCpuRegisters)
 		{
 			char *inptr = GetInpacketPtr(offset);
-			if (*inptr == '=')
+			// FPU data registers are 96 bits, all others 32 bits.
+			short hexDigits = (idx >= 18 && idx < (18 + 8)) ? 24 : 8;
+			if (*inptr == '=' && (inPacketLength - (offset + 1)) >= hexDigits)
 			{
 				++inptr;
 				if (idx < 18)
@@ -564,6 +617,12 @@ void WriteRegister(void)
 					rptr[idx + 1] = HexToLong(inptr + 8);
 					rptr[idx + 2] = HexToLong(inptr + 16);
 				}
+			}
+			else
+			{
+				// Malformed packet, or too little register data.
+				WriteError(1);
+				return;
 			}
 		}
 		else
@@ -621,21 +680,26 @@ void WriteTargetXML(short vNameEnd)
 		unsigned int xml_len = GetTargetXml(xmls);
 		
 		unsigned int maxRead = (PACKET_SIZE - 20);	// max packet size - some room for response
-		if ((offset + len) > xml_len)
+		if (len > maxRead)
+		{
+			len = maxRead;
+		}
+		if (offset >= xml_len)
+		{
+			// Nothing more to send.
+			WriteChar('l');
+			return;
+		}
+		if (len >= xml_len - offset)
 		{
 			// This transfer ends the xml transfer
 			WriteChar('l');
-			if (offset >= xml_len || len == 0)
-			{
-				return;
-			}
 			len = xml_len - offset;
 		}
 		else
 		{
-			// Too much for one packet, only send a part of it.
+			// More data remains after this part.
 			WriteChar('m');
-			len = maxRead;
 		}
 
 		const char* xml;
@@ -714,6 +778,11 @@ void ReadMemory(bool isSupervisorMode)
 	short offset = GetAddressAndLength(1, false, &addr, &len);
 	if (isSupervisorMode && offset > 0)
 	{
+		// Each byte takes two hex digits. gdb accepts a shorter reply than requested.
+		if (len > PACKET_SIZE / 2)
+		{
+			len = PACKET_SIZE / 2;
+		}
 		for (unsigned int i = 0; i < len; ++i)
 		{
 			unsigned char* infAddr = InferiorContextMemoryAddress(addr + i);

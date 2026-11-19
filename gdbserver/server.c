@@ -115,10 +115,10 @@ void SendStopCode(int si_signo, int si_code)
 
 void CmdSetWorkingDir(short vNameEnd)
 {
-	char buf[130];
+	char buf[MAX_PATH_LEN];
 	char *ptr = buf;
 	char *endptr = buf;
-	GetHexString(vNameEnd, &endptr);
+	GetHexString(vNameEnd, &endptr, buf + sizeof(buf) - 1);	// Leave room for terminating zero.
 	unsigned int len = endptr - ptr;
 	*endptr = 0;
 	if (len == 0)
@@ -283,6 +283,7 @@ LoopState CmdFileOperation(short cmdEnd)
 		*/
 		int maxRead = (PACKET_SIZE - 20);	// max packet size - some room for response
 		if (count > maxRead) {count = maxRead;}
+		if (count < 0) {count = 0;}
 		result = VfileRead(fd, inptr, offset, count, &ioErrno);
 		if (result >= 0)
 		{

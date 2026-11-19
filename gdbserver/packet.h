@@ -22,7 +22,10 @@ void ReceivePacket(void);
 void TransmitPacket(bool skipAck);
 
 void WriteChar(char c);
-short GetHexString(short offset, char** strOut);
+// Decodes hex from inPacket at offset up to ';' or end of packet, into *strOut.
+// Never writes at or beyond strEnd, and does not zero terminate.
+// Returns the offset after the ';'. *strOut is set to after the last written char.
+short GetHexString(short offset, char** strOut, char* strEnd);
 void WriteError(int e);
 void WriteByte(unsigned char c);
 void WriteLong(unsigned int val);

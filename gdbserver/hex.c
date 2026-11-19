@@ -34,7 +34,8 @@ int HexConvertByteArray(char *hexArray)
 	// To save memory, we just convert the array in the same buffer.
 	char* hexptr = hexArray;
 	char* byteArray = hexArray;
-	while (*hexptr != 0)
+	// Check both digits, so an odd number of digits doesn't skip past the terminating zero.
+	while (hexptr[0] != 0 && hexptr[1] != 0)
 	{
 		*byteArray++ = (char)HexToByte(hexptr);
 		hexptr += 2;
