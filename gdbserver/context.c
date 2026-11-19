@@ -269,7 +269,7 @@ unsigned char* InferiorContextMemoryAddress(unsigned char* address)
             unsigned char* inferiorVectors100 = (unsigned char*)(inferiorVectors + NUM_IRQ_VECTORS);
 			return &inferiorVectors100[la - 0x100];
 		}
-		else if (la >= 0x44e && la < 0x450)
+		else if (la >= 0x44e && la < 0x44e + NUM_SYS_LONGS * 4)	// _v_bas_ad
 		{
             unsigned char* inferiorSysLongs = (unsigned char*)(inferiorLongs);
 			return &inferiorSysLongs[la - 0x44e];
