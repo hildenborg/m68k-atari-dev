@@ -39,7 +39,8 @@ short GetFileArgs(short cmdEnd, char* argv[MAX_FILE_ARGS]);
 void GetInferiorNameAndArgs(short vNameEnd, char* inferior_filename, char* inferior_cmdline);
 void WriteVariable(int val);
 void WriteFileResponse(int result, int ioErrno, const char* attachment);
-void WriteStop(int si_signo, int si_code, bool start_break);
+// swbreak is only reported for breakpoints gdb has inserted.
+void WriteStop(int si_signo, int si_code, bool gdb_break);
 void ReadRegisters(void);
 void WriteRegisters(void);
 void WriteRegister(void);

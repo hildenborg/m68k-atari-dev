@@ -43,6 +43,7 @@ typedef enum
 
 #define USERCODE_SILENT		0
 #define USERCODE_REPORT		1
+#define USERCODE_RESTART	2	// Start the inferior without a stop reply, as the R packet has no reply.
 #define USERCODE_ERROR		-1
 #define USERCODE_WARNING	-2
 
@@ -65,6 +66,7 @@ bool	option_multi = false;
 bool	run_once = false;										// If set and if extended mode, then gdbserver exits when inferior is killed.
 int		userCodeForCommandLoop = USERCODE_SILENT;				// Used as si_code when calling ServerCommandLoop.
 int		userCodeIfError = USERCODE_ERROR;						// Will be copied to userCodeForCommandLoop if inferior loading fails.
+bool	silentStop = false;										// Set when the next stop should not be reported, as gdb will ask with '?'.
 
 unsigned int	numOfCpuRegisters	=	18;
 
@@ -110,7 +112,10 @@ void SendStopCode(int si_signo, int si_code)
 	{
 		ClearInferiorStartBreak();
 	}
-	WriteStop(si_signo, si_code, start_break);
+	// After the start break is cleared, a breakpoint at pc is one gdb has inserted.
+	// Checked here and not when the trap happened, so '?' gives the same answer later.
+	bool gdb_break = !start_break && IsBreakpoint((unsigned short*)GetRegisters()->pc) >= 0;
+	WriteStop(si_signo, si_code, gdb_break);
 }
 
 /*
@@ -533,6 +538,14 @@ LoopState HandleBreakResponse(int si_signo, int si_code, bool* isSupervisorMode)
 			loopState = CONTINUE_EXECUTION;
 			userCodeForCommandLoop = USERCODE_SILENT;
 		}
+		else if (si_code == USERCODE_RESTART)
+		{
+			// Inferior loaded by the R packet. Start it, but don't report the stop, as R has no reply.
+			// gdb asks for the stop reason with '?' instead.
+			loopState = CONTINUE_EXECUTION;
+			userCodeForCommandLoop = USERCODE_SILENT;
+			silentStop = true;
+		}
 	}
 	else
 	{
@@ -555,10 +568,22 @@ LoopState HandleBreakResponse(int si_signo, int si_code, bool* isSupervisorMode)
 			OutputCrashInfo();
 			si_signo = GDB_SIGABRT;
 			loopState = KILL;
+			silentStop = false;
 		}
-		// Write stop packet to gdb.
-		SendStopCode(si_signo, si_code);
-		TransmitPacket(false);
+		if (silentStop)
+		{
+			// Restarted by the R packet, which has no reply. Handle the stop (this clears
+			// the start break), but don't transmit it. gdb asks with '?' if it wants it.
+			silentStop = false;
+			SendStopCode(si_signo, si_code);
+			ClearOutPacket();
+		}
+		else
+		{
+			// Write stop packet to gdb.
+			SendStopCode(si_signo, si_code);
+			TransmitPacket(false);
+		}
 	}
 	return loopState;
 }
@@ -648,11 +673,24 @@ void HandleCommandLoopExit(LoopState loopState, int si_signo, bool* isSupervisor
 	}
 	else if(loopState == RESTART)
 	{
-		// Kill and Run inferior.
-		if (inferiorState == RUNNING)
+		// Kill and run the inferior again.
+		if (inferior_filename[0] == 0)
 		{
-			loadInferiorRequested = true;
-			userCodeForCommandLoop = USERCODE_REPORT;
+			return;	// Nothing to restart.
+		}
+		loadInferiorRequested = true;
+		userCodeForCommandLoop = USERCODE_RESTART;
+		if (inferiorState == LOADED)
+		{
+			// Not started, so we just need to free the memory taken by it.
+			Mfree(inferiorBasePage->p_env);
+			Mfree((struct BasePage*)inferiorBasePage);
+			inferiorBasePage = NULL;
+			inferiorState = NOT_LOADED;
+			DiscardAllBreakpoints();
+		}
+		else if (inferiorState == RUNNING)
+		{
 			TerminateInferior(si_signo);	// no-return function! Code execution continues in RunInferior.
 		}
 	}
@@ -721,8 +759,12 @@ void ServerCommandLoop(int si_signo, int si_code)
 		case 'T':	// Set active thread. Just return OK.
 			WriteOK();
 			break;
-		case 'R':	// Restart inferior.
-			loopState = RUN;
+		case 'R':	// Restart inferior. Only in extended mode, and there is no reply.
+			if (extendedMode)
+			{
+				loopState = RESTART;	// Leaves the loop without transmitting.
+			}
+			// Else an empty reply, meaning not supported.
 			break;
 		case 'v':	// Flexibillity packets. Like file handling, continuing, running...
 			loopState = CmdFlexible();
@@ -840,6 +882,11 @@ int ServerMain(bool loadRequest)
 				if (userCodeForCommandLoop == USERCODE_REPORT)
 				{
 					userCodeForCommandLoop = userCodeIfError;
+				}
+				else if (userCodeForCommandLoop == USERCODE_RESTART)
+				{
+					// R has no reply. gdb will find out with '?'.
+					userCodeForCommandLoop = USERCODE_SILENT;
 				}
 				else
 				{

@@ -517,7 +517,7 @@ void WriteFileResponse(int result, int ioErrno, const char* attachment)
 	}
 }
 
-void WriteStop(int si_signo, int si_code, bool start_break)
+void WriteStop(int si_signo, int si_code, bool gdb_break)
 {
 	if (si_signo == GDB_SIGTRAP && si_code == TRAP_BRKPT)
 	{
@@ -525,7 +525,7 @@ void WriteStop(int si_signo, int si_code, bool start_break)
 		WriteChar('T');
 		WriteByte((unsigned char)si_signo);
 		unsigned int* ptr = (unsigned int*)GetRegisters();
-		if (!start_break)
+		if (gdb_break)
 		{
 			WriteString("swbreak:;");
 		}
