@@ -30,9 +30,7 @@ int Fread(unsigned short bios_handle, int length, void* buf);
 
 int Fwrite(unsigned short bios_handle, int length, const void* buf);
 
-// bios_wflag: 0 = inquire attributes, 1 = set attributes to bios_attrib.
-// Returns the file attributes (FA_*), or a negative GEMDOS error code.
-int Fattrib(const char* bios_path, unsigned short bios_wflag, unsigned short bios_attrib);
+struct DTA* Fgetdta(unsigned short bios_handle);
 
 int Mfree(void* start_addr);
 
