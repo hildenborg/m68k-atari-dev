@@ -174,6 +174,10 @@ void Offgibit(unsigned short mask);
 
 void Ongibit(unsigned short mask);
 
+// Maps BIOS device AUX (1) to serial device devno (6 and up), and returns the old mapping.
+// -1 returns the current mapping. Needs TOS 2.0 or later.
+int Bconmap(short devno);
+#define BCONMAP_SCC_B 7		// Modem 2, SCC channel B. The Falcon's serial port.
 int Supexec(int (*callback)(void));
 
 #ifdef __cplusplus

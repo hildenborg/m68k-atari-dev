@@ -5,11 +5,7 @@
 
 	.global Mfp_ActiveEdgeRegister
 	.global CtrlC_enable
-	.global sccTmpData
 	.global sccDelayCount
-
-	.equ	SccBufferLength, 0x100	| factor of two numbers only
-	.equ	SccBufferMask, SccBufferLength - 1
 
 	.text
 
@@ -63,73 +59,30 @@ MfpDcd:
 oMfpDcd:
 	jmp 	0x12345678
 
+/*
+	The SCC is driven by TOS through the BIOS, like the MFP. Only the channel B receive
+	interrupt is hooked, to catch CTRL-C from gdb while the inferior runs.
+	TOS (and EmuTOS) set the SCC vector base to 0x180, so channel B "receive character available"
+	is at 0x190 and "special receive condition" at 0x198. A received byte can come through either,
+	so both are hooked.
+*/
+	.equ	SccCtrlB, 0xffff8c85
+	.equ	SccDataB, 0xffff8c87
+	.equ	SccRxBVector, 0x190
+	.equ	SccSpecialBVector, 0x198
+
 	.global InitSccAux
 InitSccAux:
 	.func InitSccAux
 	move.l	4(a7), SccSerialExceptionCall + 2
 	jbsr	SccCalcDelay
-	movem.l	d1-d2/a0, -(a7)
 	move.w	sr, -(a7)
 	ori.w	#0x700, sr
-
-	lea		sccVectors, a0
-	move.l	0x180.w, (a0)+
-	move.l	0x188.w, (a0)+
-	move.l	0x190.w, (a0)+
-	move.l	0x198.w, (a0)+
-
-	move.l	#SccSerialTX, 0x180.w
-	move.l	#SccStatus, 0x188.w
-	move.l	#SccSerialRX, 0x190.w
-	move.l	#SccSerialRX, 0x198.w
-/*
-	| Make sure all TX data is finished sending.
-	| Wait for at most ten milliseconds.
-	move.w	#10000, d2
-1:
-	move.b	#1, 0xffff8c85.w
-	jbsr	SccDelay
-	move.b	0xffff8c85.w, d1
-	jbsr	SccDelay
-	btst	#0, d1
-	jne		2f
-	dbra	d2, 1b
-2:
-
-	| Clear all errors and fifo
-	move.b	#0x30, 0xffff8c85.w
-	jbsr	SccDelay
-	move.b	0xffff8c85.w, d0
-	jbsr	SccDelay
-	moveq	#2, d1
-1:
-	move.b	0xffff8c87.w, d0
-	jbsr	SccDelay
-	dbra	d1, 1b
-	move.b	0xffff8c85.w, d0
-	jbsr	SccDelay
-	move.b	#0x30, 0xffff8c85.w
-	jbsr	SccDelay
-*/
-	| Load registers to set 9600 8N1 and interrupts enabled
-	lea		SccInit, a0
-	move.b	(a0)+, 0xffff8c85.w
-	jbsr	SccDelay
-	move.b	(a0)+, 0xffff8c85.w
-	jbsr	SccDelay
-	jbsr	SccDelay
-1:
-	move.b	(a0)+, 0xffff8c85.w
-	jbsr	SccDelay
-	cmpa.l	#SccInitEnd, a0
-	jne		1b
-	move.b	0xffff8c85.w, Scc_StatusRegister
-	jbsr	SccDelay
-
-|	bset	#5, 0xffff8e0d.w	| Mega STE/TT VME IRQ routing
-
+	move.l	SccRxBVector.w, oSccSerialInput + 2
+	move.l	#SccSerialInput, SccRxBVector.w
+	move.l	SccSpecialBVector.w, oSccSpecialInput + 2
+	move.l	#SccSpecialInput, SccSpecialBVector.w
 	move.w	(a7)+, sr
-	movem.l	(a7)+, d1-d2/a0
 	moveq	#0, d0
 	rts
 	.endfunc
@@ -137,21 +90,52 @@ InitSccAux:
 	.global ExitSccAux
 ExitSccAux:
 	.func ExitSccAux
-	move.l	a0, -(a7)
 	move.w	sr, -(a7)
 	ori.w	#0x700, sr
-
-	lea		sccVectors, a0
-	move.l	(a0)+, 0x180.w
-	move.l	(a0)+, 0x188.w
-	move.l	(a0)+, 0x190.w
-	move.l	(a0)+, 0x198.w
-
+	move.l	oSccSerialInput + 2, SccRxBVector.w
+	move.l	oSccSpecialInput + 2, SccSpecialBVector.w
 	move.w	(a7)+, sr
-	move.l	(a7)+, a0
-
 	rts
 	.endfunc
+
+/*
+	Like MfpSerialInput: while CTRL-C is enabled the inferior runs, and gdb only sends CTRL-C.
+	Then the byte is read here and not passed on to TOS. Otherwise TOS handles the interrupt.
+*/
+SccSpecialInput:
+	tst.w	CtrlC_enable
+	beq.s	oSccSpecialInput
+	bra.s	SccCheckCtrlC
+oSccSpecialInput:
+	jmp 	0x12345678
+
+SccSerialInput:
+	tst.w	CtrlC_enable
+	beq.s	oSccSerialInput
+SccCheckCtrlC:
+	movem.l	d0-d1, -(a7)
+	move.b	SccCtrlB.w, d1		| RR0
+	jbsr	SccDelay
+	btst	#0, d1
+	beq.s	1f					| No data
+	move.b	SccDataB.w, d1
+	jbsr	SccDelay
+	cmp.b	#3, d1				| CTRL-C from gdb
+	bne.s	1f
+	ori.w	#0x700, sr
+	clr.w	CtrlC_enable	| Clear CtrlC_enable so we don't handle that while the server context is running.
+	move.b	#0x38, SccCtrlB.w	| Reset highest IUS, so serial comm works in server.
+	jbsr	SccDelay
+	movem.l	(a7)+, d0-d1
+SccSerialExceptionCall:
+	jmp		0x12345678
+1:
+	move.b	#0x38, SccCtrlB.w	| Reset highest IUS
+	jbsr	SccDelay
+	movem.l	(a7)+, d0-d1
+	rte
+oSccSerialInput:
+	jmp 	0x12345678
 
 /*
 	Count how many loops we make during a 200hz tick.
@@ -192,223 +176,6 @@ SccDelay:
 	bne.s	1b
 	rts
 
-SccStatus:
-	move.l	d0, -(a7)
-	move.b	0xffff8c85.w, Scc_StatusRegister
-	jbsr	SccDelay
-	moveq	#0x10, d0
-	jbsr	SccClearIrq
-	move.l	(a7)+, d0
-	rte
-
-SccSerialRX:
-	movem.l d0-d1/a0, -(a7)
-
-	move.b	0xffff8c85.w, Scc_StatusRegister
-	jbsr	SccDelay
-	btst	#0, Scc_StatusRegister
-	jeq		SccSerialRXExit		| No data
-	move.b	0xffff8c87.w, d1
-	jbsr	SccDelay
-	tst.w	CtrlC_enable
-	jeq		SccSerialReceive	| This is a normal receive
-	cmp.b	#3, d1
-	jne		SccSerialRXExit		| No CTRL-C, discard the data and continue
-	| Break the execution of the inferior.
-	ori.w	#0x700, sr
-	clr.w	CtrlC_enable	| Clear CtrlC_enable so we don't handle that while the server context is running. 
-	moveq	#0x30, d0
-	jbsr	SccClearIrq
-	movem.l (a7)+, d0-d1/a0
-SccSerialExceptionCall:
-	jmp		0x12345678
-SccSerialReceive:
-	| store d1 in serial input fifo
-	move.w	sccInputCount, d0
-	cmp.w	#SccBufferLength, d0
-	jeq		SccSerialRXExit		| Fifo overflow, data lost (should not happen if RTS is handled properly).
-	add.w	sccInputPos, d0
-	and.w	#SccBufferMask, d0
-	lea		sccInputBuffer, a0
-	move.b	d1, (a0, d0.w)
-	add.w	#1, sccInputCount
-	move.w	sccInputCount, d0
-	cmp.w	#SccBufferLength, d0
-	jne		SccSerialRXExit
-/*
-	The buffer is full. Disable RTS.
-*/
-	move.b	#0x05, 0xffff8c85.w		| Select write register 5
-	jbsr	SccDelay
-	move.b	#0xe8, 0xffff8c85.w		| Disable RTS
-	jbsr	SccDelay
-
-SccSerialRXExit:
-	moveq	#0x30, d0
-	jbsr	SccClearIrq
-	movem.l (a7)+, d0-d1/a0
-	rte
-
-SccSerialTX:
-	movem.l d0/a0, -(a7)
-	moveq	#0x28, d0
-	jbsr	SccClearIrq
-
-	move.b	0xffff8c85.w, Scc_StatusRegister
-	jbsr	SccDelay
-	btst	#2, Scc_StatusRegister
-	jeq		SccSerialTXExit		| SCC Buffer not empty
-	move.w	sccOutputCount, d0
-	jeq		SccSerialTXExit		| No data to send
-
-	move.w	sccOutputPos, d0
-	lea		sccOutputBuffer, a0
-	move.b	(a0, d0.w), 0xffff8c87.w
-	addq.w	#1, d0
-	and.w	#SccBufferMask, d0
-	move.w	d0, sccOutputPos
-	sub.w	#1, sccOutputCount
-	jbsr	SccDelay
-SccSerialTXExit:
-	movem.l (a7)+, d0/a0
-	rte
-
-SccClearIrq:
-	move.b	d0, 0xffff8c85.w		|reset ext/status int
-	jbsr	SccDelay
-	move.b	#0x38, 0xffff8c85.w		|reset highest IUS
-	jbsr	SccDelay
-	rts
-
-	.global SccBcostat
-SccBcostat:
-	.func SccBcostat
-	move.l	#SccBufferLength, d0
-	sub.w	sccOutputCount, d0
-	rts
-	.endfunc
-
-	.global SccBconout
-SccBconout:
-	.func SccBconout
-	move.l	d1, -(a7)
-	move.w	sr, -(a7)
-	ori.w	#0x700, sr
-	move.b	0xffff8c85.w, Scc_StatusRegister
-	jbsr	SccDelay
-	move.w	sccTmpData, d0
-	move.w	sccOutputCount, d1
-	jne		1f
-	btst	#2, Scc_StatusRegister
-	jeq		1f
-	| Send immediately
-	move.b	d0, 0xffff8c87.w
-	jbsr	SccDelay
-	jbra	2f
-1:
-	| Put in buffer if space.
-	move.w	sccOutputCount, d1
-	cmp.w	#SccBufferLength, d1
-	jne		3f
-	| No space return with failure code.
-	moveq	#-1, d0
-	jra		2f
-3:
-	add.w	sccOutputPos, d1
-	and.w	#SccBufferMask, d1
-	move.l	a0, -(a7)
-	lea		sccOutputBuffer, a0
-	move.b	d0, (a0, d1.w)
-	add.w	#1, sccOutputCount
-	move.l	(a7)+, a0
-	moveq	#0, d0
-2:
-	move.w	(a7)+, sr
-	move.l	(a7)+, d1
-	rts
-	.endfunc
-
-	.global SccBconin
-SccBconin:
-	.func SccBconin
-1:
-	move.w	sccInputCount, d0
-	jeq		1b		| Wait for data
-	move.w	sr, -(a7)
-	ori.w	#0x700, sr
-	move.w	sccInputCount, d0	| Read again after turning off irqs
-
-	move.l	a0, -(a7)
-	move.l	d1, -(a7)
-	move.w	sccInputPos, d0
-	lea		sccInputBuffer, a0
-	moveq	#0, d1
-	move.b	(a0, d0.w), d1
-	move.w	d1, sccTmpData
-	addq.w	#1, d0
-	and.w	#SccBufferMask, d0
-	move.w	d0, sccInputPos
-	move.w	sccInputCount, d0
-	sub.w	#1, sccInputCount
-	cmp.w	#SccBufferLength, d0
-	jne		1f
-/*
-	The buffer is no longer full. We can enable RTS.
-*/
-	move.b	#0x05, 0xffff8c85.w		| Select write register 5
-	jbsr	SccDelay
-	move.b	#0xea, 0xffff8c85.w		| Enable RTS
-	jbsr	SccDelay
-1:
-	move.l	(a7)+, d1
-	move.l	(a7)+, a0
-	move.w	(a7)+, sr
-	rts
-	.endfunc
-
-	.global SccBconstat
-SccBconstat:
-	.func SccBconstat
-	moveq	#0, d0
-	move.w	sccInputCount, d0
-	rts
-	.endfunc
-
-	.data
-SccInit:
-	.dc.b 0x09, 0x41	| Reset channel b and turn off interrupts
-	.dc.b 0x04, 0x44	| x16 clock mode, 1 stop bit asynchronous mode.
-	.dc.b 0x03, 0xc0	| Disable RX, 8 bit
-	.dc.b 0x05, 0xe2	| Disable TX, DTR and RTS enabled, 8 bit
-
-	.dc.b 0x02, 0x60	| Vector register
-
-	.dc.b 0x0e, 0x02	| Disable BRG, set BRG source
-	.dc.b 0x0b, 0x50	| Clock mode
-	.dc.b 0x0c, 0x18	| Lower divisor
-	.dc.b 0x0d, 0x00	| Upper divisor
-	.dc.b 0x0e, 0x03	| Enable BRG
-
-	.dc.b 0x0f, 0x01	| Select prime D7
-	.dc.b 0x07, 0x00	| Clear prime D7
-	.dc.b 0x0f, 0x08	| Select non prime D7 and turn on DCD interrupts
-	.dc.b 0x01, 0x13	| Enable TX, RX and EXT interrupts.
-
-	.dc.b 0x03, 0xc1	| Enable RX, auto enable CTS, 8 bit
-	.dc.b 0x05, 0xea	| Enable TX, DTR and RTS enabled, 8 bit
-
-	.dc.b 0x00, 0x10	| Reset external status interrupt
-	.dc.b 0x00, 0x10	| Reset external status interrupt
-	.dc.b 0x09, 0x09	| Master interrupt enable
-SccInitEnd:
-
 	.bss
-	.lcomm	sccVectors, 4*4
 	.lcomm	sccDelayCount, 4
-	.lcomm	sccInputPos, 2
-	.lcomm	sccInputCount, 2
-	.lcomm	sccOutputPos, 2
-	.lcomm	sccOutputCount, 2
-	.lcomm	sccInputBuffer, SccBufferLength
-	.lcomm	sccOutputBuffer, SccBufferLength
 	.even

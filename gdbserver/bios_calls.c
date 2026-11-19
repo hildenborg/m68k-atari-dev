@@ -363,6 +363,19 @@ void Ongibit(unsigned short mask)
 		: CLOBBER_REG, "d0");
 }
 
+int Bconmap(short devno)
+{
+	register int result asm ("d0") = -1;
+	__asm__ volatile (
+		TRAP_BEGIN
+		"move.w		%1, %%a7@-\n\t"
+		TRAP_FUNC(14, 0x2c)
+		: "=r" (result)
+		: "r" (devno)
+		: CLOBBER_REG);
+	return result;
+}
+
 int Supexec(int (*callback)(void))
 {
 	register int callback_return asm ("d0") = -1;

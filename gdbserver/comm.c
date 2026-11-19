@@ -13,19 +13,12 @@ int CheckServerQuitKey(void);
 
 volatile short CtrlC_enable;
 volatile unsigned char Mfp_ActiveEdgeRegister;
-volatile unsigned char Scc_StatusRegister;
-volatile unsigned short sccTmpData;
 
 void InitMfpAux(_CommException CommException);
 void ExitMfpAux(void);
 
 void InitSccAux(_CommException CommException);
 void ExitSccAux(void);
-
-int SccBcostat(void);
-int SccBconout(void);
-int SccBconin(void);
-int SccBconstat(void);
 
 comm*	comDev = 0;
 
@@ -128,18 +121,22 @@ static void RestoreSerialInputBuffer(void)
 	}
 }
 
-int Mfp_Init(const char *comString, _CommException CommException)
+// Sets 9600 8N1 with RTS/CTS, gives the AUX device a larger input buffer and empties it.
+// Must be called in supervisor mode.
+static void AuxInit(void)
 {
-	InitMfpAux(CommException);
-
-	// Set serial conf
-	 Rsconf(BAUD_9600, FLOW_HARD, RS_CLK16 | RS_1STOP | RS_8BITS, RS_INQUIRE, RS_INQUIRE, RS_INQUIRE);
+	Rsconf(BAUD_9600, FLOW_HARD, RS_CLK16 | RS_1STOP | RS_8BITS, RS_INQUIRE, RS_INQUIRE, RS_INQUIRE);
 	SetSerialInputBuffer();
-	// Empty serial buffer
 	while (Bconstat(DEV_AUX) != 0)
 	{
 		Bconin(DEV_AUX);
 	}
+}
+
+int Mfp_Init(const char *comString, _CommException CommException)
+{
+	InitMfpAux(CommException);
+	AuxInit();
 	
 	// Set DTR to ON
 	Ongibit(GI_DTR);
@@ -163,11 +160,12 @@ bool Mfp_IsConnected(void)
 }
 
 
-int Mfp_TransmitByte(unsigned char byte)
+// Sends a byte through the BIOS AUX device, which TOS maps to the MFP or SCC port.
+static int AuxTransmitByte(unsigned char byte, _IsConnected isConnected)
 {
 	if (Bcostat(DEV_AUX) == 0)
 	{
-		if (!Mfp_IsConnected())
+		if (!isConnected())
 		{
 			return COMM_ERR_DISCONNECTED;
 		}
@@ -177,18 +175,28 @@ int Mfp_TransmitByte(unsigned char byte)
 	return 0;
 }
 
-
-int Mfp_ReceiveByte(void)
+// Receives a byte through the BIOS AUX device, which TOS maps to the MFP or SCC port.
+static int AuxReceiveByte(_IsConnected isConnected)
 {
 	if (Bconstat(DEV_AUX) == 0)
 	{
-		if (!Mfp_IsConnected())
+		if (!isConnected())
 		{
 			return COMM_ERR_DISCONNECTED;
 		}
 		return COMM_ERR_NOT_READY;
 	}
 	return Bconin(DEV_AUX) & 0xff;
+}
+
+int Mfp_TransmitByte(unsigned char byte)
+{
+	return AuxTransmitByte(byte, Mfp_IsConnected);
+}
+
+int Mfp_ReceiveByte(void)
+{
+	return AuxReceiveByte(Mfp_IsConnected);
 }
 
 
@@ -229,16 +237,25 @@ bool Scc_IsMyDevice(const char *comString)
 	return false;
 }
 
+int		sccOldBconmap = -1;	// The AUX mapping to restore on exit.
+
 int Scc_Init(const char *comString, _CommException CommException)
 {
+	// The Falcon's TOS maps AUX to the SCC channel B port by default, but make sure.
+	sccOldBconmap = Bconmap(BCONMAP_SCC_B);
 	InitSccAux(CommException);
-	
+	AuxInit();
 	return 0;
 }
 
 void Scc_Exit(void)
 {
 	ExitSccAux();
+	RestoreSerialInputBuffer();
+	if (sccOldBconmap > 0)
+	{
+		Bconmap((short)sccOldBconmap);
+	}
 }
 
 bool Scc_IsConnected(void)
@@ -250,40 +267,16 @@ bool Scc_IsConnected(void)
 		The mega STE have a pull upp resistor connected to the pin and the falcon do not.
 		If this is the reason why I can detect DCD on mega STE and not on falcon is worth investigating. 
 	*/
-	//return (Scc_StatusRegister & 0x08) != 0;
 }
-
 
 int Scc_TransmitByte(unsigned char byte)
 {
-	if (SccBcostat() == 0)
-	{
-		if (!Scc_IsConnected())
-		{
-			return COMM_ERR_DISCONNECTED;
-		}
-		return COMM_ERR_NOT_READY;
-	}
-	sccTmpData = (unsigned short)byte;
-	if (Supexec(SccBconout) < 0)
-	{
-		return COMM_ERR_NOT_READY;
-	}
-	return 0;
+	return AuxTransmitByte(byte, Scc_IsConnected);
 }
 
 int Scc_ReceiveByte(void)
 {
-	if (SccBconstat() == 0)
-	{
-		if (!Scc_IsConnected())
-		{
-			return COMM_ERR_DISCONNECTED;
-		}
-		return COMM_ERR_NOT_READY;
-	}
-	Supexec(SccBconin);
-	return sccTmpData;
+	return AuxReceiveByte(Scc_IsConnected);
 }
 
 const char*	Scc_DeviceName(void)
