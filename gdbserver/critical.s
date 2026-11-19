@@ -261,7 +261,9 @@ SaveStateAndSwitchContext:
 	move.l	a0, internal_fpu_state_frame
 	cmp.w	#0x6, d0
 	jmi		3f
-	| 68882 and internal needs to set BIU flag in IDLE frame.
+	cmp.w	#0x8, d0		| Not for the 68040/68060 internal FPUs, that have a different frame format.
+	jpl		3f
+	| 68882 needs to set BIU flag in IDLE frame.
 	move.b	(a0), d0
 	jeq		3f
 	moveq	#0, d0
@@ -427,12 +429,28 @@ ClearInternalCaches:
     cmp.l   #20, Cookie_CPU
     jmi     1f
     move.l  d1, -(a7)
+    cmp.l   #40, Cookie_CPU
+    jpl     2f
+    | 68020/68030: Clear instruction and data caches with CACR CI and CD bits.
     movec	cacr, d1
     bset	#3, d1
     bset	#11, d1
 	movec	d1, cacr
     move.l  (a7)+, d1
 1:
+    rts
+2:
+    | 68040/68060: Push dirty data cache lines to memory, so that written breakpoints
+    | and code reaches memory, and invalidate both caches.
+    .dc.w   0xf4f8		| cpusha bc (assembled as 68030, so encoded by hand)
+    cmp.l   #60, Cookie_CPU
+    jmi     3f
+    | 68060: Also clear the branch cache with CACR CABC.
+    movec	cacr, d1
+    bset	#22, d1
+	movec	d1, cacr
+3:
+    move.l  (a7)+, d1
     rts
 	.endfunc
 
