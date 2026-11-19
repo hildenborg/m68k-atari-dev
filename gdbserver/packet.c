@@ -73,6 +73,7 @@ static bool HandleCommError(int c)
 	{
 		DbgRemOut("\r\n\tConnection dropped!\r\n");
 		SetSpecialPacket('k');
+		noAckMode = false;	// No-ack mode only lasts for one connection.
 		return true;
 	}
 	if (c == COMM_ERR_KILLED)
@@ -186,6 +187,14 @@ void ReceivePacket(void)
 			}
 			csum[i] = (char)c;
 		}
+		if (noAckMode && StringCompare("qSupported", inPacket) > 0)
+		{
+			/*
+				gdb starts every connection with qSupported, in ack mode. A serial line can't
+				tell us that the previous gdb went away without detaching, so end no-ack mode here.
+			*/
+			noAckMode = false;
+		}
 		if (!noAckMode)
 		{
 			unsigned char psum = HexToByte(csum);
@@ -209,6 +218,7 @@ void ReceivePacket(void)
 		{
 			DbgRemOut("\r\n\tConnection dropped!\r\n");
 			SetSpecialPacket('k');	// Kill inferior
+			noAckMode = false;	// No-ack mode only lasts for one connection.
 			return;
 		}
 		if (overflow && !waitForPacket)

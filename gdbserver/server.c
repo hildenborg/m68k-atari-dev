@@ -12,9 +12,6 @@
 		InferiorContextMemoryAddress
 */
 
-// Don't use when serial communication, it's not good enough.
-//#define QStartNoAckMode
-
 #include <stddef.h>
 #include <stdbool.h>
 #include "gdb_defines.h"
@@ -46,11 +43,7 @@ typedef enum
 #define USERCODE_ERROR		-1
 #define USERCODE_WARNING	-2
 
-const char serverFeatures[] = "PacketSize=3ff;swbreak+;QSetWorkingDir+;qXfer:features:read+"
-	#ifdef QStartNoAckMode
-	";QStartNoAckMode+"
-	#endif
-	;
+const char serverFeatures[] = "PacketSize=3ff;swbreak+;QSetWorkingDir+;qXfer:features:read+;QStartNoAckMode+";
 
 /*
 	Global states.
@@ -231,6 +224,11 @@ void CmdQuery(void)
 	{
 		// We don't care about what the gdb client supports, we just report back what we support.
 		WriteString(serverFeatures);
+		/*
+			gdb starts every connection with qSupported, and sends '!' again if it wants extended mode.
+			It is not reset on D or disconnect, as it keeps the server running for the next connection.
+		*/
+		extendedMode = false;
 	}
 	else if (StringCompare("QStartNoAckMode", inptr) > 0)
 	{
@@ -623,6 +621,9 @@ void HandleCommandLoopExit(LoopState loopState, int si_signo, bool* isSupervisor
 		{
 			int return_code = 0;
 			bool terminatedByServer = RunInferior(&return_code);	// Returns after inferior is terminated.
+			// The CTRL-C hook drops all other received bytes. Turn it off before replying, as gdb in
+			// no-ack mode sends its next packet right after the W reply.
+			comDev->EnableCtrlC(false);
 			if (!terminatedByServer)
 			{
 				// Inferior terminated itself. Save its context, as it may have left garbage behind.
@@ -740,6 +741,7 @@ void ServerCommandLoop(int si_signo, int si_code)
 			// gdb expects OK as reply. Send it before killing, as killing a running inferior doesn't return here.
 			WriteOK();
 			TransmitPacket(false);
+			noAckMode = false;	// gdb disconnects after detaching, and the next connection starts with acks.
 			loopState = KILL;
 			break;
 		case 'H':	// Set thread number. Just return OK. (gdbserver returns E01.)

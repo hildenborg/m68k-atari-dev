@@ -70,4 +70,6 @@ An Atari specific gdb server supporting motorola 68000 and up to 68060 CPUs.
 
 - Hatari delivers bytes from the pty faster than a real 9600 baud line and ignores RTS/CTS. The server therefore replaces the 256 byte TOS serial input buffer with a 2 KB one (`comm.c`), so a whole gdb packet (max 1023 bytes, more when escaped) fits.
 - A custom test client talking to the pty directly should keep each burst below 2 KB.
-- A custom client that sends `QStartNoAckMode` and exits without `D` or `vKill` leaves the server in no-ack mode, and a following gdb session hangs. Detach at the end, or restart Hatari between clients.
+- `QStartNoAckMode` is advertised, so gdb uses no-ack mode. It lasts for one connection: the server ends it on `D`, on a detected disconnect, and when a packet starting with `qSupported` arrives (gdb starts every connection with it). A serial line usually can't signal a disconnect, so a custom test client that uses no-ack mode should end with `D`, or the next client should start with `qSupported`. `vKill` doesn't end it, as gdb stays connected after a kill.
+- Extended mode (`!`) is reset by `qSupported` only, not by `D` or a disconnect: after a kill it decides whether a server started without `--multi` keeps running for the next connection. A test client that relies on extended mode being off should start with `qSupported`.
+- In no-ack mode gdb sends its next packet right after a reply. While the inferior runs, the CTRL-C hook drops every other received byte, so it must be off before the server replies (e.g. `W` after the inferior exits).
