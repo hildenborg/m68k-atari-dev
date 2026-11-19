@@ -577,6 +577,7 @@ void HandleCommandLoopExit(LoopState loopState, int si_signo, bool* isSupervisor
 			Mfree((struct BasePage*)inferiorBasePage);
 			inferiorBasePage = NULL;
 			inferiorState = NOT_LOADED;
+			DiscardAllBreakpoints();	// They point into the freed memory.
 		}
 		else if (inferiorState == RUNNING)
 		{

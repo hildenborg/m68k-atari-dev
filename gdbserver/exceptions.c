@@ -3,6 +3,7 @@
 	SPDX-License-Identifier: MIT
 */
 
+#include <stddef.h>
 #include "gdb_defines.h"
 #include "bios_calls.h"
 #include "exceptions.h"
@@ -44,13 +45,22 @@ void DiscardAllBreakpoints(void)
 
 int InsertMemoryBreakpoint(unsigned short* addr)
 {
+	if (inferiorBasePage == NULL)
+	{
+		return -1;	// No inferior loaded.
+	}
 	// Do a sanity check and only allow setting breakpoints in even memory owned by inferior.
 	unsigned int iaddr = (unsigned int)addr;
 	unsigned int textStart = (unsigned int)(inferiorBasePage->p_tbase);
 	unsigned int bssEnd = (unsigned int)(inferiorBasePage->p_bbase) + inferiorBasePage->p_blen;
-	if ((iaddr & 0x1) != 0 || iaddr < textStart || iaddr > bssEnd)
+	if ((iaddr & 0x1) != 0 || iaddr < textStart || iaddr + 2 > bssEnd)
 	{
 		return -1;
+	}
+	if (IsBreakpoint(addr) >= 0)
+	{
+		// Already set. Inserting it again would store the trap instruction as the original word.
+		return 0;
 	}
 	for (int i = 0; i < NUM_MEMPOINTS; ++i)
 	{
@@ -67,20 +77,26 @@ int InsertMemoryBreakpoint(unsigned short* addr)
 
 int RemoveMemoryBreakpoint(unsigned short* addr)
 {
-	for (int i = 0; i < NUM_MEMPOINTS; ++i)
+	short i = IsBreakpoint(addr);
+	if (i < 0)
 	{
-		if (mempoints[i].addr == addr)
-		{
-			mempoints[i].addr = 0;
-			*addr = mempoints[i].store;
-			return 0;
-		}
+		return -1;
 	}
-	return -1;
+	mempoints[i].addr = 0;
+	if (inferiorBasePage != NULL)
+	{
+		// Only restore the word while the inferior still owns the memory.
+		*addr = mempoints[i].store;
+	}
+	return 0;
 }
 
 int IsBreakpoint(unsigned short* addr)
 {
+	if (addr == NULL)
+	{
+		return -1;	// NULL marks an empty slot.
+	}
 	for (short i = 0; i < NUM_MEMPOINTS; ++i)
 	{
 		if (mempoints[i].addr == addr)

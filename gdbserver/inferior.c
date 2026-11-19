@@ -87,6 +87,7 @@ bool RunInferior(int* return_code)
 	// Returning from a terminated inferior
 	inferiorState = NOT_LOADED;
 	inferiorBasePage = NULL;	// inferior have been unloaded.
+	DiscardAllBreakpoints();	// They point into the freed memory.
 	DbgOut("RunInferior: Terminated\r\n");
 	return inferiorTerminatedByServer;
 }
