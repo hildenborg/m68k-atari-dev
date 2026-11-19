@@ -31,6 +31,10 @@ int RemoveMemoryBreakpoint(unsigned short* addr);
 int IsBreakpoint(unsigned short* addr);
 ExceptionRegisters* GetRegisters(void);
 
+// Set when the server sets the trace bit in sr to single step the inferior.
+// The next exception then removes the bit from the reported sr.
+extern bool serverTraceBit;
+
 #ifdef __cplusplus
 }
 #endif

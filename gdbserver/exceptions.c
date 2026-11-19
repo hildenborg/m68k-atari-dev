@@ -15,6 +15,7 @@
 #define NUM_MEMPOINTS 128		// Max number of breakpoints handled by this code.
 
 ExceptionRegisters registers;
+bool serverTraceBit = false;
 
 typedef struct
 {
@@ -111,6 +112,13 @@ void Exception(void)
 {
 	int si_signo = GDB_SIGINT;
 	int si_code = 0;
+	if (serverTraceBit)
+	{
+		// The stacked sr still has the trace bit the server set for a step, both after the
+		// trace exception and when the stepped instruction faulted. It is not the inferior's.
+		serverTraceBit = false;
+		registers.sr &= ~0x8000;
+	}
 	switch (GetExceptionNum())
 	{
 		case 2:		// BusError

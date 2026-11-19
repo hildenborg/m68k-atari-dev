@@ -324,6 +324,7 @@ LoopState CmdContinue(bool trace)
 		// Set a new address to continue/step at.
 		er->pc = add;
 	}
+	serverTraceBit = trace && (er->sr & 0x8000) == 0;
 	if (trace)
 	{
 		er->sr |= 0x8000;
