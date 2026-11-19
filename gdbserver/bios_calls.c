@@ -163,16 +163,55 @@ int Fwrite(unsigned short bios_handle, int length, const void* buf)
 	return result;
 }
 
-struct DTA* Fgetdta(unsigned short bios_handle)
+int Fdatime(struct DOSTIME* timeptr, unsigned short bios_handle, unsigned short bios_wflag)
+{
+	register int result asm ("d0") = -1;
+	__asm__ volatile (
+		TRAP_BEGIN
+		"move.w		%3, %%a7@-\n\t"
+		"move.w		%2, %%a7@-\n\t"
+		"move.l		%1, %%a7@-\n\t"
+		TRAP_FUNC(1, 0x57)
+		: "=r" (result)
+		: "r" (timeptr), "r" (bios_handle), "r" (bios_wflag)
+		: CLOBBER_REG, "memory");	// Writes to *timeptr.
+	return result;
+}
+
+struct DTA* Fgetdta(void)
 {
 	register struct DTA* result asm ("d0") = (struct DTA*)-1;
 	__asm__ volatile (
 		TRAP_BEGIN
-		"move.w		%1, %%a7@-\n\t"
 		TRAP_FUNC(1, 0x2f)
 		: "=r" (result)
-		: "r" (bios_handle)
+		:
 		: CLOBBER_REG);
+	return result;
+}
+
+void Fsetdta(struct DTA* dta)
+{
+	__asm__ volatile (
+		TRAP_BEGIN
+		"move.l		%0, %%a7@-\n\t"
+		TRAP_FUNC(1, 0x1a)
+		:
+		: "r" (dta)
+		: CLOBBER_REG, "d0");
+}
+
+int Fsfirst(const char* bios_filespec, unsigned short bios_attribs)
+{
+	register int result asm ("d0") = -1;
+	__asm__ volatile (
+		TRAP_BEGIN
+		"move.w		%2, %%a7@-\n\t"
+		"move.l		%1, %%a7@-\n\t"
+		TRAP_FUNC(1, 0x4e)
+		: "=r" (result)
+		: "r" (bios_filespec), "r" (bios_attribs)
+		: CLOBBER_REG, "memory");	// Writes to the DTA.
 	return result;
 }
 

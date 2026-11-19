@@ -37,7 +37,26 @@ int Fread(unsigned short bios_handle, int length, void* buf);
 
 int Fwrite(unsigned short bios_handle, int length, const void* buf);
 
-struct DTA* Fgetdta(unsigned short bios_handle);
+// DOS format date and time, as used by Fdatime.
+struct DOSTIME
+{
+	unsigned short time;	// bits 15-11: hours, 10-5: minutes, 4-0: seconds / 2
+	unsigned short date;	// bits 15-9: years since 1980, 8-5: month (1-12), 4-0: day (1-31)
+};
+
+// bios_wflag: 0 = get date and time of file into *timeptr, 1 = set it from *timeptr.
+// Returns 0, or a negative GEMDOS error code.
+int Fdatime(struct DOSTIME* timeptr, unsigned short bios_handle, unsigned short bios_wflag);
+
+// Returns the current process' DTA.
+struct DTA* Fgetdta(void);
+
+// Sets the current process' DTA.
+void Fsetdta(struct DTA* dta);
+
+// Finds the first file matching bios_filespec and bios_attribs (FA_*), and stores the result in the DTA.
+// Returns 0 if found, otherwise a negative GEMDOS error code.
+int Fsfirst(const char* bios_filespec, unsigned short bios_attribs);
 
 int Mfree(void* start_addr);
 
