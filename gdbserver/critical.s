@@ -455,11 +455,28 @@ ClearInternalCaches:
 	.endfunc
 
 	.data
+/*
+	Exception stack frame size in bytes for each format code (bits 15-12 of the format/vector word),
+	including sr, pc and the format/vector word.
+	Undefined formats are given the size of the normal 4 word frame.
+*/
 stackframe_sizes:
-	.dc.w	8, 58, 12, 8
-	.dc.w	8, 8, 8, 8
-	.dc.w	58, 8, 32, 92
-	.dc.w	8, 8, 8, 8
+	.dc.w	8		| 0: Normal four word frame (all 68010+)
+	.dc.w	8		| 1: Throwaway four word frame (68020/68030/68040)
+	.dc.w	12		| 2: Six word frame (68020+: trap, trace, chk, zero divide...)
+	.dc.w	12		| 3: 68040 floating point post-instruction frame
+	.dc.w	16		| 4: 68060 access error, 68040 unimplemented FP (EC040/LC040), 8 words
+	.dc.w	8		| 5: Undefined
+	.dc.w	8		| 6: Undefined
+	.dc.w	60		| 7: 68040 access error frame, 30 words
+	.dc.w	58		| 8: 68010 bus/address error frame, 29 words
+	.dc.w	20		| 9: 68020/68030 coprocessor mid-instruction frame, 10 words
+	.dc.w	32		| A: 68020/68030 short bus cycle fault frame, 16 words
+	.dc.w	92		| B: 68020/68030 long bus cycle fault frame, 46 words
+	.dc.w	24		| C: CPU32 bus error frame, 12 words
+	.dc.w	8		| D: Undefined
+	.dc.w	8		| E: Undefined
+	.dc.w	8		| F: Undefined
 
 	.bss
 	.lcomm	exception_a7,		4
