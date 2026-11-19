@@ -35,7 +35,7 @@ SECTIONS
 	}
 	.bss BLOCK(0x4) : {
 		__BSS_SEGMENT__ = .;
-		*(.bss);
+		*(.bss .bss.*);
 		. = ALIGN(0x4);
 		*(COMMON);
 		. = ALIGN(0x4);
