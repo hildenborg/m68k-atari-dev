@@ -62,12 +62,79 @@ bool Mfp_IsMyDevice(const char *comString)
 }
 
 
+/*
+	The default TOS serial input buffer is only 256 bytes. A gdb packet is up to 1023 bytes
+	(more on the wire when escaped), and arrives as one burst. Without working flow control
+	(e.g. emulators, or cables without RTS/CTS), anything above 256 bytes that arrives faster
+	than we read it is lost. So the TOS buffer is replaced with a larger one while the server runs.
+*/
+#define SERIAL_INPUT_BUFFER_SIZE 2048
+unsigned char	serialInputBuffer[SERIAL_INPUT_BUFFER_SIZE];
+struct IOREC	originalSerialInput;	// The TOS buffer record, restored on exit.
+struct IOREC*	serialInput = 0;
+
+// Must be called in supervisor mode.
+static unsigned short DisableIrq(void)
+{
+	unsigned short sr;
+	__asm__ volatile ("move.w %%sr, %0\n\tori.w #0x700, %%sr" : "=d" (sr) : : "memory", "cc");
+	return sr;
+}
+
+// Must be called in supervisor mode.
+static void RestoreIrq(unsigned short sr)
+{
+	__asm__ volatile ("move.w %0, %%sr" : : "d" (sr) : "memory", "cc");
+}
+
+// Field by field copy, as a struct assignment would need memcpy, which we don't have.
+static void CopyIorec(struct IOREC* dst, const struct IOREC* src)
+{
+	dst->ibuf = src->ibuf;
+	dst->ibufsiz = src->ibufsiz;
+	dst->ibufhd = src->ibufhd;
+	dst->ibuftl = src->ibuftl;
+	dst->ibuflow = src->ibuflow;
+	dst->ibufhi = src->ibufhi;
+}
+
+// Replaces the TOS serial input buffer with ours. Must be called in supervisor mode.
+static void SetSerialInputBuffer(void)
+{
+	serialInput = Iorec(IO_SERIAL);
+	unsigned short sr = DisableIrq();
+	CopyIorec(&originalSerialInput, serialInput);
+	serialInput->ibuf = serialInputBuffer;
+	serialInput->ibufsiz = SERIAL_INPUT_BUFFER_SIZE;
+	serialInput->ibufhd = 0;
+	serialInput->ibuftl = 0;
+	serialInput->ibuflow = SERIAL_INPUT_BUFFER_SIZE / 4;		// Flow control: resume sending below this
+	serialInput->ibufhi = (SERIAL_INPUT_BUFFER_SIZE * 3) / 4;	// Flow control: stop sending above this
+	RestoreIrq(sr);
+}
+
+// Puts back the TOS serial input buffer. Must be called in supervisor mode.
+static void RestoreSerialInputBuffer(void)
+{
+	if (serialInput != 0)
+	{
+		unsigned short sr = DisableIrq();
+		CopyIorec(serialInput, &originalSerialInput);
+		// Any data left is in our buffer, so start with an empty TOS buffer.
+		serialInput->ibufhd = 0;
+		serialInput->ibuftl = 0;
+		RestoreIrq(sr);
+		serialInput = 0;
+	}
+}
+
 int Mfp_Init(const char *comString, _CommException CommException)
 {
 	InitMfpAux(CommException);
 
 	// Set serial conf
 	 Rsconf(BAUD_9600, FLOW_HARD, RS_CLK16 | RS_1STOP | RS_8BITS, RS_INQUIRE, RS_INQUIRE, RS_INQUIRE);
+	SetSerialInputBuffer();
 	// Empty serial buffer
 	while (Bconstat(DEV_AUX) != 0)
 	{
@@ -86,6 +153,7 @@ void Mfp_Exit(void)
 	// Set DTR to OFF
 	Offgibit(GI_DTR);
 	ExitMfpAux();
+	RestoreSerialInputBuffer();
 }
 
 

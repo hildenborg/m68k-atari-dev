@@ -142,6 +142,23 @@ int Bcostat(unsigned short dev);
 #define RS_BUFFULL   	0x0080
 // ucr, rsr, tsr, scr
 #define RS_INQUIRE   	0xffff
+// Serial/keyboard/midi buffer record, as returned by Iorec.
+// For the serial device (IO_SERIAL), the output IOREC directly follows the input IOREC.
+struct IOREC
+{
+	unsigned char* ibuf;			// Buffer
+	short ibufsiz;					// Buffer size in bytes
+	volatile short ibufhd;			// Head index (next read position)
+	volatile short ibuftl;			// Tail index (next write position)
+	short ibuflow;					// Low water mark, for flow control
+	short ibufhi;					// High water mark, for flow control
+};
+
+#define IO_SERIAL	0
+#define IO_KEYBOARD	1
+#define IO_MIDI		2
+struct IOREC* Iorec(unsigned short dev);
+
 int Rsconf(unsigned short speed, unsigned short flow, unsigned short ucr, unsigned short rsr, unsigned short tsr, unsigned short scr);
 
 

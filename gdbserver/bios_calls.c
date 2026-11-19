@@ -310,6 +310,19 @@ int Bcostat(unsigned short dev)
 }
 
 
+struct IOREC* Iorec(unsigned short dev)
+{
+	register struct IOREC* result asm ("d0") = 0;
+	__asm__ volatile (
+		TRAP_BEGIN
+		"move.w		%1, %%a7@-\n\t"
+		TRAP_FUNC(14, 0x0e)
+		: "=r" (result)
+		: "r" (dev)
+		: CLOBBER_REG);
+	return result;
+}
+
 int Rsconf(unsigned short speed, unsigned short flow, unsigned short ucr, unsigned short rsr, unsigned short tsr, unsigned short scr)
 {
 	register int result asm ("d0") = -1;
