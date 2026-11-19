@@ -833,7 +833,7 @@ int ServerMain(bool loadRequest)
 	int ret = -1;
 	// Get cookies
 	Supexec(GetCookies);
-	if ((Cookie_FPU & (0x1f << 16)) != 0 && Cookie_CPU >= 20)
+	if (Fpu_Coprocessor != 0)
 	{
 		numOfCpuRegisters = 29;
 	}

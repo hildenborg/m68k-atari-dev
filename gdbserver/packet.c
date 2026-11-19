@@ -548,7 +548,7 @@ void WriteStop(int si_signo, int si_code, bool gdb_break)
 size_t GetNumRegisterLongs(void)
 {
 	size_t num = 18;
-	if ((Cookie_FPU & (0x1f << 16)) != 0)
+	if (Fpu_Coprocessor != 0)
 	{
 		num += (8*3) + 3;
 	}

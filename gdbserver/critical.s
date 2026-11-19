@@ -15,6 +15,7 @@
 	.global Cookie_CPU
 	.global Cookie_VDO
 	.global Cookie_FPU
+	.global Fpu_Coprocessor
 	.global Cookie_MCH
 	.global SwitchToServerContext
 	.global SwitchToInferorContext
@@ -108,9 +109,7 @@ InitExceptions:
 	HookVector NMI
 	HookVector BreakPoint
 
-	move.l	Cookie_FPU, d0
-	swap	d0
-	and.w	#0x1e, d0
+	move.w	Fpu_Coprocessor, d0
 	jeq		1f
 	HookVector FPUnordered
 	HookVector FPInexact
@@ -151,9 +150,7 @@ RestoreExceptions:
 	UnHookVector NMI
 	UnHookVector BreakPoint
 
-	move.l	Cookie_FPU, d0
-	swap	d0
-	and.w	#0x1e, d0
+	move.w	Fpu_Coprocessor, d0
 	jeq		1f
 	move.l	fpucr_save, d0
 	fmove.l	d0, fpcr
@@ -179,9 +176,7 @@ RestoreExceptions:
 	.global ResetFpuControl
 ResetFpuControl:
 	.func ResetFpuControl
-	move.l	Cookie_FPU, d0
-	swap	d0
-	and.w	#0x1e, d0
+	move.w	Fpu_Coprocessor, d0
 	jeq		1f
 	move.l	fpucr_save, d0
 	fmove.l	d0, fpcr
@@ -249,12 +244,8 @@ Calc68010Stack:
 
 SaveStateAndSwitchContext:
 	movem.l	d0-d7/a0-a6, registers
-	move.l	Cookie_FPU, d0
-	swap	d0
-	and.w	#0x1f, d0
-	jeq		2f
-    cmp.l   #20, Cookie_CPU
-	jmi		1f
+	move.w	Fpu_Coprocessor, d0
+	jeq		2f				| No FPU registers to handle. (ToDo: SFP004)
 	| Got fpu and a 020+ cpu
 	lea		internal_fpu_state + FPU_FRAME_SIZE, a0
 	fsave	-(a0)
@@ -274,12 +265,6 @@ SaveStateAndSwitchContext:
 	fmove.l		fpcr, registers + o_to_fp_control
 	fmove.l		fpsr, registers + o_to_fp_status
 	fmove.l		fpiar, registers + o_to_fp_iaddr
-	jra		2f
-1:
-	btst	#0, d0
-	jeq		2f
-	| ToDo: SFP004
-
 2:
 	jsr		Calc68000Stack
 	move.l	a0, exception_sr_pc
@@ -319,12 +304,8 @@ RestoreStateAndSwitchContext:
 	jsr		Calc68000Stack
 	move.w	d0, (a0)	| sr
 	move.l	registers + o_to_pc, 2(a0)
-	move.l	Cookie_FPU, d0
-	swap	d0
-	and.w	#0x1f, d0
-	jeq		2f
-    cmp.l   #20, Cookie_CPU
-	jmi		1f
+	move.w	Fpu_Coprocessor, d0
+	jeq		2f				| No FPU registers to handle. (ToDo: SFP004)
 	| Got fpu and a 020+ cpu
 	fmovem.x	registers + o_to_fp0, fp0-fp7
 	fmove.l		registers + o_to_fp_control, fpcr
@@ -332,12 +313,6 @@ RestoreStateAndSwitchContext:
 	fmove.l		registers + o_to_fp_iaddr, fpiar
 	move.l	internal_fpu_state_frame, a0
 	frestore	(a0)
-	jra		2f
-1:
-	btst	#0, d0
-	jeq		2f
-	| ToDo: SFP004
-	
 2:
 	movem.l	registers, d0-d7/a0-a6
 	rts

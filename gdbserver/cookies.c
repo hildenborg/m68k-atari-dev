@@ -11,6 +11,7 @@ unsigned int Cookie_VDO = 0;
 unsigned int Cookie_FPU = 0;
 unsigned int Cookie_MCH = 0;
 unsigned int Cookie_SDBG = 0;
+unsigned short Fpu_Coprocessor = 0;
 
 #pragma GCC diagnostic push
 // Remove out of bounds warning, as the cookie code will trigger false warnings.
@@ -61,6 +62,12 @@ int GetCookies(void)
 		}
 	}
 	#undef COOKIE_NAME
+	// FPU registers are only handled for an FPU that is a coprocessor (or internal) to a 68020+ CPU.
+	// An SFP004 (bit 0) is memory mapped, and isn't saved or restored.
+	if (Cookie_CPU >= 20)
+	{
+		Fpu_Coprocessor = (unsigned short)((Cookie_FPU >> 16) & 0x1e);
+	}
 	return 0;
 }
 #pragma GCC diagnostic pop

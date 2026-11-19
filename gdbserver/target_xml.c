@@ -6,7 +6,7 @@
 #include "target_xml.h"
 #include "clib.h"
 
-extern unsigned int Cookie_FPU;
+extern unsigned short Fpu_Coprocessor;
 
 char target_xml_header[] =
 	"<?xml version=\"1.0\"?>\n"
@@ -63,7 +63,7 @@ unsigned int GetTargetXml(const char* parts[])
 	parts[0] = target_xml_header;
 	parts[1] = target_xml_cpu_feature;
 
-	if ((Cookie_FPU & (0x1f << 16)) != 0)
+	if (Fpu_Coprocessor != 0)
 	{
 		parts[2] = target_xml_fpu_feature;
 		length += strlen(target_xml_fpu_feature);

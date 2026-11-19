@@ -55,6 +55,13 @@ extern unsigned int Cookie_MCH;
 */
 extern unsigned int Cookie_SDBG;
 
+/*
+	Bits 1-4 of the _FPU high word, if the CPU is a 68020 or above, else 0.
+	Non zero means that FPU instructions can be used, and that the FPU registers
+	are saved, restored and reported to gdb. Set by GetCookies.
+*/
+extern unsigned short Fpu_Coprocessor;
+
 
 int GetCookies(void);
 
