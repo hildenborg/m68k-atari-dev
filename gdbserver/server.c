@@ -43,7 +43,7 @@ typedef enum
 #define USERCODE_ERROR		-1
 #define USERCODE_WARNING	-2
 
-const char serverFeatures[] = "PacketSize=3ff;swbreak+;QSetWorkingDir+;qXfer:features:read+;QStartNoAckMode+";
+const char serverFeatures[] = "PacketSize=3ff;swbreak+;QSetWorkingDir+;qXfer:features:read+;QStartNoAckMode+;binary-upload+";
 
 /*
 	Global states.
@@ -820,8 +820,9 @@ void ServerCommandLoop(int si_signo, int si_code)
 		case 'G':	// Set register values
 			WriteRegisters();
 			break;
-		case 'm':	// Read from memory
-			ReadMemory(isSupervisorMode);
+		case 'm':	// Read from memory, as hex
+		case 'x':	// Read from memory, as binary
+			ReadMemory(isSupervisorMode, inptr[0] == 'x');
 			break;
 		case 'M':	// Write to memory
 			WriteMemory(isSupervisorMode);

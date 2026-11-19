@@ -46,7 +46,7 @@ void ReadRegister(void);
 void WriteTargetXML(short vNameEnd);
 void WriteOffsets(void);
 void WriteMemory(bool isSupervisorMode);
-void ReadMemory(bool isSupervisorMode);
+void ReadMemory(bool isSupervisorMode, bool binary);
 
 #define WriteOK() WriteString("OK")
 

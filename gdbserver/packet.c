@@ -754,6 +754,8 @@ static unsigned char*	memAddr;
 static unsigned int		memLen;
 static char*			memHex;
 static bool				memInferiorContext;
+static bool				memBinary;		// Read as raw bytes (x packet) instead of hex (m packet).
+
 
 static int WriteMemory_super(void)
 {
@@ -788,7 +790,14 @@ static int ReadMemory_super(void)
 		{
 			return (int)i;	// Bus or address error.
 		}
-		WriteByte(membyte);
+		if (memBinary)
+		{
+			WriteChar((char)membyte);	// Escaped when the packet is sent.
+		}
+		else
+		{
+			WriteByte(membyte);
+		}
 	}
 	return (int)memLen;
 }
@@ -836,24 +845,35 @@ void WriteMemory(bool isSupervisorMode)
 	}
 }
 
-void ReadMemory(bool isSupervisorMode)
+/*
+	m replies with hex digits. x (gdb 16 and later, advertised as binary-upload) replies with 'b' and the
+	raw bytes, which take half the space. gdb accepts a shorter reply than requested from both.
+*/
+void ReadMemory(bool isSupervisorMode, bool binary)
 {
 	unsigned char* addr;
 	unsigned int len;
 	short offset = GetAddressAndLength(1, false, &addr, &len);
 	if (offset > 0)
 	{
-		// Each byte takes two hex digits. gdb accepts a shorter reply than requested.
-		if (len > PACKET_SIZE / 2)
+		unsigned int maxLen = PACKET_SIZE / 2;	// Each byte takes two hex digits.
+		if (binary)
 		{
-			len = PACKET_SIZE / 2;
+			WriteChar('b');
+			maxLen = PACKET_SIZE - 1;
+		}
+		if (len > maxLen)
+		{
+			len = maxLen;
 		}
 		memAddr = addr;
 		memLen = len;
-		// A read that fails part way replies with the bytes read so far, which gdb accepts.
+		memBinary = binary;
+		// A read that fails part way replies with the bytes read so far.
 		// If not even the first byte can be read, it is an error.
 		if (AccessMemory(ReadMemory_super, isSupervisorMode) == 0 && len != 0)
 		{
+			ClearOutPacket();	// Drops the 'b'.
 			WriteError(1);
 		}
 	}
