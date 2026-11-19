@@ -50,7 +50,7 @@ struct BasePage
 };
 
 #ifdef MINTELF_TOOLCHAIN
-#define _BasePage _base;
+#define _BasePage _base
 #endif
 extern struct BasePage* _BasePage;
 
