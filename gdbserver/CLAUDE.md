@@ -7,7 +7,7 @@ An Atari specific gdb server supporting motorola 68000 and up to 68060 CPUs.
     make TOOLKIT=$HOME/toolchain/m68k-atari-elf all
 
 - Making the project will build a `gdbsrv.ttp` file that can be run in Hatari.
-- The makefile builds into the current directory, so build from a separate directory to keep object files out of the sources: `mkdir build && cd build && make -f ../makefile TOOLKIT=$HOME/toolchain/m68k-atari-elf all` (as `build.sh` does). `build.sh` also copies the result to `$HOME/sthd/gdbsrv.ttp`.
+- The makefile builds into the current directory, so build from a separate directory to keep object files out of the sources: `mkdir build && cd build && make -f ../makefile TOOLKIT=$HOME/toolchain/m68k-atari-elf all` (as `build.sh` does). `build.sh` also copies the result to `$HOME/sthd/gdbsrv.ttp`. The makefile reads `specs.spec` from its own directory, so a copy of the sources for a variant build must include it.
 - There is no C library and no libgcc. Code that makes gcc emit library calls fails to link:
 	- Struct assignment can become `memcpy`. Copy fields one by one instead.
 	- 32x32 bit multiplication on 68000 becomes `__mulsi3`. Keep multiplications 16x16 bits (`mulu.w`).
@@ -42,6 +42,7 @@ An Atari specific gdb server supporting motorola 68000 and up to 68060 CPUs.
 
 - TOS images are in `$HOME/tos`: `tos206.img` for `--machine st/ste`, `etos512se.img` (EmuTOS) for `--machine tt/falcon`, `tos404.img` for Falcon.
 - For 68040/68060 use the TT with `--cpulevel 4` or `--cpulevel 6` and `--data-cache true`. The Falcon's serial port needs `--scc-b-in/--scc-b-out`, not `--rs232-*`.
+- Hatari's Falcon has no FPU by default (18 registers in `g`). With TOS 4.04 it needs about 15 s to boot before the server answers; ST/STE/TT need about 7 s.
 - Hatari does not emulate an SFP004 FPU. Test that path with a build that forces the `_FPU` cookie.
 - The TT (68030 + 68882) exercises the FPU code paths. Hatari's default FPU emulation never sets the inexact flag or takes FPU exception traps, so add `--fpu 68882 --fpu-softfloat true` when testing FPU exceptions.
 - Drive C: is a host folder, so files written through `vFile` packets can be checked directly on the host.
@@ -70,6 +71,8 @@ An Atari specific gdb server supporting motorola 68000 and up to 68060 CPUs.
 
 - Hatari delivers bytes from the pty faster than a real 9600 baud line and ignores RTS/CTS. The server therefore replaces the 256 byte TOS serial input buffer with a 2 KB one (`comm.c`), so a whole gdb packet (max 1023 bytes, more when escaped) fits.
 - A custom test client talking to the pty directly should keep each burst below 2 KB.
+- In Hatari the server's CPU, not the line, limits the speed: about 1200 B/s of hex `m` replies on an STE and 7000 B/s on a TT. A real 9600 baud line carries about 960 B/s, so there the time follows the number of bytes on the wire. Speed tests should compare builds in Hatari, and not pace short requests (a sleep after every write hides round trip times).
 - `QStartNoAckMode` is advertised, so gdb uses no-ack mode. It lasts for one connection: the server ends it on `D`, on a detected disconnect, and when a packet starting with `qSupported` arrives (gdb starts every connection with it). A serial line usually can't signal a disconnect, so a custom test client that uses no-ack mode should end with `D`, or the next client should start with `qSupported`. `vKill` doesn't end it, as gdb stays connected after a kill.
+- Replies are run-length encoded (`c*n`, n - 29 more copies of c; gdb always accepts it). A custom test client must expand runs before removing `}` escapes, as gdb does. The server never puts a run after an escaped byte. The send loop in `SendPacketData` runs for every byte, so it only calls `RunLength` when the next byte is equal, and keeps the length in a local (the compiler must assume `PutByte` changes globals).
 - Extended mode (`!`) is reset by `qSupported` only, not by `D` or a disconnect: after a kill it decides whether a server started without `--multi` keeps running for the next connection. A test client that relies on extended mode being off should start with `qSupported`.
 - In no-ack mode gdb sends its next packet right after a reply. While the inferior runs, the CTRL-C hook drops every other received byte, so it must be off before the server replies (e.g. `W` after the inferior exits).

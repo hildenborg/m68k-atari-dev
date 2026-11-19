@@ -238,23 +238,71 @@ void ReceivePacket(void)
 // Max number of times a packet is resent when gdb answers with a nak ('-').
 #define MAX_TRANSMIT_RETRIES 10
 
-// Sends outPacket as "$<escaped data>#<checksum>".
+/*
+	Run-length encoding: "c*n" means c followed by n - 29 more copies of c.
+	n must be printable (max '~', 97 repeats), and not '#' or '$' (6 or 7 repeats).
+	Shorter runs than 3 repeats would not save anything.
+	gdb expands runs before it removes escapes, so only bytes that are not escaped can be repeated.
+*/
+#define RLE_MIN_REPEATS 3
+#define RLE_MAX_REPEATS ('~' - 29)
+
+// Returns the number of repeats to encode after outPacket[i], or 0 if it isn't worth it.
+static short RunLength(short i)
+{
+	char c = outPacket[i];
+	short repeats = 0;
+	while (repeats < RLE_MAX_REPEATS && i + repeats + 1 < outPacketLength && outPacket[i + repeats + 1] == c)
+	{
+		++repeats;
+	}
+	if (repeats < RLE_MIN_REPEATS)
+	{
+		return 0;
+	}
+	while (repeats + 29 == '#' || repeats + 29 == '$')
+	{
+		--repeats;
+	}
+	return repeats;
+}
+
+static void PutByteSum(char c, unsigned char* sum)
+{
+	PutByte(c);
+	*sum += (unsigned char)c;
+}
+
+// Sends outPacket as "$<escaped and run-length encoded data>#<checksum>".
 static void SendPacketData(void)
 {
 	unsigned char sum = 0;
-	// Send encoded
 	PutByte('$');	// Packets always start with $
-	for (int i = 0; i < outPacketLength; ++i)
+	short length = outPacketLength;	// Local, as the compiler must assume PutByte can change the global.
+	short i = 0;
+	while (i < length)
 	{
-		char c = outPacket[i];
+		char c = outPacket[i++];
 		if (c == '$' || c == '#' || c == '*' || c == 0x7d)
 		{
-			PutByte(0x7d);
-			sum += 0x7d;
-			c ^= 0x20;
+			PutByteSum(0x7d, &sum);
+			PutByteSum(c ^ 0x20, &sum);
 		}
-		PutByte(c);
-		sum += (unsigned char)c;
+		else
+		{
+			PutByteSum(c, &sum);
+			// Most bytes differ from the next one, so check that before counting the run.
+			if (i < length && outPacket[i] == c)
+			{
+				short repeats = RunLength(i - 1);
+				if (repeats > 0)
+				{
+					PutByteSum('*', &sum);
+					PutByteSum((char)(repeats + 29), &sum);
+					i += repeats;
+				}
+			}
+		}
 	}
 	// End with checksum
 	PutByte('#');
