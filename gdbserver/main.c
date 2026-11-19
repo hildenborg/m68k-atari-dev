@@ -32,13 +32,18 @@
 	args
 		Commandline arguments for prog.
 	options:
+		--log
+			Must be the first argument. Turns on --debug and --debug-remote,
+			and writes the output to gdblog.txt instead of the console.
 		--debug
 			Outputs status information to console.
-		--remote-debug
+		--debug-remote
 			Outputs remote package communication to console.
 		--multi
 			Starts the server without any executable to debug.
 			Waits for gdb to connect with target extended-remote and tell us what executable to debug.
+		--once
+			In extended mode, exits the server when the inferior is killed.
 */
 static bool IsCommName(const char* arg)
 {

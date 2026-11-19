@@ -58,6 +58,33 @@ void ClearOutPacket(void)
 	outPacketLength = 0;
 }
 
+// Replaces inPacket with a one byte command for the command loop:
+// 'k' kills the inferior, and Ctrl-Z (0x1a) shuts down the server.
+static void SetSpecialPacket(char c)
+{
+	inPacketLength = 1;
+	inPacket[0] = c;
+	inPacket[1] = 0;
+}
+
+// If GetByte returned a communication error, sets the matching special packet and returns true.
+static bool HandleCommError(int c)
+{
+	if (c == COMM_ERR_DISCONNECTED)
+	{
+		DbgRemOut("\r\n\tConnection dropped!\r\n");
+		SetSpecialPacket('k');
+		return true;
+	}
+	if (c == COMM_ERR_KILLED)
+	{
+		DbgRemOut("\r\n\tKill Server!\r\n");
+		SetSpecialPacket(0x1a);
+		return true;
+	}
+	return false;
+}
+
 void ReceivePacket(void)
 {
 	DbgRemOut("ReceivePacket: \r\n");
@@ -79,8 +106,7 @@ void ReceivePacket(void)
 			if (CheckServerQuitKey() < 0)
 			{
 				DbgOut("\r\n\tKill Server!\r\n");
-				inPacketLength = 1;
-				inPacket[0] = 0x1a;		// Ctrl-Z
+				SetSpecialPacket(0x1a);
 				return;
 			}
 		}
@@ -89,59 +115,25 @@ void ReceivePacket(void)
 		// Wait for packet start
 		while ((c = GetByte()) != '$')
 		{
-			if (c == COMM_ERR_DISCONNECTED)
+			if (HandleCommError(c))
 			{
-				DbgRemOut("\r\n\tConnection dropped!\r\n");
-				inPacketLength = 1;
-				inPacket[0] = (unsigned char)'k';
-				return;
-			}
-			else if (c == COMM_ERR_KILLED)
-			{
-				DbgRemOut("\r\n\tKill Server!\r\n");
-				inPacketLength = 1;
-				inPacket[0] = 0x1a;		// Ctrl-Z
 				return;
 			}
 		}
 		
 		DbgRemOut("\tGot beginning of packet.\r\n");
-		// Fetch payload
+		// Fetch payload. The checksum covers all bytes between '$' and '#', as sent.
 		bool escaped = false;
 		bool error = false;
 		bool overflow = false;
-		while (!error)
+		for (;;)
 		{
 			c = GetByte();
-			if (c == COMM_ERR_DISCONNECTED)
+			if (HandleCommError(c))
 			{
-				DbgRemOut("\r\n\tConnection dropped!\r\n");
-				inPacketLength = 1;
-				inPacket[0] = (unsigned char)'k';
 				return;
 			}
-			else if (c == COMM_ERR_KILLED)
-			{
-				DbgRemOut("\r\n\tKill Server!\r\n");
-				inPacketLength = 1;
-				inPacket[0] = 0x1a;		// Ctrl-Z
-				return;
-			}
-			if (escaped)
-			{
-				sum += (unsigned char)c;
-				c ^= 0x20;
-				escaped = false;
-				if (inPacketLength < PACKET_SIZE)
-				{
-					inPacket[inPacketLength++] = (unsigned char)c;
-				}
-				else
-				{
-					overflow = true;
-				}
-			}
-			else
+			if (!escaped)
 			{
 				if (c == '$')
 				{
@@ -149,24 +141,31 @@ void ReceivePacket(void)
 					error = true;
 					break;
 				}
-				else if (c == '#')
+				if (c == '#')
 				{
 					// End of packet.
 					break;
 				}
-				else if (c == 0x7d)
-				{
-					escaped = true;
-				}
-				else if (inPacketLength < PACKET_SIZE)
-				{
-					inPacket[inPacketLength++] = (unsigned char)c;
-				}
-				else
-				{
-					overflow = true;
-				}
-				sum += (unsigned char)c;
+			}
+			sum += (unsigned char)c;
+			if (escaped)
+			{
+				c ^= 0x20;
+				escaped = false;
+			}
+			else if (c == 0x7d)
+			{
+				// The next byte is escaped.
+				escaped = true;
+				continue;
+			}
+			if (inPacketLength < PACKET_SIZE)
+			{
+				inPacket[inPacketLength++] = (char)c;
+			}
+			else
+			{
+				overflow = true;
 			}
 		}
 		if (error)
@@ -179,8 +178,15 @@ void ReceivePacket(void)
 		DbgRemOut(inPacket);
 		// Fetch checksum
 		char csum[2];
-		csum[0] = (char)GetByte();
-		csum[1] = (char)GetByte();
+		for (int i = 0; i < 2; ++i)
+		{
+			c = GetByte();
+			if (HandleCommError(c))
+			{
+				return;
+			}
+			csum[i] = (char)c;
+		}
 		if (!noAckMode)
 		{
 			unsigned char psum = HexToByte(csum);
@@ -203,8 +209,7 @@ void ReceivePacket(void)
 		if (!comDev->IsConnected())
 		{
 			DbgRemOut("\r\n\tConnection dropped!\r\n");
-			inPacketLength = 1;
-			inPacket[0] = 'k';	// Kill inferior
+			SetSpecialPacket('k');	// Kill inferior
 			return;
 		}
 		if (overflow && !waitForPacket)
@@ -587,51 +592,52 @@ void WriteRegisters(void)
 	}
 }
 
+/*
+	Finds where gdb register number idx is stored in ExceptionRegisters, as an index of longs.
+	gdb numbers: 0-17 CPU registers, 18-25 FPU data registers (96 bits, 3 longs each),
+	26-28 FPU control, status and instruction address registers.
+	Returns the number of longs the register takes. idx must be below numOfCpuRegisters.
+*/
+static short RegisterLongs(unsigned int idx, unsigned int* longIndex)
+{
+	if (idx < 18)
+	{
+		*longIndex = idx;
+		return 1;
+	}
+	if (idx < 18 + 8)
+	{
+		*longIndex = 18 + (idx - 18) * 3;
+		return 3;
+	}
+	*longIndex = idx + 16;	// After the 8 FPU data registers, which take 2 extra longs each.
+	return 1;
+}
+
 void WriteRegister(void)
 {
 	unsigned int* rptr = (unsigned int*)GetRegisters();
 	short offset;
 	unsigned int idx;
-	if ((offset = ReadNumber(1, &idx)) > 0)
+	// Registers we don't have are ignored.
+	if ((offset = ReadNumber(1, &idx)) > 0 && idx < numOfCpuRegisters)
 	{
-		if (idx < numOfCpuRegisters)
+		unsigned int longIndex;
+		short numLongs = RegisterLongs(idx, &longIndex);
+		char *inptr = GetInpacketPtr(offset);
+		if (*inptr != '=' || (inPacketLength - (offset + 1)) < numLongs * 8)
 		{
-			char *inptr = GetInpacketPtr(offset);
-			// FPU data registers are 96 bits, all others 32 bits.
-			short hexDigits = (idx >= 18 && idx < (18 + 8)) ? 24 : 8;
-			if (*inptr == '=' && (inPacketLength - (offset + 1)) >= hexDigits)
-			{
-				++inptr;
-				if (idx < 18)
-				{
-					rptr[idx] = HexToLong(inptr);
-				}
-				else if (idx >= (18 + 8))
-				{
-					idx += 16;
-					rptr[idx] = HexToLong(inptr);
-				}
-				else
-				{
-					idx = 18 + ((idx - 18) * 3);
-					rptr[idx] = HexToLong(inptr);
-					rptr[idx + 1] = HexToLong(inptr + 8);
-					rptr[idx + 2] = HexToLong(inptr + 16);
-				}
-			}
-			else
-			{
-				// Malformed packet, or too little register data.
-				WriteError(1);
-				return;
-			}
+			// Malformed packet, or too little register data.
+			WriteError(1);
+			return;
 		}
-		else
+		++inptr;
+		for (short i = 0; i < numLongs; ++i)
 		{
-			// Just ignore.
+			rptr[longIndex + i] = HexToLong(inptr);
+			inptr += 8;
 		}
 	}
-
 	WriteOK();
 }
 
@@ -639,33 +645,15 @@ void ReadRegister(void)
 {
 	unsigned int* rptr = (unsigned int*)GetRegisters();
 	unsigned int idx;
-	if (ReadNumber(1, &idx) > 0)
+	// An empty reply for registers we don't have.
+	if (ReadNumber(1, &idx) > 0 && idx < numOfCpuRegisters)
 	{
-		if (idx < numOfCpuRegisters)
+		unsigned int longIndex;
+		short numLongs = RegisterLongs(idx, &longIndex);
+		for (short i = 0; i < numLongs; ++i)
 		{
-			if (idx < 18)
-			{
-				WriteLong(rptr[idx]);
-			}
-			else if (idx >= (18 + 8))
-			{
-				idx += 16;
-				WriteLong(rptr[idx]);
-			}
-			else
-			{
-				idx = 18 + ((idx - 18) * 3);
-				WriteLong(rptr[idx]);
-				WriteLong(rptr[idx + 1]);
-				WriteLong(rptr[idx + 2]);
-			}
+			WriteLong(rptr[longIndex + i]);
 		}
-		/*
-		else
-		{
-			WriteLong(0x0);
-		}
-		*/
 	}
 }
 

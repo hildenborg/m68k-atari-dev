@@ -280,17 +280,18 @@ int VfileDelete(const char *fileName, int *ioErrno)
 
 int VfileWrite(int fd, const void *buf, int offset, int nbytes, int *ioErrno)
 {
-	int numWritten = -1;
-	if (IsHandle(fd) == 0)
+	if (IsHandle(fd) != 0)
 	{
-		int new_file_pos = Fseek(offset, (unsigned short)fd, 0);
-		if (new_file_pos < 0)
-		{
-			*ioErrno = gem_to_errno(new_file_pos);
-			return -1;
-		}
-		numWritten = Fwrite((unsigned short)fd, nbytes, buf);
+		*ioErrno = VFILE_ERRNO_EBADF;
+		return -1;
 	}
+	int new_file_pos = Fseek(offset, (unsigned short)fd, 0);
+	if (new_file_pos < 0)
+	{
+		*ioErrno = gem_to_errno(new_file_pos);
+		return -1;
+	}
+	int numWritten = Fwrite((unsigned short)fd, nbytes, buf);
 	if (numWritten < 0)
 	{
 		*ioErrno = gem_to_errno(numWritten);
@@ -301,17 +302,18 @@ int VfileWrite(int fd, const void *buf, int offset, int nbytes, int *ioErrno)
 
 int VfileRead(int fd, void *buf, int offset, int nbytes, int *ioErrno)
 {
-	int numRead = -1;
-	if (IsHandle(fd) == 0)
+	if (IsHandle(fd) != 0)
 	{
-		int new_file_pos = Fseek(offset, (unsigned short)fd, 0);
-		if (new_file_pos < 0)
-		{
-			*ioErrno = gem_to_errno(new_file_pos);
-			return -1;
-		}
-		numRead = Fread((unsigned short)fd, nbytes, buf);
+		*ioErrno = VFILE_ERRNO_EBADF;
+		return -1;
 	}
+	int new_file_pos = Fseek(offset, (unsigned short)fd, 0);
+	if (new_file_pos < 0)
+	{
+		*ioErrno = gem_to_errno(new_file_pos);
+		return -1;
+	}
+	int numRead = Fread((unsigned short)fd, nbytes, buf);
 	if (numRead < 0)
 	{
 		*ioErrno = gem_to_errno(numRead);

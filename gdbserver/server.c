@@ -621,11 +621,7 @@ void HandleCommandLoopExit(LoopState loopState, int si_signo, bool* isSupervisor
 		if (inferiorState == LOADED)
 		{
 			// Not started, so we just need to free the memory taken by it.
-			Mfree(inferiorBasePage->p_env);
-			Mfree((struct BasePage*)inferiorBasePage);
-			inferiorBasePage = NULL;
-			inferiorState = NOT_LOADED;
-			DiscardAllBreakpoints();	// They point into the freed memory.
+			FreeInferior();
 		}
 		else if (inferiorState == RUNNING)
 		{
@@ -706,11 +702,7 @@ void HandleCommandLoopExit(LoopState loopState, int si_signo, bool* isSupervisor
 		if (inferiorState == LOADED)
 		{
 			// Not started, so we just need to free the memory taken by it.
-			Mfree(inferiorBasePage->p_env);
-			Mfree((struct BasePage*)inferiorBasePage);
-			inferiorBasePage = NULL;
-			inferiorState = NOT_LOADED;
-			DiscardAllBreakpoints();
+			FreeInferior();
 		}
 		else if (inferiorState == RUNNING)
 		{

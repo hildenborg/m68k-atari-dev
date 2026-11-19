@@ -78,6 +78,15 @@ int LoadInferior(const char* fileName, const char* cmdLine, const char* environm
 	return loadres;
 }
 
+void FreeInferior(void)
+{
+	Mfree(inferiorBasePage->p_env);
+	Mfree(inferiorBasePage);
+	inferiorBasePage = NULL;
+	inferiorState = NOT_LOADED;
+	DiscardAllBreakpoints();	// They point into the freed memory.
+}
+
 bool RunInferior(int* return_code)
 {
 	DbgOut("RunInferior: Started\r\n");
@@ -87,12 +96,8 @@ bool RunInferior(int* return_code)
 	ResetFpuControl();	// Don't let FPU settings from a previous inferior leak into this one.
 //	*return_code = Pexec(PE_GOTHENFREE, 0, (const char*)inferiorBasePage, 0); // Requires GEMDOS 0.19 or above.
 	*return_code = Pexec(PE_GO, 0, (const char*)inferiorBasePage, 0);
-	Mfree(inferiorBasePage->p_env);
-	Mfree(inferiorBasePage);
 	// Returning from a terminated inferior
-	inferiorState = NOT_LOADED;
-	inferiorBasePage = NULL;	// inferior have been unloaded.
-	DiscardAllBreakpoints();	// They point into the freed memory.
+	FreeInferior();
 	DbgOut("RunInferior: Terminated\r\n");
 	return inferiorTerminatedByServer;
 }

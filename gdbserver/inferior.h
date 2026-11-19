@@ -23,6 +23,8 @@ extern char inferior_cmdline[];
 extern char inferior_workpath[];
 
 int LoadInferior(const char* fileName, const char* cmdLine, const char* environment);
+// Frees the memory of a loaded inferior, and discards its breakpoints. Sets inferiorState to NOT_LOADED.
+void FreeInferior(void);
 bool RunInferior(int* return_code);
 void TerminateInferior(int si_signo);
 bool IsInferiorStartBreak(int si_signo, int si_code);
