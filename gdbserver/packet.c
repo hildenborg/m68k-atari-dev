@@ -16,6 +16,7 @@
 #include "context.h"
 #include "critical.h"
 #include "server.h"
+#include "bios_calls.h"
 
 /*
 	Max inPacket and outPacket size must be the same, 
@@ -750,19 +751,85 @@ void WriteOffsets(void)
 	}
 }
 
+// Arguments to the memory access functions, which may run through Supexec.
+static unsigned char*	memAddr;
+static unsigned int		memLen;
+static char*			memHex;
+static bool				memInferiorContext;
+
+static int WriteMemory_super(void)
+{
+	char* ptr = memHex;
+	for (unsigned int i = 0; i < memLen; ++i)
+	{
+		unsigned char* a = memAddr + i;
+		if (memInferiorContext)
+		{
+			a = InferiorContextMemoryAddress(a);
+		}
+		if (ExceptionSafeMemoryWrite(a, HexToByte(ptr)) != 0)
+		{
+			return (int)i;	// Bus or address error.
+		}
+		ptr += 2;
+	}
+	return (int)memLen;
+}
+
+static int ReadMemory_super(void)
+{
+	for (unsigned int i = 0; i < memLen; ++i)
+	{
+		unsigned char* a = memAddr + i;
+		if (memInferiorContext)
+		{
+			a = InferiorContextMemoryAddress(a);
+		}
+		unsigned char membyte;
+		if (ExceptionSafeMemoryRead(a, &membyte) != 0)
+		{
+			return (int)i;	// Bus or address error.
+		}
+		WriteByte(membyte);
+	}
+	return (int)memLen;
+}
+
+/*
+	Memory is accessed in supervisor mode, as the exception safe access needs it,
+	and so that system variables and hardware registers can be read.
+	When no inferior is stopped (isSupervisorMode is false) the server runs in user mode,
+	so Supexec is used. The server context is then the current one, so there is no
+	inferior context to redirect addresses to.
+	Returns the number of bytes accessed before any bus or address error.
+*/
+static unsigned int AccessMemory(int (*func)(void), bool isSupervisorMode)
+{
+	memInferiorContext = isSupervisorMode;
+	if (isSupervisorMode)
+	{
+		return (unsigned int)func();
+	}
+	return (unsigned int)Supexec(func);
+}
+
 void WriteMemory(bool isSupervisorMode)
 {
 	unsigned char* addr;
 	unsigned int len;
 	short offset = GetAddressAndLength(1, true, &addr, &len);
-	if (isSupervisorMode && offset > 0)
+	if (offset > 0)
 	{
-		char* ptr = GetInpacketPtr(offset);
-		for (unsigned int i = 0; i < len; ++i)
+		memAddr = addr;
+		memLen = len;
+		memHex = GetInpacketPtr(offset);
+		if (AccessMemory(WriteMemory_super, isSupervisorMode) == len)
 		{
-			unsigned char* infAddr = InferiorContextMemoryAddress(addr + i);
-			ExceptionSafeMemoryWrite(infAddr, HexToByte(ptr));
-			ptr += 2;
+			WriteOK();
+		}
+		else
+		{
+			WriteError(1);	// M has no reply for a partial write.
 		}
 	}
 	else
@@ -776,19 +843,20 @@ void ReadMemory(bool isSupervisorMode)
 	unsigned char* addr;
 	unsigned int len;
 	short offset = GetAddressAndLength(1, false, &addr, &len);
-	if (isSupervisorMode && offset > 0)
+	if (offset > 0)
 	{
 		// Each byte takes two hex digits. gdb accepts a shorter reply than requested.
 		if (len > PACKET_SIZE / 2)
 		{
 			len = PACKET_SIZE / 2;
 		}
-		for (unsigned int i = 0; i < len; ++i)
+		memAddr = addr;
+		memLen = len;
+		// A read that fails part way replies with the bytes read so far, which gdb accepts.
+		// If not even the first byte can be read, it is an error.
+		if (AccessMemory(ReadMemory_super, isSupervisorMode) == 0 && len != 0)
 		{
-			unsigned char* infAddr = InferiorContextMemoryAddress(addr + i);
-			unsigned char membyte;
-			ExceptionSafeMemoryRead(infAddr, &membyte);
-			WriteByte(membyte);
+			WriteError(1);
 		}
 	}
 	else
