@@ -177,22 +177,45 @@ int VfileOpen(const char *fileName, int flags, int *ioErrno)
 	bool excl = (flags & VFILE_O_EXCL) != 0;
 	bool trunc = (flags & VFILE_O_TRUNC) != 0;
 
-	if (!trunc)
+	if (create && excl)
+	{
+		// The file must not exist, not even when O_TRUNC is also given.
+		// Checked before Fcreate, as Fcreate would truncate an existing file.
+		unsigned char attrib;
+		unsigned int size;
+		unsigned int mtime;
+		if (GetFileInfo(fileName, &attrib, &size, &mtime) == 0)
+		{
+			*ioErrno = VFILE_ERRNO_EEXIST;
+			return -1;
+		}
+		fd = Fcreate(fileName, 0);
+	}
+	else if (trunc)
+	{
+		if (!create)
+		{
+			// Without O_CREAT the file must already exist.
+			// Checked before Fcreate, as Fcreate would create a missing file.
+			unsigned char attrib;
+			unsigned int size;
+			unsigned int mtime;
+			int result = GetFileInfo(fileName, &attrib, &size, &mtime);
+			if (result != 0)
+			{
+				*ioErrno = gem_to_errno(result);
+				return -1;
+			}
+		}
+		fd = Fcreate(fileName, 0);
+	}
+	else
 	{
 		fd = Fopen(fileName, bios_mode);
-	}
-	if (fd < 0 && (create || trunc))
-	{
-		unsigned short bios_attrib = 0;
-		fd = Fcreate(fileName, bios_attrib);
-	}
-	else if (create && excl)
-	{
-		// We explicitly specified that file must be created, and it already existed, so error!
-		// Close file.
-		Fclose((unsigned short)fd);
-        *ioErrno = VFILE_ERRNO_EACCES;
-		return -1;
+		if (fd < 0 && create)
+		{
+			fd = Fcreate(fileName, 0);
+		}
 	}
 
 	if (fd >= 0 && append)
