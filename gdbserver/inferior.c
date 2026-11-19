@@ -23,17 +23,22 @@ char	inferior_workpath[MAX_PATH_LEN] __attribute__((aligned(2)));	// The work pa
 
 bool CheckIfMintElf(const char* fileName)
 {
-	unsigned int reserved_long_word;
+	unsigned int reserved_long_word = 0;
 	int fd = Fopen(fileName, VFILE_O_RDONLY);
 	if (fd < 0)
 	{
 		// File not found, but let the caller handle that problem.
 		return false;
 	}
-	Fseek(18,(unsigned short)fd, 0);	// position of reserved long word
-	Fread((unsigned short)fd, 4, &reserved_long_word);
+	bool found = false;
+	// A file shorter than the header, or a failed seek or read, is not mintelf.
+	if (Fseek(18, (unsigned short)fd, 0) == 18 &&	// position of reserved long word
+		Fread((unsigned short)fd, 4, &reserved_long_word) == 4)
+	{
+		found = reserved_long_word == MINTELF_RESERVED;
+	}
 	Fclose((unsigned short)fd);
-	return reserved_long_word == MINTELF_RESERVED;
+	return found;
 }
 
 int LoadInferior(const char* fileName, const char* cmdLine, const char* environment)
