@@ -826,6 +826,19 @@ void ServerCommandLoop(int si_signo, int si_code)
 	DbgOut("ServerCommandLoop: exiting\r\n");
 }
 
+// Lets the user read the messages before the program exits and its window closes.
+static void WaitForKeyIfNeeded(int ret)
+{
+	if (log_debug || log_debug_remote || ret < 0)
+	{
+		ConOut("Press any key...");
+		// Wait for keypress
+		while (Bconstat(DEV_CON) == 0)
+		{
+		}
+	}
+}
+
 int ServerMain(bool loadRequest)
 {
 	DbgOut("ServerMain: Server initing.\r\n");
@@ -841,6 +854,7 @@ int ServerMain(bool loadRequest)
 	if (comDev == 0)
 	{
 		ConOut("Failed creating communication method.");
+		WaitForKeyIfNeeded(-1);
 		return -1;
 	}
 	comDev->EnableCtrlC(false); // Init as off
@@ -848,6 +862,7 @@ int ServerMain(bool loadRequest)
 	if (CreateServerContext() < 0)
 	{
 		ConOut("Could not create server context.");
+		WaitForKeyIfNeeded(-1);
 		return -1;
 	}
 	DbgOut(comDev->DeviceName());
@@ -906,14 +921,7 @@ int ServerMain(bool loadRequest)
 	
 	DestroyServerContext();
 
-	if (log_debug || log_debug_remote || ret < 0)
-	{
-		ConOut("Press any key...");
-		// Wait for keypress
-		while (Bconstat(DEV_CON) == 0)
-		{
-		}
-	}
+	WaitForKeyIfNeeded(ret);
 	return ret;
 }
 
