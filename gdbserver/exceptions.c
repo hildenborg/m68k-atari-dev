@@ -12,7 +12,7 @@
 #include "inferior.h"
 
 #define BREAKPOINT	0x4e40		// Trap #0
-#define NUM_MEMPOINTS 128		// Max number of breakpoints handled by this code.
+#define NUM_MEMPOINTS 32		// Max number of breakpoints handled by this code.
 
 ExceptionRegisters registers;
 bool serverTraceBit = false;

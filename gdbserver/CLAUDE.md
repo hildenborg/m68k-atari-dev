@@ -12,6 +12,7 @@ An Atari specific gdb server supporting motorola 68000 and up to 68060 CPUs.
 	- Struct assignment can become `memcpy`. Copy fields one by one instead.
 	- 32x32 bit multiplication on 68000 becomes `__mulsi3`. Keep multiplications 16x16 bits (`mulu.w`).
 	- Check with `m68k-atari-elf-nm gdbsrv | grep " U "` that nothing is undefined.
+- Memory use matters: the server stays resident while the inferior runs. Check `m68k-atari-elf-size gdbsrv` after changes. `-ffunction-sections` with `--gc-sections` makes it larger, and the toolchain has no LTO. Defining `NO_CON_OR_LOG` (`log.h`) removes all console and log output and saves about 3 KB.
 - `critical.s` is assembled for 68030/68882. It is the only place for 68020+ and FPU instructions, and they must be guarded by checks of `Cookie_CPU` / `Cookie_FPU` (or `Fpu_Coprocessor`, which is 0 when there are no FPU registers to save). Comments in `.s` files use `|`; `//` does not assemble.
 - GEMDOS/BIOS/XBIOS calls are wrapped in `bios_calls.c`. Calls where the OS writes to memory through a pointer argument need a `"memory"` clobber.
 - `link.ld` must collect wildcard input sections (`.text*`, `.data*`, `.bss .bss.*`), or `-fdata-sections` style sections land outside the segment sizes written to the prg header.
@@ -20,6 +21,8 @@ An Atari specific gdb server supporting motorola 68000 and up to 68060 CPUs.
 
 - The server runs the inferior with `Pexec`. While no inferior is stopped, the server runs in user mode (`isSupervisorMode` false in the command loop): privileged access, like memory reads and writes, must go through `Supexec`.
 - While an inferior is stopped, the server runs inside the exception handler in supervisor mode. Memory accesses then go through `InferiorContextMemoryAddress`, which returns the inferior's saved vectors, MFP and video registers instead of the server's live ones.
+- Stacks: in user mode the server uses its own 1 KB stack (`DEFAULT_STACK` in `start.s`, measured peak about 420 bytes over the test suite). While an inferior is stopped, the command loop runs on the stack that was active at the exception, the inferior's supervisor stack, and uses about as much there. Re-measure before adding large local buffers.
+- At most 32 software breakpoints (`NUM_MEMPOINTS`); more give `E01`. Memory reads return the inserted trap words (`0x4e40`), not the original words; gdb keeps its own copy of what it replaced.
 - Serial communication goes through the TOS BIOS `AUX` device for both the MFP (ST/STE/TT) and the SCC (Falcon, mapped with `Bconmap(7)`). Only the receive interrupt is hooked (`comm_mfp_scc.s`), to catch CTRL-C from gdb while the inferior runs. The SCC hook must cover both channel B receive vectors, 0x190 and 0x198: Hatari delivers received bytes through 0x198.
 - GEMDOS is not reentrant. When the inferior stopped in supervisor mode outside its own text (`osMaybeBusy`), it may be inside a GEMDOS call, so the server must not call GEMDOS then (vFile, working dir, log file). BIOS and XBIOS calls are used instead where possible.
 

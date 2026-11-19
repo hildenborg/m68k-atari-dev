@@ -3,7 +3,8 @@
 	SPDX-License-Identifier: MIT
 */
 
-	.equ	DEFAULT_STACK, 2048
+	| The server's user mode stack. The full test suite peaks at about 420 bytes.
+	.equ	DEFAULT_STACK, 1024
 
 	.global _BasePage
 	.global __BSS_SEGMENT_END
