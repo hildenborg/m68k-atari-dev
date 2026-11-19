@@ -4,76 +4,106 @@
 */
 
 #include "target_xml.h"
-#include "clib.h"
+#include "packet.h"
 
 extern unsigned short Fpu_Coprocessor;
 
-char target_xml_header[] =
-	"<?xml version=\"1.0\"?>\n"
-	"<!DOCTYPE target SYSTEM \"gdb-target.dtd\">\n"
-	"<target version=\"1.0\">\n"
-	;
-
-char target_xml_cpu_feature[] =
-	"  <feature name=\"org.gnu.gdb.m68k.core\">\n"
-	"    <reg name=\"d0\" bitsize=\"32\"/>\n"
-	"    <reg name=\"d1\" bitsize=\"32\"/>\n"
-	"    <reg name=\"d2\" bitsize=\"32\"/>\n"
-	"    <reg name=\"d3\" bitsize=\"32\"/>\n"
-	"    <reg name=\"d4\" bitsize=\"32\"/>\n"
-	"    <reg name=\"d5\" bitsize=\"32\"/>\n"
-	"    <reg name=\"d6\" bitsize=\"32\"/>\n"
-	"    <reg name=\"d7\" bitsize=\"32\"/>\n"
-	"    <reg name=\"a0\" bitsize=\"32\" type=\"data_ptr\"/>\n"
-	"    <reg name=\"a1\" bitsize=\"32\" type=\"data_ptr\"/>\n"
-	"    <reg name=\"a2\" bitsize=\"32\" type=\"data_ptr\"/>\n"
-	"    <reg name=\"a3\" bitsize=\"32\" type=\"data_ptr\"/>\n"
-	"    <reg name=\"a4\" bitsize=\"32\" type=\"data_ptr\"/>\n"
-	"    <reg name=\"a5\" bitsize=\"32\" type=\"data_ptr\"/>\n"
-	"    <reg name=\"fp\" bitsize=\"32\" type=\"data_ptr\"/>\n"
-	"    <reg name=\"sp\" bitsize=\"32\" type=\"data_ptr\"/>\n"
-	"    <reg name=\"ps\" bitsize=\"32\"/>\n"
-	"    <reg name=\"pc\" bitsize=\"32\" type=\"code_ptr\"/>\n"
-	"  </feature>\n"
-	;
-
-char target_xml_fpu_feature[] =
-	"  <feature name=\"org.gnu.gdb.coldfire.fp\">\n"
-	"    <reg name=\"fp0\" bitsize=\"96\" type=\"float\" group=\"float\"/>\n"
-	"    <reg name=\"fp1\" bitsize=\"96\" type=\"float\" group=\"float\"/>\n"
-	"    <reg name=\"fp2\" bitsize=\"96\" type=\"float\" group=\"float\"/>\n"
-	"    <reg name=\"fp3\" bitsize=\"96\" type=\"float\" group=\"float\"/>\n"
-	"    <reg name=\"fp4\" bitsize=\"96\" type=\"float\" group=\"float\"/>\n"
-	"    <reg name=\"fp5\" bitsize=\"96\" type=\"float\" group=\"float\"/>\n"
-	"    <reg name=\"fp6\" bitsize=\"96\" type=\"float\" group=\"float\"/>\n"
-	"    <reg name=\"fp7\" bitsize=\"96\" type=\"float\" group=\"float\"/>\n"
-	"    <reg name=\"fpcontrol\" bitsize=\"32\" group=\"float\"/>\n"
-	"    <reg name=\"fpstatus\" bitsize=\"32\" group=\"float\"/>\n"
-	"    <reg name=\"fpiaddr\" bitsize=\"32\" type=\"code_ptr\" group=\"float\"/>\n"
-	"  </feature>\n"
-	;
-
-char target_xml_footer[] =
-	"</target>\n"
-	;
-
-unsigned int GetTargetXml(const char* parts[])
+/*
+	The target description is generated from tables instead of stored as text, to save memory.
+	A register group is either one register (count 0), or count registers named prefix0, prefix1...
+	attribs is the rest of the reg element after 'bitsize="'.
+*/
+typedef struct
 {
-	unsigned int length = strlen(target_xml_header) + strlen(target_xml_footer) + strlen(target_xml_cpu_feature);
-	parts[0] = target_xml_header;
-	parts[1] = target_xml_cpu_feature;
+	const char* name;
+	short count;
+	const char* attribs;
+} RegGroup;
 
+static const char int32[] = "32\"";
+static const char dataPtr[] = "32\" type=\"data_ptr\"";
+static const char codePtr[] = "32\" type=\"code_ptr\"";
+static const char float32[] = "32\" group=\"float\"";
+
+static const RegGroup cpuRegs[] =
+{
+	{ "d", 8, int32 },
+	{ "a", 6, dataPtr },
+	{ "fp", 0, dataPtr },
+	{ "sp", 0, dataPtr },
+	{ "ps", 0, int32 },
+	{ "pc", 0, codePtr },
+	{ 0, 0, 0 }
+};
+
+static const RegGroup fpuRegs[] =
+{
+	{ "fp", 8, "96\" type=\"float\" group=\"float\"" },
+	{ "fpcontrol", 0, float32 },
+	{ "fpstatus", 0, float32 },
+	{ "fpiaddr", 0, "32\" type=\"code_ptr\" group=\"float\"" },
+	{ 0, 0, 0 }
+};
+
+// State for writing one part of the xml.
+static unsigned int xmlSkip;	// Characters left to skip before the requested offset.
+static unsigned int xmlRoom;	// Characters left to write.
+static unsigned int xmlLength;	// Total length of the xml so far.
+
+static void Put(const char* str)
+{
+	for (; *str != 0; ++str)
+	{
+		++xmlLength;
+		if (xmlSkip != 0)
+		{
+			--xmlSkip;
+		}
+		else if (xmlRoom != 0)
+		{
+			WriteChar(*str);
+			--xmlRoom;
+		}
+	}
+}
+
+static void PutFeature(const char* featureName, const RegGroup* group)
+{
+	Put("<feature name=\"");
+	Put(featureName);
+	Put("\">");
+	for (; group->name != 0; ++group)
+	{
+		char digit[2] = { '0', 0 };
+		short i = 0;
+		do
+		{
+			Put("<reg name=\"");
+			Put(group->name);
+			if (group->count != 0)
+			{
+				Put(digit);
+				++digit[0];
+			}
+			Put("\" bitsize=\"");
+			Put(group->attribs);
+			Put("/>");
+		} while (++i < group->count);
+	}
+	Put("</feature>");
+}
+
+unsigned int WriteTargetXmlPart(unsigned int offset, unsigned int len)
+{
+	xmlSkip = offset;
+	xmlRoom = len;
+	xmlLength = 0;
+	Put("<?xml version=\"1.0\"?><!DOCTYPE target SYSTEM \"gdb-target.dtd\"><target version=\"1.0\">");
+	PutFeature("org.gnu.gdb.m68k.core", cpuRegs);
 	if (Fpu_Coprocessor != 0)
 	{
-		parts[2] = target_xml_fpu_feature;
-		length += strlen(target_xml_fpu_feature);
-		parts[3] = target_xml_footer;
-		parts[4] = 0;
+		PutFeature("org.gnu.gdb.coldfire.fp", fpuRegs);
 	}
-	else
-	{
-		parts[2] = target_xml_footer;
-		parts[3] = 0;
-	}
-	return length;
+	Put("</target>");
+	return xmlLength;
 }

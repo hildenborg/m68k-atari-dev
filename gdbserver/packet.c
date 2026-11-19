@@ -725,54 +725,16 @@ void WriteTargetXML(short vNameEnd)
 	if (GetAddressAndLength(vNameEnd, false, &addr, &len) > 0)
 	{
 		unsigned int offset = (unsigned int)addr;
-		
-		const char* xmls[5];
-		unsigned int xml_len = GetTargetXml(xmls);
-		
 		unsigned int maxRead = (PACKET_SIZE - 20);	// max packet size - some room for response
 		if (len > maxRead)
 		{
 			len = maxRead;
 		}
-		if (offset >= xml_len)
+		short start = outPacketLength;
+		WriteChar('m');	// More data remains after this part, unless changed below.
+		if (offset + len >= WriteTargetXmlPart(offset, len))
 		{
-			// Nothing more to send.
-			WriteChar('l');
-			return;
-		}
-		if (len >= xml_len - offset)
-		{
-			// This transfer ends the xml transfer
-			WriteChar('l');
-			len = xml_len - offset;
-		}
-		else
-		{
-			// More data remains after this part.
-			WriteChar('m');
-		}
-
-		const char* xml;
-		int ix = 0;
-		while ((xml = xmls[ix++]) != 0 && len != 0)
-		{
-			unsigned int slen = strlen(xml);
-			if (offset >= slen)
-			{
-				offset -= slen;
-			}
-			else
-			{
-				char c;
-				unsigned int i = offset;
-				while ((c = xml[i]) != 0 && len != 0)
-				{
-					WriteChar(c);
-					++i;
-					--len;
-				}
-				offset = 0;
-			}
+			outPacket[start] = 'l';	// This part ends the xml.
 		}
 	}
 }

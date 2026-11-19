@@ -10,7 +10,8 @@
 extern "C" {
 #endif
 
-unsigned int GetTargetXml(const char* parts[]);
+// Writes len characters of the target description, from offset, with WriteChar. Returns its total length.
+unsigned int WriteTargetXmlPart(unsigned int offset, unsigned int len);
 
 #ifdef __cplusplus
 }
