@@ -185,9 +185,10 @@ void MakeInferiorFilenameAbsolute(void)
 	StrCopy(buf, inferior_filename);
 }
 
-// Returns false if the drive or path doesn't exist.
+// Returns false if the drive or path doesn't exist. The current drive and path are then left unchanged.
 bool CmdSetWorkingDir(short vNameEnd)
 {
+	unsigned short oldDrive = Dgetdrv();
 	char buf[MAX_PATH_LEN];
 	char *ptr = buf;
 	char *endptr = buf;
@@ -206,7 +207,7 @@ bool CmdSetWorkingDir(short vNameEnd)
 		unsigned short drive = ((unsigned char*)ptr)[0];
 		drive -= drive >= 'a' ? 'a' : 'A';
 		// Check that the drive exists before switching to it. Dsetdrv returns a bitmap of mounted drives.
-		unsigned int drives = Dsetdrv(Dgetdrv());
+		unsigned int drives = Dsetdrv(oldDrive);
 		if (drive >= 32 || (drives & (1u << drive)) == 0)
 		{
 			return false;
@@ -224,6 +225,9 @@ bool CmdSetWorkingDir(short vNameEnd)
 		}
 		if (Dsetpath(ptr) < 0)
 		{
+			// GEMDOS keeps a current path per drive, so a failed Dsetpath has not changed any path.
+			// Only the drive may have been changed above.
+			Dsetdrv(oldDrive);
 			return false;
 		}
 	}
