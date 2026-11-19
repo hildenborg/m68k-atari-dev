@@ -16,6 +16,7 @@
 
 ExceptionRegisters registers;
 bool serverTraceBit = false;
+bool osMaybeBusy = false;
 
 typedef struct
 {

@@ -35,6 +35,14 @@ ExceptionRegisters* GetRegisters(void);
 // The next exception then removes the bit from the reported sr.
 extern bool serverTraceBit;
 
+/*
+	True while the inferior is stopped somewhere that may be inside GEMDOS: in supervisor mode,
+	outside the inferior's own code, e.g. by Ctrl-C during a GEMDOS call or a step into a trap.
+	GEMDOS is not reentrant, so the server must not call it then.
+	A stop in the inferior's own interrupt handler, that interrupted a GEMDOS call, is not detected.
+*/
+extern bool osMaybeBusy;
+
 #ifdef __cplusplus
 }
 #endif

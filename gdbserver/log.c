@@ -7,6 +7,7 @@
 #include "hex.h"
 #include "bios_calls.h"
 #include "clib.h"
+#include "exceptions.h"
 
 const char newline[] = "\r\n";
 
@@ -40,7 +41,8 @@ void ExitLog(void)
 
 void ConOut(const char* txt)
 {
-	if (logHandle > 0)
+	// GEMDOS may be in use by the stopped inferior. Then write to the console with BIOS instead.
+	if (logHandle > 0 && !osMaybeBusy)
 	{
 		Fwrite((unsigned short)logHandle, strlen(txt), txt);
 	}

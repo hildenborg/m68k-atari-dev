@@ -188,6 +188,10 @@ void MakeInferiorFilenameAbsolute(void)
 // Returns false if the drive or path doesn't exist. The current drive and path are then left unchanged.
 bool CmdSetWorkingDir(short vNameEnd)
 {
+	if (osMaybeBusy)
+	{
+		return false;	// Needs GEMDOS, which may be in use by the stopped inferior.
+	}
 	unsigned short oldDrive = Dgetdrv();
 	char buf[MAX_PATH_LEN];
 	char *ptr = buf;
@@ -353,6 +357,12 @@ LoopState CmdFileOperation(short cmdEnd)
 
 	char* inptr = GetInpacketPtr(0);
 
+	if (osMaybeBusy)
+	{
+		// The file operations need GEMDOS, which may be in use by the stopped inferior.
+		WriteFileResponse(-1, VFILE_ERRNO_EBUSY, 0);
+		return LISTEN_TO_GDB;
+	}
 	if (CheckFileCmdArgs("open", 4, argv[0], argc))
 	{
 		HexConvertByteArray(argv[1]);
@@ -526,6 +536,7 @@ LoopState HandleBreakResponse(int si_signo, int si_code, bool* isSupervisorMode)
 			There may still be an inferior loaded into memory.
 		*/
 		*isSupervisorMode = false;		
+		osMaybeBusy = false;	// The server itself is not inside any GEMDOS call here.
 		if (si_code == USERCODE_ERROR)
 		{
 			WriteError(1);
@@ -564,6 +575,13 @@ LoopState HandleBreakResponse(int si_signo, int si_code, bool* isSupervisorMode)
 			This also means that we must have an inferior being executed (but paused now).
 		*/
 		*isSupervisorMode = true;		
+		{
+			ExceptionRegisters* er = GetRegisters();
+			bool inInferiorText = inferiorBasePage != NULL &&
+				er->pc >= (unsigned int)inferiorBasePage->p_tbase &&
+				er->pc < (unsigned int)inferiorBasePage->p_tbase + inferiorBasePage->p_tlen;
+			osMaybeBusy = (er->sr & 0x2000) != 0 && !inInferiorText;
+		}
 		if (IsServerException())
 		{
 			// Exception in gdbserver code!
