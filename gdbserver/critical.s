@@ -10,16 +10,6 @@
 		Always check in code that the computer running the code supports those
 		instructions before usage. Like checking the Cookie_CPU or Cookie_FPU. 
 */
-	.global registers
-	.global Exception
-	.global Cookie_CPU
-	.global Cookie_VDO
-	.global Cookie_FPU
-	.global Fpu_Coprocessor
-	.global Cookie_MCH
-	.global SwitchToServerContext
-	.global SwitchToInferorContext
-
 	.equ	o_to_sp, 60
 	.equ	o_to_sr, 64
 	.equ	o_to_pc, 68
@@ -428,26 +418,6 @@ ExceptionSafeMemoryWrite:
 	move.l	#AddressError, nAddressError
 	move.w	(a7)+, sr
 	move.l	(a7)+, a0
-	rts
-	.endfunc
-
-	.global CaptureMfpData
-CaptureMfpData:
-	.func CaptureMfpData
-	movem.l	d1-d2/a0, -(a7)
-	move.l	16(a7), a0
-
-	moveq	#0, d0
-	move.w	#10000, d2
-1:
-	move.b	(a0), d1
-	cmp.b	d1, d0
-	bhi.s	2f
-	move.b	d1, d0
-2:
-	dbra	d2, 1b
-
-	movem.l	(a7)+, d1-d2/a0
 	rts
 	.endfunc
 

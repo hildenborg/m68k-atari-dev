@@ -28,14 +28,11 @@ unsigned int inferiorVectors[NUM_IRQ_VECTORS + NUM_MFP_VECTORS];
 unsigned int inferiorLongs[NUM_VDO_LONGS + NUM_SYS_LONGS];
 unsigned char inferiorBytes[NUM_VDO_BYTES + NUM_MFP_BYTES] __attribute__((aligned(2)));
 
-unsigned short GetMfpChangedMask(void);
-void StoreVectors(unsigned int* vectors);
-void RestoreVectors(unsigned int* vectors);
-void StoreMemoryRegisters(unsigned int* longs, unsigned char* bytes);
-void RestoreMemoryRegisters(unsigned int* longs, unsigned char* bytes, unsigned short mfpMask);
-
-extern comm*	comDev;
-extern char	com_method[];
+static unsigned short GetMfpChangedMask(void);
+static void StoreVectors(unsigned int* vectors);
+static void RestoreVectors(unsigned int* vectors);
+static void StoreMemoryRegisters(unsigned int* longs, unsigned char* bytes);
+static void RestoreMemoryRegisters(unsigned int* longs, unsigned char* bytes, unsigned short mfpMask);
 
 int CreateServerContext_super(void)
 {
@@ -117,7 +114,7 @@ void ResetServerContext(void)
 	Supexec(ResetServerContext_super);
 }
 
-unsigned short GetMfpChangedMask(void)
+static unsigned short GetMfpChangedMask(void)
 {
 	unsigned int* serverMfpVecs = &serverVectors[NUM_IRQ_VECTORS];
 	unsigned int* inferiorMfpVecs = &inferiorVectors[NUM_IRQ_VECTORS];
@@ -136,7 +133,7 @@ unsigned short GetMfpChangedMask(void)
 // Remove out of bounds warning, as we do some memory direct stuff here that will trigger false warnings.
 #pragma GCC diagnostic ignored "-Warray-bounds="
 
-void StoreVectors(unsigned int* vectors)
+static void StoreVectors(unsigned int* vectors)
 {
 	unsigned int* vector60 = (unsigned int*)0x60;
 	for (int i = 0; i < NUM_IRQ_VECTORS; ++i)
@@ -150,7 +147,7 @@ void StoreVectors(unsigned int* vectors)
 	}
 }
 
-void RestoreVectors(unsigned int* vectors)
+static void RestoreVectors(unsigned int* vectors)
 {
 	unsigned int* vector60 = (unsigned int*)0x60;
 	for (int i = 0; i < NUM_IRQ_VECTORS; ++i)
@@ -164,7 +161,7 @@ void RestoreVectors(unsigned int* vectors)
 	}
 }
 
-void StoreMemoryRegisters(unsigned int* longs, unsigned char* bytes)
+static void StoreMemoryRegisters(unsigned int* longs, unsigned char* bytes)
 {
 	unsigned int* sysLongs = longs;
 	unsigned int* vdoLongs = longs + NUM_SYS_LONGS;
@@ -207,7 +204,7 @@ void StoreMemoryRegisters(unsigned int* longs, unsigned char* bytes)
 	#undef MFP_CHAR
 }
 
-void RestoreMemoryRegisters(unsigned int* longs, unsigned char* bytes, unsigned short mfpMask)
+static void RestoreMemoryRegisters(unsigned int* longs, unsigned char* bytes, unsigned short mfpMask)
 {
 	unsigned int* sysLongs = longs;
 	unsigned int* vdoLongs = longs + NUM_SYS_LONGS;

@@ -5,8 +5,7 @@
 
 #include "target_xml.h"
 #include "packet.h"
-
-extern unsigned short Fpu_Coprocessor;
+#include "cookies.h"
 
 /*
 	The target description is generated from tables instead of stored as text, to save memory.

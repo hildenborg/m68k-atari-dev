@@ -14,8 +14,6 @@ int RestoreExceptions(void);
 
 void ClearInternalCaches(void);
 
-unsigned char CaptureMfpData(unsigned char* address);
-
 int ExceptionSafeMemoryRead(unsigned char* address, unsigned char* c);
 int ExceptionSafeMemoryWrite(unsigned char* address, unsigned char c);
 
