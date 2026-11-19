@@ -7,13 +7,20 @@ An Atari specific gdb server supporting motorola 68000 and up to 68060 CPUs.
     make TOOLKIT=$HOME/toolchain/m68k-atari-elf all
 
 - Making the project will build a `gdbsrv.ttp` file that can be run in Hatari.
-- The makefile builds into the current directory, so build from a separate directory to keep object files out of the sources: `mkdir build && cd build && make -f ../makefile TOOLKIT=$HOME/toolchain/m68k-atari-elf all` (as `build.sh` does).
+- The makefile builds into the current directory, so build from a separate directory to keep object files out of the sources: `mkdir build && cd build && make -f ../makefile TOOLKIT=$HOME/toolchain/m68k-atari-elf all` (as `build.sh` does). `build.sh` also copies the result to `$HOME/sthd/gdbsrv.ttp`.
 - There is no C library and no libgcc. Code that makes gcc emit library calls fails to link:
 	- Struct assignment can become `memcpy`. Copy fields one by one instead.
 	- 32x32 bit multiplication on 68000 becomes `__mulsi3`. Keep multiplications 16x16 bits (`mulu.w`).
 	- Check with `m68k-atari-elf-nm gdbsrv | grep " U "` that nothing is undefined.
-- `critical.s` is assembled for 68030/68882. It is the only place for 68020+ and FPU instructions, and they must be guarded by checks of `Cookie_CPU` / `Cookie_FPU`.
+- `critical.s` is assembled for 68030/68882. It is the only place for 68020+ and FPU instructions, and they must be guarded by checks of `Cookie_CPU` / `Cookie_FPU` (or `Fpu_Coprocessor`, which is 0 when there are no FPU registers to save). Comments in `.s` files use `|`; `//` does not assemble.
 - GEMDOS/BIOS/XBIOS calls are wrapped in `bios_calls.c`. Calls where the OS writes to memory through a pointer argument need a `"memory"` clobber.
+- `link.ld` must collect wildcard input sections (`.text*`, `.data*`, `.bss .bss.*`), or `-fdata-sections` style sections land outside the segment sizes written to the prg header.
+
+## Runtime model
+
+- The server runs the inferior with `Pexec`. While no inferior is stopped, the server runs in user mode (`isSupervisorMode` false in the command loop): privileged access, like memory reads and writes, must go through `Supexec`.
+- While an inferior is stopped, the server runs inside the exception handler in supervisor mode. Memory accesses then go through `InferiorContextMemoryAddress`, which returns the inferior's saved vectors, MFP and video registers instead of the server's live ones.
+- GEMDOS is not reentrant. When the inferior stopped in supervisor mode outside its own text (`osMaybeBusy`), it may be inside a GEMDOS call, so the server must not call GEMDOS then (vFile, working dir, log file). BIOS and XBIOS calls are used instead where possible.
 
 ## Test
 
@@ -33,9 +40,15 @@ An Atari specific gdb server supporting motorola 68000 and up to 68060 CPUs.
 			-- <dir>/GDBSRV.TTP --multi HELLO.PRG
 
 - TOS images are in `$HOME/tos`: `tos206.img` for `--machine st/ste`, `etos512se.img` (EmuTOS) for `--machine tt/falcon`, `tos404.img` for Falcon.
+- For 68040/68060 use the TT with `--cpulevel 4` or `--cpulevel 6` and `--data-cache true`. The Falcon's serial port needs `--scc-b-in/--scc-b-out`, not `--rs232-*`.
+- Hatari does not emulate an SFP004 FPU. Test that path with a build that forces the `_FPU` cookie.
 - The TT (68030 + 68882) exercises the FPU code paths. Hatari's default FPU emulation never sets the inexact flag or takes FPU exception traps, so add `--fpu 68882 --fpu-softfloat true` when testing FPU exceptions.
 - Drive C: is a host folder, so files written through `vFile` packets can be checked directly on the host.
 - GEMDOS file times are local time without time zone, so `stat` times are the host time plus the time zone offset.
+- `--conout 2` copies the console output (e.g. `ConOut` messages) to Hatari's stdout.
+- A blank floppy for drive A: (e.g. to test drive changes): `hmsa blank.st DS`, then `--disk-a blank.st`.
+- `hatari-prg-args` passes the arguments with a leading space in the command line.
+- Addresses that give a bus error on ST/STE: `0x00f10000` and `0xffff8e00`. `0xffff8010` is a readable/bus error boundary.
 - Stop with `pkill -x hatari` and `pkill -x socat`. A `pkill -f` pattern can match the command line of the shell running it and kill that shell.
 
 ### gdb session
@@ -55,3 +68,4 @@ An Atari specific gdb server supporting motorola 68000 and up to 68060 CPUs.
 
 - Hatari delivers bytes from the pty faster than a real 9600 baud line and ignores RTS/CTS. The server therefore replaces the 256 byte TOS serial input buffer with a 2 KB one (`comm.c`), so a whole gdb packet (max 1023 bytes, more when escaped) fits.
 - A custom test client talking to the pty directly should keep each burst below 2 KB.
+- A custom client that sends `QStartNoAckMode` and exits without `D` or `vKill` leaves the server in no-ack mode, and a following gdb session hangs. Detach at the end, or restart Hatari between clients.
