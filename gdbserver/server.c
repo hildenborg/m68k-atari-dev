@@ -46,7 +46,7 @@ typedef enum
 #define USERCODE_ERROR		-1
 #define USERCODE_WARNING	-2
 
-const char serverFeatures[] = "PacketSize=3ff;swbreak+"
+const char serverFeatures[] = "PacketSize=3ff;swbreak+;QSetWorkingDir+"
 	#ifdef QStartNoAckMode
 	";QStartNoAckMode+"
 	#endif
@@ -113,7 +113,26 @@ void SendStopCode(int si_signo, int si_code)
 	WriteStop(si_signo, si_code, start_break);
 }
 
-void CmdSetWorkingDir(short vNameEnd)
+/*
+	Stores the current drive and path in inferior_workpath, as "X:\path".
+	This is the working dir an empty QSetWorkingDir resets to.
+*/
+void StoreDefaultWorkPath(void)
+{
+	char* p = inferior_workpath;
+	*p++ = (char)('A' + Dgetdrv());
+	*p++ = ':';
+	// MAX_PATH_LEN - 2 leaves the 128 bytes Dgetpath may need.
+	if (Dgetpath(p, 0) < 0 || *p == 0)
+	{
+		// Root dir, or error.
+		p[0] = '\\';
+		p[1] = 0;
+	}
+}
+
+// Returns false if the drive or path doesn't exist.
+bool CmdSetWorkingDir(short vNameEnd)
 {
 	char buf[MAX_PATH_LEN];
 	char *ptr = buf;
@@ -132,6 +151,12 @@ void CmdSetWorkingDir(short vNameEnd)
 		// Set drive
 		unsigned short drive = ((unsigned char*)ptr)[0];
 		drive -= drive >= 'a' ? 'a' : 'A';
+		// Check that the drive exists before switching to it. Dsetdrv returns a bitmap of mounted drives.
+		unsigned int drives = Dsetdrv(Dgetdrv());
+		if (drive >= 32 || (drives & (1u << drive)) == 0)
+		{
+			return false;
+		}
 		Dsetdrv(drive);
 		ptr += 2;
 		len -= 2;
@@ -143,8 +168,12 @@ void CmdSetWorkingDir(short vNameEnd)
 		{
 			if (*p == '/') {*p = '\\';}
 		}
-		Dsetpath(ptr);
+		if (Dsetpath(ptr) < 0)
+		{
+			return false;
+		}
 	}
+	return true;
 }
 
 void CmdQuery(void)
@@ -167,7 +196,14 @@ void CmdQuery(void)
 	}
 	else if ((vNameEnd = StringCompare("QSetWorkingDir:", inptr)) > 0)
 	{
-		CmdSetWorkingDir(vNameEnd);
+		if (CmdSetWorkingDir(vNameEnd))
+		{
+			WriteOK();
+		}
+		else
+		{
+			WriteError(1);
+		}
 	}
 	else if ((vNameEnd = StringCompare("qXfer:features:read:target.xml:", inptr)) > 0)
 	{
@@ -717,6 +753,7 @@ int ServerMain(bool loadRequest)
 	DbgOut(comDev->DeviceName());
 	
 	InitFileIO();
+	StoreDefaultWorkPath();
 
 	inferiorState = NOT_LOADED;
 	

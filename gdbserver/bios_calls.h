@@ -14,6 +14,13 @@ extern "C" {
 
 unsigned int Dsetdrv(unsigned short bios_drive);
 
+// Returns current drive (0 = A, 1 = B, ...).
+unsigned short Dgetdrv(void);
+
+// bios_drive: 0 = current drive, 1 = A, 2 = B, ...
+// bios_path must have room for at least 128 bytes.
+int Dgetpath(char* bios_path, unsigned short bios_drive);
+
 int Dsetpath(const char* bios_path);
 
 int Fcreate(const char* bios_path, unsigned short bios_attrib);

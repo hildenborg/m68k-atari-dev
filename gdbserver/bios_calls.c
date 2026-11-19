@@ -25,6 +25,32 @@ unsigned int Dsetdrv(unsigned short bios_drive)
 	return bios_mounted_drives;
 }
 
+unsigned short Dgetdrv(void)
+{
+	register unsigned int bios_drive asm ("d0") = 0;
+	__asm__ volatile (
+		TRAP_BEGIN
+		TRAP_FUNC(1, 0x19)
+		: "=r" (bios_drive)
+		:
+		: CLOBBER_REG);
+	return (unsigned short)bios_drive;
+}
+
+int Dgetpath(char* bios_path, unsigned short bios_drive)
+{
+	register int result asm ("d0") = -1;
+	__asm__ volatile (
+		TRAP_BEGIN
+		"move.w		%2, %%a7@-\n\t"
+		"move.l		%1, %%a7@-\n\t"
+		TRAP_FUNC(1, 0x47)
+		: "=r" (result)
+		: "r" (bios_path), "r" (bios_drive)
+		: CLOBBER_REG, "memory");
+	return result;
+}
+
 int Dsetpath(const char* bios_path)
 {
 	register int result asm ("d0") = -1;
