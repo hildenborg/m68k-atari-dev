@@ -20,6 +20,7 @@ An Atari specific gdb server supporting motorola 68000 and up to 68060 CPUs.
 
 - The server runs the inferior with `Pexec`. While no inferior is stopped, the server runs in user mode (`isSupervisorMode` false in the command loop): privileged access, like memory reads and writes, must go through `Supexec`.
 - While an inferior is stopped, the server runs inside the exception handler in supervisor mode. Memory accesses then go through `InferiorContextMemoryAddress`, which returns the inferior's saved vectors, MFP and video registers instead of the server's live ones.
+- Serial communication goes through the TOS BIOS `AUX` device for both the MFP (ST/STE/TT) and the SCC (Falcon, mapped with `Bconmap(7)`). Only the receive interrupt is hooked (`comm_mfp_scc.s`), to catch CTRL-C from gdb while the inferior runs. The SCC hook must cover both channel B receive vectors, 0x190 and 0x198: Hatari delivers received bytes through 0x198.
 - GEMDOS is not reentrant. When the inferior stopped in supervisor mode outside its own text (`osMaybeBusy`), it may be inside a GEMDOS call, so the server must not call GEMDOS then (vFile, working dir, log file). BIOS and XBIOS calls are used instead where possible.
 
 ## Test
@@ -47,6 +48,7 @@ An Atari specific gdb server supporting motorola 68000 and up to 68060 CPUs.
 - GEMDOS file times are local time without time zone, so `stat` times are the host time plus the time zone offset.
 - `--conout 2` copies the console output (e.g. `ConOut` messages) to Hatari's stdout.
 - A blank floppy for drive A: (e.g. to test drive changes): `hmsa blank.st DS`, then `--disk-a blank.st`.
+- Run Python RSP clients with `python3 -u`, or their output is lost when `timeout` kills them.
 - `hatari-prg-args` passes the arguments with a leading space in the command line.
 - Addresses that give a bus error on ST/STE: `0x00f10000` and `0xffff8e00`. `0xffff8010` is a readable/bus error boundary.
 - Stop with `pkill -x hatari` and `pkill -x socat`. A `pkill -f` pattern can match the command line of the shell running it and kill that shell.
