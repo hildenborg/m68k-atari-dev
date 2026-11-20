@@ -119,11 +119,31 @@ static void RestoreSerialInputBuffer(void)
 	}
 }
 
-// Sets 9600 8N1 with RTS/CTS, gives the AUX device a larger input buffer and empties it.
+/*
+	Rsconf speed codes are the index in this table, for both the MFP and the SCC (BAUD_19200 is 0).
+	19200 is the fastest rate Rsconf has.
+*/
+static const unsigned short rsconfRates[] = {19200, 9600, 4800, 3600, 2400, 2000, 1800, 1200, 600, 300, 200, 150, 134, 110, 75, 50};
+static unsigned short serialBaud = BAUD_19200;
+
+bool SetSerialBaud(unsigned int baud)
+{
+	for (unsigned short i = 0; i < sizeof(rsconfRates) / sizeof(rsconfRates[0]); ++i)
+	{
+		if (rsconfRates[i] == baud)
+		{
+			serialBaud = i;
+			return true;
+		}
+	}
+	return false;
+}
+
+// Sets the speed (default 19200) and 8N1 with RTS/CTS, gives the AUX device a larger input buffer and empties it.
 // Must be called in supervisor mode.
 static void AuxInit(void)
 {
-	Rsconf(BAUD_9600, FLOW_HARD, RS_CLK16 | RS_1STOP | RS_8BITS, RS_INQUIRE, RS_INQUIRE, RS_INQUIRE);
+	Rsconf(serialBaud, FLOW_HARD, RS_CLK16 | RS_1STOP | RS_8BITS, RS_INQUIRE, RS_INQUIRE, RS_INQUIRE);
 	SetSerialInputBuffer();
 	while (Bconstat(DEV_AUX) != 0)
 	{

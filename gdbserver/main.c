@@ -18,6 +18,7 @@
 #include "log.h"
 #include "clib.h"
 #include "inferior.h"
+#include "comm.h"
 
 /*
 	Option handling for this server is made to follow the real gdbserver documentation.
@@ -44,7 +45,27 @@
 			Waits for gdb to connect with target extended-remote and tell us what executable to debug.
 		--once
 			In extended mode, exits the server when the inferior is killed.
+		--baud=rate
+			Serial speed. Default 19200. One of the rates TOS Rsconf supports:
+			19200, 9600, 4800, 3600, 2400, 2000, 1800, 1200, 600, 300, 200, 150, 134, 110, 75, 50.
 */
+
+// Reads a decimal number. Returns false if str is empty, has other characters than digits, or is too long.
+static bool ReadDecimal(const char* str, unsigned int* value)
+{
+	unsigned int v = 0;
+	short digits = 0;
+	for (; *str != 0; ++str, ++digits)
+	{
+		if (*str < '0' || *str > '9' || digits >= 6)
+		{
+			return false;
+		}
+		v = (v << 3) + (v << 1) + (unsigned int)(*str - '0');	// v * 10 without a 32 bit multiplication.
+	}
+	*value = v;
+	return digits > 0;
+}
 static bool IsCommName(const char* arg)
 {
 	for (const char* p = arg; *p != 0; ++p)
@@ -60,6 +81,7 @@ static bool IsCommName(const char* arg)
 int HandleOptions(int argc, char** argv)
 {
 	int result = 0;
+	short nameEnd;
 	bool loadRequest = false;
 	com_method[0] = 0;
 	char *inferior_args = inferior_cmdline + 1;
@@ -95,6 +117,23 @@ int HandleOptions(int argc, char** argv)
 				{
 					run_once = true;
 					DbgOut("Using: --once\r\n");
+				}
+				else if ((nameEnd = StringCompare("--baud=", argv[i])) > 0)
+				{
+					unsigned int baud;
+					if (!ReadDecimal(argv[i] + nameEnd, &baud) || !SetSerialBaud(baud))
+					{
+						ConOut("Unsupported baud rate: ");
+						ConOut(argv[i] + nameEnd);
+						ConOut(newline);
+						result = -1;
+					}
+					else
+					{
+						DbgOut("Using: ");
+						DbgOut(argv[i]);
+						DbgOut(newline);
+					}
 				}
 #ifndef NO_CON_OR_LOG
 				else if (StringCompare("--debug-remote", argv[i]) > 0)

@@ -44,4 +44,7 @@ void PutByte(char ch);
 
 comm* InitComm(const char *comString);
 
+// Sets the serial speed used by the comm devices (--baud). Returns false for a rate Rsconf doesn't have.
+bool SetSerialBaud(unsigned int baud);
+
 #endif // COMM_DEFINED
