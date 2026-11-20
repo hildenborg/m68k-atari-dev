@@ -29,7 +29,7 @@ CONF_INSTALL=$HOME/toolchain
 BINUTIL_VERSION="2.46.1"
 GCC_VERSION="16.1.0"
 #NEWLIB_VERSION="4.6.0.20260123"
-NEWLIB_HASH="137e27ffb622df7e6c9bb0565182929a60db8ace"
+NEWLIB_HASH="041b6410bfa86f8da4c3251f1df66c4a28a9b929"
 ATARI_LIB_HASH="29c2d2f9379fe6114eacebcd0a5ac4578df3741f"
 
 # Target specific settings
@@ -116,11 +116,26 @@ if [ ! -d newlib-cygwin ]; then
 	echo "Downloading: newlib"
 	git clone https://sourceware.org/git/newlib-cygwin.git
 	cd newlib-cygwin
-	#echo "Checking out: newlib hash $NEWLIB_HASH"
-	#git checkout $NEWLIB_HASH	
-	#echo "Patching: newlib"
-	#git apply $PATCHES/newlib/0001-newlib-m68k-atari-elf-Correct-handling-of-CRLF-in-st.patch
-	#git apply $PATCHES/newlib/0002-autoreconf.patch
+	echo "Checking out: newlib hash $NEWLIB_HASH"
+	git checkout $NEWLIB_HASH	
+	echo "Patching: newlib"
+	git apply $PATCHES/newlib/0001-m68k-atari-elf-Fixed-bug-for-missing-C-sections.patch
+	git apply $PATCHES/newlib/0002-m68k-atari-elf-Fixed-bug-with-fstat-and-stat.patch
+	git apply $PATCHES/newlib/0003-m68k-atari-elf-Fixed-bug-in-gettimeofday-where-the-t.patch
+	git apply $PATCHES/newlib/0004-m68k-atari-elf-Fixed-several-bugs-with-the-argv-and-.patch
+	git apply $PATCHES/newlib/0005-m68k-atari-elf-Fixed-bugs-in-isatty-and-fstat.patch
+	git apply $PATCHES/newlib/0006-m68k-atari-elf-Fixed-bug-where-wrong-drive-could-be-.patch
+	git apply $PATCHES/newlib/0007-m68k-atari-elf-Fixed-buffer-overrun.patch
+	git apply $PATCHES/newlib/0008-m68k-atari-elf-Open-is-now-POSIX-compatible-and-a-bu.patch
+	git apply $PATCHES/newlib/0009-m68k-atari-elf-GEM-error-codes-is-more-properly-mapp.patch
+	git apply $PATCHES/newlib/0010-m68k-atari-elf-Added-memory-clobber-to-asm-calls.patch
+	git apply $PATCHES/newlib/0011-m68k-atari-elf-Fixed-bug-with-line-endings.patch
+	git apply $PATCHES/newlib/0012-m68k-atari-elf-Fixed-bug-with-C-destructors-not-hand.patch
+	git apply $PATCHES/newlib/0013-m68k-atari-elf-Fixed-some-heap-and-stack-problems.patch
+	git apply $PATCHES/newlib/0014-m68k-atari-elf-getentropy-is-now-a-lot-stronger.patch
+	git apply $PATCHES/newlib/0015-m68k-atari-elf-Fixed-getmode-for-stderr.patch
+	git apply $PATCHES/newlib/0016-m68k-atari-elf-Kill-is-properly-implemented-for-a-si.patch
+	git apply $PATCHES/newlib/0017-m68k-atari-elf-Fixed-bug-where-O_APPEND-not-always-d.patch
 	cd ..
 fi
 
@@ -130,7 +145,7 @@ if [ ! -d atari-libs ]; then
 	git clone https://github.com/hildenborg/atari-libs.git
 	# We checkout the specific stable commit.
 	cd atari-libs
-	echo "Checking out: atari-libs hash $ATARI_LIB_HASH"
+	#echo "Checking out: atari-libs hash $ATARI_LIB_HASH"
 	#git checkout $ATARI_LIB_HASH
 	cd ..
 fi

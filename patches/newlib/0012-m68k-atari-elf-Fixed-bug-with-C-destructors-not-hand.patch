@@ -1,0 +1,114 @@
+From 6aa0675450b4e47049a2445032ad3b43bc10cc11 Mon Sep 17 00:00:00 2001
+From: Mikael <micael@hildenborg.com>
+Date: Wed, 18 Nov 2026 19:58:05 +0100
+Subject: [PATCH 12/17] m68k-atari-elf: Fixed bug with C destructors not
+ handled properly in CRT.
+
+---
+ libgloss/m68k/atari/atari-crt0.S | 22 ++++++++++++++++++----
+ libgloss/m68k/atari/atari-crti.S |  8 +++++++-
+ libgloss/m68k/atari/atari-crtn.S | 17 +++++------------
+ 3 files changed, 30 insertions(+), 17 deletions(-)
+
+diff --git a/libgloss/m68k/atari/atari-crt0.S b/libgloss/m68k/atari/atari-crt0.S
+index 882be54b0..e19143115 100644
+--- a/libgloss/m68k/atari/atari-crt0.S
++++ b/libgloss/m68k/atari/atari-crt0.S
+@@ -4,6 +4,8 @@
+ */
+ 
+ 	.global exit
++	.global atexit
++	.global _fini			| in atari-crti.S / atari-crtn.S
+ 	.global _atari_argv		| in atari-environ.c
+ 	.global _atari_argc		| in atari-environ.c
+ 
+@@ -14,6 +16,13 @@ __call_main_with_argc_argv:
+ 
+     | this occurs after crtbegin.o have done all global constructors etc.
+ 	| atari-crti.S have already set up _atari_argc, _atari_argv
++
++	| Global destructors are run by exit(), before stdio is flushed.
++	| Registered before main, so atexit handlers registered by the program run first.
++	pea		_fini
++	jsr		atexit
++	addq.l	#4, a7
++
+ 	move.l	_atari_argv, -(a7)
+ 	move.l	_atari_argc, -(a7)
+ 	jsr		main
+@@ -22,10 +31,15 @@ __call_main_with_argc_argv:
+ 	jsr		exit			| not expected to return
+ 	illegal
+ 
++	.text
++	/*
++		_exit terminates at once: no atexit handlers, no destructors, no stdio flush.
++	*/
+ 	.global _exit
+ 	.type	_exit,#function
+ _exit:
+-	move.l 4(a7), d0
+-	move.w	d0, _program_return_code
+-    | crtend.o follows here with global destructors etc.
+-
++	move.l	4(a7), d0
++	move.w	d0, -(a7)
++	move.w	#0x4c, -(a7)	| Pterm()
++	trap	#1
++	illegal				| Pterm does not return
+diff --git a/libgloss/m68k/atari/atari-crti.S b/libgloss/m68k/atari/atari-crti.S
+index caecacef0..0d5919f07 100644
+--- a/libgloss/m68k/atari/atari-crti.S
++++ b/libgloss/m68k/atari/atari-crti.S
+@@ -132,8 +132,14 @@ heap_setup_done:
+ 
+ 	.section	".fini"
+ 	/*
+-		Empty.
++		_fini runs the global destructors: crtbegin.o follows here with its .fini code,
++		and atari-crtn.S ends the function with rts.
++		It is registered with atexit in atari-crt0.S, so it is called by exit()
++		(before stdio is flushed), but not by _exit().
+ 	*/
++	.global	_fini
++	.type	_fini,#function
++_fini:
+ 
+ 
+ 	.bss
+diff --git a/libgloss/m68k/atari/atari-crtn.S b/libgloss/m68k/atari/atari-crtn.S
+index 6482a9c9f..721129ad2 100644
+--- a/libgloss/m68k/atari/atari-crtn.S
++++ b/libgloss/m68k/atari/atari-crtn.S
+@@ -3,8 +3,6 @@
+ 	SPDX-License-Identifier: BSD-2-Clause
+ */
+ 
+-    .global _program_return_code
+-
+ 	.section	".init"
+ 	/*
+ 		Empty.
+@@ -12,13 +10,8 @@
+ 
+ 
+ 	.section	".fini"
+-	.global	_fini
+-	.type	_fini,#function
+-_fini:
+-    | this occurs after crtend.o have done all global destructors etc.
+-	move.w	_program_return_code,-(a7)
+-	move.w	#0x4c,-(a7)
+-	trap	#1
+-
+-	.bss
+-    .lcomm  _program_return_code, 2
++	/*
++		End of _fini (started in atari-crti.S),
++		this occurs after crtend.o have done all global destructors etc.
++	*/
++	rts
+-- 
+2.53.0
+

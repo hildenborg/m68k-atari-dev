@@ -1,0 +1,25 @@
+From 4060f0c5bbc8584eef962c0fdd943fb60137350a Mon Sep 17 00:00:00 2001
+From: Mikael <micael@hildenborg.com>
+Date: Wed, 18 Nov 2026 20:23:27 +0100
+Subject: [PATCH 15/17] m68k-atari-elf: Fixed getmode for stderr.
+
+---
+ libgloss/m68k/atari/atari-setmode.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libgloss/m68k/atari/atari-setmode.c b/libgloss/m68k/atari/atari-setmode.c
+index 89fe7511f..856d2a86d 100644
+--- a/libgloss/m68k/atari/atari-setmode.c
++++ b/libgloss/m68k/atari/atari-setmode.c
+@@ -39,7 +39,7 @@ int atari_getmode(short fd)
+ 		return -1;
+ 	}
+ 	int mode = ((int)file_descriptor_modes[fd]) << FILE_MODE_SHIFT;
+-	if (mode == 0 && fd < 2)
++	if (mode == 0 && fd <= 2)
+ 	{
+ 		/*
+ 			stdin, stdout and stderr isn't opened and assumed to exist.
+-- 
+2.53.0
+

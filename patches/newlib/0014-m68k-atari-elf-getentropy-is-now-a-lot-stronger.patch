@@ -1,0 +1,186 @@
+From 9bca28f2d4e946abd8f93a123e3328508b61ff9c Mon Sep 17 00:00:00 2001
+From: Mikael <micael@hildenborg.com>
+Date: Wed, 18 Nov 2026 20:20:52 +0100
+Subject: [PATCH 14/17] m68k-atari-elf: getentropy is now a lot stronger.
+
+---
+ libgloss/m68k/atari/atari-getentropy.c | 157 +++++++++++++++++++------
+ 1 file changed, 122 insertions(+), 35 deletions(-)
+
+diff --git a/libgloss/m68k/atari/atari-getentropy.c b/libgloss/m68k/atari/atari-getentropy.c
+index 0b5b461b9..b902162ae 100644
+--- a/libgloss/m68k/atari/atari-getentropy.c
++++ b/libgloss/m68k/atari/atari-getentropy.c
+@@ -6,47 +6,134 @@
+ #include <_ansi.h>
+ #include <_syslist.h>
+ #include <errno.h>
++#include <stddef.h>
++#include <stdint.h>
+ #include "atari-gem_errno.h"
+ #include "atari-traps.h"
+ 
+ /*
+-    Xorshift pseudorandom number generator.
+-    https://en.wikipedia.org/wiki/Xorshift
+-    Inited with random seed.
++	The Atari has no hardware random number generator, so entropy is collected from
++	timing jitter and mixed into a pool:
++	- The video address counter (changes continuously while the screen is drawn),
++	  MFP timer C (the 200 Hz system timer, counting at 19.2 kHz), _hz_200 and _frclock,
++	  sampled with delays that depend on the previous sample, so interrupts and
++	  bus contention change the timing.
++	- XBIOS Random(), the GEMDOS date and time, and the stack address.
++	The samples are absorbed into a sponge based on the ChaCha20 permutation.
++	The pool is kept between calls and fresh samples are added on every call.
++	After output, the output part of the state is cleared and permuted again,
++	so earlier output cannot be reconstructed from the pool.
++
++	This is the best that can be done without a hardware source, but it is not
++	a guaranteed amount of entropy, in particular right after boot or in an emulator.
+ */
+ 
++#define GETENTROPY_MAX	256		// POSIX limit for one call.
++#define NSAMPLES		64
++#define RATE_WORDS		8		// 32 bytes absorbed/squeezed per permutation.
++
++static uint32_t pool[16] = {
++	0x61707865, 0x3320646e, 0x79622d32, 0x6b206574	// "expand 32-byte k"
++};
++static int pool_pos;
++static uint32_t samples[NSAMPLES];
++
++#define ROTL(v, n)	(((v) << (n)) | ((v) >> (32 - (n))))
++#define QR(a, b, c, d) \
++	a += b; d ^= a; d = ROTL(d, 16); \
++	c += d; b ^= c; b = ROTL(b, 12); \
++	a += b; d ^= a; d = ROTL(d, 8); \
++	c += d; b ^= c; b = ROTL(b, 7);
++
++static void permute(void)
++{
++	uint32_t *x = pool;
++	for (int i = 0; i < 10; ++i)
++	{
++		QR(x[0], x[4], x[8], x[12]);
++		QR(x[1], x[5], x[9], x[13]);
++		QR(x[2], x[6], x[10], x[14]);
++		QR(x[3], x[7], x[11], x[15]);
++		QR(x[0], x[5], x[10], x[15]);
++		QR(x[1], x[6], x[11], x[12]);
++		QR(x[2], x[7], x[8], x[13]);
++		QR(x[3], x[4], x[9], x[14]);
++	}
++	pool_pos = 0;
++}
++
++static void absorb(uint32_t w)
++{
++	pool[pool_pos++] ^= w;
++	if (pool_pos == RATE_WORDS)
++	{
++		permute();
++	}
++}
++
++// Runs in supervisor mode (Supexec), as the hardware registers and system variables are protected.
++static int collect_samples(void)
++{
++	volatile unsigned char *video_hi = (volatile unsigned char *)0xffff8205;
++	volatile unsigned char *video_mid = (volatile unsigned char *)0xffff8207;
++	volatile unsigned char *video_lo = (volatile unsigned char *)0xffff8209;
++	volatile unsigned char *timer_c = (volatile unsigned char *)0xfffffa23;
++	volatile uint32_t *hz_200 = (volatile uint32_t *)0x4ba;
++	volatile uint32_t *frclock = (volatile uint32_t *)0x466;
++
++	uint32_t prev = 0;
++	for (int i = 0; i < NSAMPLES; ++i)
++	{
++		uint32_t video = ((uint32_t)*video_hi << 16) | ((uint32_t)*video_mid << 8) | *video_lo;
++		uint32_t timer = *timer_c;
++		uint32_t s = (video << 8) ^ timer ^ (*hz_200 << 24) ^ (*frclock << 12) ^ ROTL(prev, 5);
++		samples[i] = s;
++		prev = s;
++		// Delay depending on the last sample, to spread the samples over interrupts and scan lines.
++		for (volatile int d = (int)((s ^ (s >> 8)) & 63) + 16; d > 0; --d)
++		{
++		}
++	}
++	return 0;
++}
++
+ int getentropy(void *buf, size_t buflen)
+ {
+-    unsigned int a;
+-    unsigned int state[4];
+-
+-    // Init state
+-    a = trap14_11();     // Atari Random func.
+-    for (int i = 0; i < 4; ++i)
+-    {
+-        // xorshift32
+-        a ^= (a << 13);
+-        a ^= (a >> 17);
+-        a ^= (a << 5);
+-        state[i] = a;
+-    }
+-
+-    for (size_t i = 0; i < buflen; ++i)
+-    {
+-        // xorshift128
+-        unsigned int t = state[3];
+-        unsigned int s = state[0];
+-        state[3] = state[2];
+-        state[2] = state[1];
+-        state[1] = s;
+-
+-        t ^= t << 11;
+-        t ^= t >> 7;
+-        state[0] = t ^ s ^ (s >> 19);
+-
+-        // use lowest byte (could be optimized to adapt to buf len and output whole 32 bits when possible.)
+-        ((unsigned char*)buf)[i] = (unsigned char)state[0];
+-    }
+-
+-    return 0;
++	if (buflen > GETENTROPY_MAX)
++	{
++		errno = EIO;
++		return -1;
++	}
++
++	// Fresh samples on every call.
++	trap14_26(collect_samples);
++	for (int i = 0; i < NSAMPLES; ++i)
++	{
++		absorb(samples[i]);
++	}
++	absorb(trap14_11());						// XBIOS Random()
++	absorb(((uint32_t)trap1_2a() << 16) | trap1_2c());	// GEMDOS date and time
++	absorb((uint32_t)(uintptr_t)&buflen);				// Stack address
++	absorb((uint32_t)buflen);
++	permute();
++
++	// Squeeze.
++	unsigned char *out = (unsigned char *)buf;
++	while (buflen > 0)
++	{
++		size_t n = buflen < RATE_WORDS * 4 ? buflen : RATE_WORDS * 4;
++		for (size_t i = 0; i < n; ++i)
++		{
++			out[i] = (unsigned char)(pool[i >> 2] >> ((i & 3) * 8));
++		}
++		out += n;
++		buflen -= n;
++		// Clear the output part of the state, so it cannot be used to find earlier output.
++		for (int i = 0; i < RATE_WORDS; ++i)
++		{
++			pool[i] = 0;
++		}
++		permute();
++	}
++	return 0;
+ }
+-- 
+2.53.0
+

@@ -1,0 +1,189 @@
+From 62a9f4eb734c118fe673ed1b40175810b0ddd17a Mon Sep 17 00:00:00 2001
+From: Mikael <micael@hildenborg.com>
+Date: Wed, 18 Nov 2026 19:32:11 +0100
+Subject: [PATCH 05/17] m68k-atari-elf: Fixed bugs in isatty and fstat.
+
+---
+ libgloss/m68k/Makefile.in          |  2 +-
+ libgloss/m68k/atari/atari-fstat.c  | 15 +++++++------
+ libgloss/m68k/atari/atari-handle.c | 36 ++++++++++++++++++++++++++++++
+ libgloss/m68k/atari/atari-handle.h | 30 +++++++++++++++++++++++++
+ libgloss/m68k/atari/atari-isatty.c | 17 ++++++++++++--
+ 5 files changed, 90 insertions(+), 10 deletions(-)
+ create mode 100644 libgloss/m68k/atari/atari-handle.c
+ create mode 100644 libgloss/m68k/atari/atari-handle.h
+
+diff --git a/libgloss/m68k/Makefile.in b/libgloss/m68k/Makefile.in
+index 30ff09613..f046880dd 100644
+--- a/libgloss/m68k/Makefile.in
++++ b/libgloss/m68k/Makefile.in
+@@ -216,7 +216,7 @@ ATARI_SRC_LIBGLOSS := atari-environ.c atari-execve.c atari-link.c atari-times.c
+ 	atari-sbrk.c atari-stat.c atari-unlink.c atari-write.c \
+ 	atari-chown.c atari-fork.c atari-getentropy.c atari-gettod.c atari-readlink.c \
+ 	atari-symlink.c atari-chdir.c atari-getcwd.c atari-mkdir.c atari-rmdir.c \
+-	atari-rename.c atari-setmode.c atari-dostime.c
++	atari-rename.c atari-setmode.c atari-dostime.c atari-handle.c
+ 
+ ATARI_OBJS_LIBGLOSS := $(foreach source,$(ATARI_SRC_LIBGLOSS),$(basename $(source)).o)
+ 
+diff --git a/libgloss/m68k/atari/atari-fstat.c b/libgloss/m68k/atari/atari-fstat.c
+index d0a5e8253..d741f1955 100644
+--- a/libgloss/m68k/atari/atari-fstat.c
++++ b/libgloss/m68k/atari/atari-fstat.c
+@@ -9,6 +9,7 @@
+ #include "atari-gem_errno.h"
+ #include "atari-traps.h"
+ #include "atari-dostime.h"
++#include "atari-handle.h"
+ 
+ /*
+ 	From man page:
+@@ -18,12 +19,11 @@
+ 	GEMDOS has no call that returns information about an open handle, so:
+ 	- The size is found by seeking to the end and back.
+ 	- The modification time is read with Fdatime.
+-	- Handles 0-5 are the standard (character device) handles.
++	- Character devices (console, aux, ...) are told apart from files with a seek probe,
++	  so standard handles redirected to files (Fforce) are reported as files.
+ 	- The read-only attribute cannot be read from a handle, so files are reported as writable.
+ */
+ 
+-#define FIRST_FILE_HANDLE	6
+-
+ int fstat(int fd, struct stat *buf)
+ {
+ 	int err = GEM_E_OK;
+@@ -31,17 +31,18 @@ int fstat(int fd, struct stat *buf)
+ 	buf->st_nlink = 1;
+ 	buf->st_blksize = 512;
+ 
+-	if (fd < 0)
++	int kind = fd < 0 ? GEM_EIHNDL : atari_handle_is_chardev(atari_fd_to_handle(fd));
++	if (kind < 0)
+ 	{
+-		err = GEM_EIHNDL;
++		err = kind;
+ 	}
+-	else if (fd < FIRST_FILE_HANDLE)
++	else if (kind == 1)
+ 	{
+ 		buf->st_mode = S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+ 	}
+ 	else
+ 	{
+-		unsigned short handle = (unsigned short)fd;
++		unsigned short handle = atari_fd_to_handle(fd);
+ 		int pos = trap1_42(0, handle, 1);	// SEEK_CUR
+ 		if (pos < 0)
+ 		{
+diff --git a/libgloss/m68k/atari/atari-handle.c b/libgloss/m68k/atari/atari-handle.c
+new file mode 100644
+index 000000000..70feede2d
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-handle.c
+@@ -0,0 +1,36 @@
++/*
++	Copyright (C) 2026 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
++#include "atari-handle.h"
++#include "atari-traps.h"
++
++unsigned short atari_fd_to_handle(int fd)
++{
++	return fd == 2 ? GSH_CONOUT : (unsigned short)fd;
++}
++
++/*
++	GEMDOS has no call that tells what kind of object a handle refers to.
++	But Fseek on a character device (console, aux, ...) does nothing and returns 0,
++	while on a file a relative seek of 1 byte returns the new position (>= 1)
++	or an error (past end of file).
++	The standard handles 0-5 can be redirected to files (Fforce), so they need testing too.
++*/
++int atari_handle_is_chardev(unsigned short handle)
++{
++	int pos = trap1_42(0, handle, 1);	// SEEK_CUR
++	if (pos < 0)
++	{
++		return pos;
++	}
++	if (trap1_42(1, handle, 1) == 0)	// SEEK_CUR
++	{
++		// Nothing moved: character device.
++		return 1;
++	}
++	// A file: restore the position.
++	trap1_42((unsigned int)pos, handle, 0);	// SEEK_SET
++	return 0;
++}
+diff --git a/libgloss/m68k/atari/atari-handle.h b/libgloss/m68k/atari/atari-handle.h
+new file mode 100644
+index 000000000..4ef61fbd1
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-handle.h
+@@ -0,0 +1,30 @@
++/*
++	Copyright (C) 2026 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
++#ifndef ATARI_HANDLE_H
++#define ATARI_HANDLE_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/*
++	Map a file descriptor to the GEMDOS handle that read/write/... actually use.
++	write() sends stderr (fd 2) to the console out handle.
++*/
++unsigned short atari_fd_to_handle(int fd);
++
++/*
++	Find out if a GEMDOS handle is a character device or a file.
++	Returns 1 for a character device, 0 for a file (its position is left unchanged),
++	or a negative GEMDOS error code (e.g. GEM_EIHNDL for an invalid handle).
++*/
++int atari_handle_is_chardev(unsigned short handle);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif // ATARI_HANDLE_H
+diff --git a/libgloss/m68k/atari/atari-isatty.c b/libgloss/m68k/atari/atari-isatty.c
+index 5ab8b9aff..e5f76fea3 100644
+--- a/libgloss/m68k/atari/atari-isatty.c
++++ b/libgloss/m68k/atari/atari-isatty.c
+@@ -3,10 +3,23 @@
+ 	SPDX-License-Identifier: BSD-2-Clause
+ */
+ 
++#include <errno.h>
+ #include <_ansi.h>
+-#include "atari-traps.h"
++#include "atari-gem_errno.h"
++#include "atari-handle.h"
+ 
+ int isatty(int fd)
+ {
+-	return fd == GSH_AUX ? 1 : 0;
++	if (fd < 0)
++	{
++		errno = EBADF;
++		return 0;
++	}
++	int kind = atari_handle_is_chardev(atari_fd_to_handle(fd));
++	if (kind == 1)
++	{
++		return 1;
++	}
++	errno = (kind == GEM_EIHNDL) ? EBADF : ENOTTY;
++	return 0;
+ }
+-- 
+2.53.0
+

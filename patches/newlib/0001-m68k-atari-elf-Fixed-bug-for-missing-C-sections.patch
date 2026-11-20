@@ -1,0 +1,25 @@
+From 0fa47877c13e883ed9ac459dc4af3fe803619b3a Mon Sep 17 00:00:00 2001
+From: Mikael <micael@hildenborg.com>
+Date: Wed, 18 Nov 2026 19:15:14 +0100
+Subject: [PATCH 01/17] m68k-atari-elf: Fixed bug for missing C++ sections.
+
+---
+ libgloss/m68k/atari/atari-tos.ld | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libgloss/m68k/atari/atari-tos.ld b/libgloss/m68k/atari/atari-tos.ld
+index a2f0b7625..29d9b47a7 100644
+--- a/libgloss/m68k/atari/atari-tos.ld
++++ b/libgloss/m68k/atari/atari-tos.ld
+@@ -68,7 +68,7 @@ SECTIONS
+ 	}
+ 	.bss BLOCK(0x4) : {
+ 		__BSS_SEGMENT__ = .;
+-		*(.bss);
++		*(.bss .bss.* .gnu.linkonce.b.*);
+ 		. = ALIGN(0x4);
+ 		*(COMMON);
+ 		. = ALIGN(0x4);
+-- 
+2.53.0
+

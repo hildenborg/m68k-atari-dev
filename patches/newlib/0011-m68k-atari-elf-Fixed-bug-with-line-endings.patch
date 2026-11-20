@@ -1,0 +1,86 @@
+From 8a7f32143875d39f51babc493acfc08ff1f2a1c2 Mon Sep 17 00:00:00 2001
+From: Mikael <micael@hildenborg.com>
+Date: Wed, 18 Nov 2026 19:51:43 +0100
+Subject: [PATCH 11/17] m68k-atari-elf: Fixed bug with line endings.
+
+---
+ libgloss/m68k/atari/atari-read.c | 55 +++++++++++++++++++++-----------
+ 1 file changed, 37 insertions(+), 18 deletions(-)
+
+diff --git a/libgloss/m68k/atari/atari-read.c b/libgloss/m68k/atari/atari-read.c
+index cdff256e7..3797906a7 100644
+--- a/libgloss/m68k/atari/atari-read.c
++++ b/libgloss/m68k/atari/atari-read.c
+@@ -7,6 +7,40 @@
+ #include <_ansi.h>
+ #include "atari-gem_errno.h"
+ #include "atari-traps.h"
++#include "atari-handle.h"
++
++#define CTRL_D	0x04
++#define CTRL_Z	0x1a
++
++/*
++	Reading a line from the console with Fread returns the typed chars without the
++	ending newline. The "\r" is echoed by TOS, but the "\n" is not.
++	To behave like a POSIX terminal, a console read that returns less than requested
++	(a complete line) gets a "\n" added, and a "\n" is echoed so the cursor moves to the next line.
++	A line with only Ctrl-D or Ctrl-Z is end of file, as there is no other way to send it from the console.
++
++	This is only done when stdin really is a character device: if it is redirected to
++	a file, short reads are the normal end of file and are returned as they are.
++*/
++static int console_line(void *buf, int numRead)
++{
++	char *cbuf = (char *)buf;
++	if (numRead == 1 && (cbuf[0] == CTRL_D || cbuf[0] == CTRL_Z))
++	{
++		numRead = 0;	// End of file.
++	}
++	else
++	{
++		cbuf[numRead] = '\n';
++		++numRead;
++	}
++	// Move the cursor to the next line, unless stdout is redirected to a file.
++	if (atari_handle_is_chardev(GSH_CONOUT) == 1)
++	{
++		trap1_40(GSH_CONOUT, 1, "\n");
++	}
++	return numRead;
++}
+ 
+ _READ_WRITE_RETURN_TYPE read(int fd, void *buf, size_t nbytes)
+ {
+@@ -14,25 +48,10 @@ _READ_WRITE_RETURN_TYPE read(int fd, void *buf, size_t nbytes)
+ 	if (fd >= 0)
+ 	{
+ 		numRead = trap1_3f((unsigned short)fd, nbytes, buf);
+-		if (numRead >= 0 && numRead < nbytes && fd == GSH_CONIN)
++		if (numRead >= 0 && (size_t)numRead < nbytes && fd == GSH_CONIN
++			&& atari_handle_is_chardev(GSH_CONIN) == 1)
+ 		{
+-			/*
+-				When reading from console, the EOF character is "\n".
+-				Atari tos do not return the EOF character, but posix read do.
+-				So we assume that when the trap call have not reached the nbytes limit,
+-				then it must have gotten an EOF.
+-				So in that case we insert "\n" to the end of the buffer and increase lenth by 1.
+-			*/
+-			((char*)buf)[numRead] = '\n';
+-			++numRead;
+-			/*
+-				This is not enough however...
+-				Atari tos requires a line feed to be "\r\n", and apparently, the "\r" is executed by tos
+-				but not returned when reading. This is not a problem for us, but the "\n" as it is an EOF
+-				is simply discarded and not executed. So we also need to send a "\n" to stdout to fully comply
+-				with standard C behaviour.
+-			*/
+-			trap1_40(GSH_CONOUT, 1, "\n");
++			numRead = console_line(buf, numRead);
+ 		}
+ 	}
+ 	if (numRead < 0)
+-- 
+2.53.0
+

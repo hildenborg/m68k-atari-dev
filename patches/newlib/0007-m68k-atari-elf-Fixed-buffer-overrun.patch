@@ -1,0 +1,91 @@
+From 487890a42ba570a80ef297c0351b779484eee356 Mon Sep 17 00:00:00 2001
+From: Mikael <micael@hildenborg.com>
+Date: Wed, 18 Nov 2026 19:35:31 +0100
+Subject: [PATCH 07/17] m68k-atari-elf: Fixed buffer overrun.
+
+---
+ libgloss/m68k/atari/atari-getcwd.c | 50 +++++++++++++++++++++++++++---
+ 1 file changed, 46 insertions(+), 4 deletions(-)
+
+diff --git a/libgloss/m68k/atari/atari-getcwd.c b/libgloss/m68k/atari/atari-getcwd.c
+index 37d778e42..d1cd68ceb 100644
+--- a/libgloss/m68k/atari/atari-getcwd.c
++++ b/libgloss/m68k/atari/atari-getcwd.c
+@@ -5,28 +5,70 @@
+ 
+ #include <unistd.h>
+ #include <errno.h>
++#include <stdlib.h>
++#include <string.h>
+ 
+ #include <_ansi.h>
+ #include "atari-gem_errno.h"
+ #include "atari-traps.h"
+ 
++/*
++	Dgetpath has no buffer size argument, so the path is fetched into a local buffer
++	and then copied. GEMDOS paths are much shorter than this.
++	Dgetpath returns the path without drive ("\DIR\SUB", or "" for the root),
++	so the drive letter is added, and the root is returned as "C:\".
++
++	As in glibc, if buf is 0 the result is allocated with malloc: size bytes,
++	or as many as needed if size is 0.
++*/
++#define DGETPATH_MAX	512
++
+ char *getcwd(char *buf, size_t size)
+ {
+-	char *retbuf = buf;
+-	if (retbuf == 0)
++	if (buf != 0 && size == 0)
+ 	{
+-		errno = EIO;
++		errno = EINVAL;
+ 		return 0;
+ 	}
+ 
++	char path[DGETPATH_MAX];
+ 	unsigned short drive = trap1_19();
+-	int result = trap1_47(retbuf + 2, drive + 1);
++	int result = trap1_47(path, 0);	// 0 = current drive
+ 	if (result < 0)
+ 	{
+ 		gem_error_to_errno(result);
+ 		return 0;
+ 	}
++	path[DGETPATH_MAX - 1] = 0;
++
++	const char *dir = path[0] != 0 ? path : "\\";
++	size_t needed = 2 + strlen(dir) + 1;	// "C:" + dir + null
++
++	char *retbuf = buf;
++	if (retbuf == 0)
++	{
++		if (size == 0)
++		{
++			size = needed;
++		}
++		if (size >= needed)
++		{
++			retbuf = malloc(size);
++			if (retbuf == 0)
++			{
++				errno = ENOMEM;
++				return 0;
++			}
++		}
++	}
++	if (size < needed)
++	{
++		errno = ERANGE;
++		return 0;
++	}
++
+ 	retbuf[0] = (char)('A' + drive);
+ 	retbuf[1] = ':';
++	memcpy(retbuf + 2, dir, needed - 2);
+ 	return retbuf;
+ }
+-- 
+2.53.0
+

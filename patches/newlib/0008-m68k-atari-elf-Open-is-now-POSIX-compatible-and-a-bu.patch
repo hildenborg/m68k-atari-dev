@@ -1,0 +1,225 @@
+From 811aeb29a487f7cce91f4999a325ed1a287529ca Mon Sep 17 00:00:00 2001
+From: Mikael <micael@hildenborg.com>
+Date: Wed, 18 Nov 2026 19:39:26 +0100
+Subject: [PATCH 08/17] m68k-atari-elf: Open is now POSIX compatible, and a bug
+ with truncated files is fixed.
+
+---
+ libgloss/m68k/atari/atari-open.c  | 124 +++++++++++++++++++++---------
+ libgloss/m68k/atari/atari-traps.c |  15 ++++
+ libgloss/m68k/atari/atari-traps.h |   5 ++
+ 3 files changed, 108 insertions(+), 36 deletions(-)
+
+diff --git a/libgloss/m68k/atari/atari-open.c b/libgloss/m68k/atari/atari-open.c
+index 6c960b6a6..31f1e563a 100644
+--- a/libgloss/m68k/atari/atari-open.c
++++ b/libgloss/m68k/atari/atari-open.c
+@@ -4,75 +4,127 @@
+ */
+ 
+ #include <unistd.h>
++#include <errno.h>
+ #include <_ansi.h>
+ #include <fcntl.h>
+ #include <io.h>
+ #include "atari-gem_errno.h"
++#include "atari-gem_basepage.h"
+ #include "atari-traps.h"
+ 
+ extern int atari_get_fmode(int* mode);
+ extern int atari_setmode(short f, int mode);
+ 
++/*
++	GEMDOS has Fopen (open existing file) and Fcreate (create or truncate a file).
++	Whether the file exists is checked with Fattrib first, so that:
++	- O_CREAT | O_EXCL fails with EEXIST if the file exists.
++	- O_TRUNC truncates only existing files, and O_CREAT is needed to create new ones.
++	- A file is never truncated because Fopen failed for some other reason.
++	Fcreate may return a write only handle, so for O_RDONLY and O_RDWR the file is
++	reopened with Fopen and the requested mode.
++	The permission bits in the optional mode argument are not supported by GEMDOS and are ignored.
++	O_APPEND seeks to the end when the file is opened (stdio seeks to the end before each write).
++*/
++
++static int close_and_fail(int bios_handle, int gem_error)
++{
++	trap1_3e((unsigned short)bios_handle);
++	gem_error_to_errno(gem_error);
++	return -1;
++}
++
+ int open(const char *buf, int flags, ...)
+ {
+-	int bios_handle = -1;
+-	unsigned short bios_mode = (unsigned short)(flags & 0x3); // bits 0-1 the same for st and linux.
++	int accmode = flags & O_ACCMODE;
++	if (accmode == O_ACCMODE)
++	{
++		errno = EINVAL;
++		return -1;
++	}
++	unsigned short bios_mode = (unsigned short)accmode; // O_RDONLY, O_WRONLY, O_RDWR are the same as for Fopen.
+ 	int create = flags & O_CREAT;
+-	int append = flags & O_APPEND; // open doc says that seek end should be done before each write call. We assume that newlib handles that.
+-	int excl = flags & O_EXCL;	   // File must be created by this call.
+-	int trunc = flags & O_TRUNC;   // File is forced to be created and thus truncated.
+-
++	int excl = flags & O_EXCL;
++	int trunc = flags & O_TRUNC;
++	int append = flags & O_APPEND;
+ 	const char *bios_path = buf;
+-	if (!trunc)
++
++	int attrib = trap1_43(bios_path, FATTRIB_GET, 0);
++	if (attrib < 0 && attrib != GEM_EFILNF)
+ 	{
+-		bios_handle = trap1_3d(bios_path, bios_mode);
++		// Path not found, invalid drive...
++		gem_error_to_errno(attrib);
++		return -1;
+ 	}
+-	if (bios_handle < 0 && (create || trunc))
++	int exists = attrib >= 0;
++
++	int bios_handle;
++	if (exists)
+ 	{
+-		unsigned short bios_attrib = 0;
++		if (create && excl)
++		{
++			errno = EEXIST;
++			return -1;
++		}
++		if (attrib & FA_DIR)
++		{
++			errno = EISDIR;
++			return -1;
++		}
++		if (trunc && (attrib & FA_READONLY))
++		{
++			gem_error_to_errno(GEM_EACCDN);
++			return -1;
++		}
++	}
++
++	if ((!exists && create) || (exists && trunc))
++	{
++		// Create a new file, or truncate an existing one (keeping its hidden and system attributes).
++		unsigned short bios_attrib = exists ? (unsigned short)(attrib & (FA_HIDDEN | FA_SYSTEM)) : 0;
+ 		bios_handle = trap1_3c(bios_path, bios_attrib);
++		if (bios_handle >= 0 && accmode != O_WRONLY)
++		{
++			trap1_3e((unsigned short)bios_handle);
++			bios_handle = trap1_3d(bios_path, bios_mode);
++		}
+ 	}
+-	else if (create && excl)
++	else
+ 	{
+-		// We explicitly specified that file must be created, and it already existed, so error!
+-		gem_error_to_errno(GEM_EACCDN);
+-		// Close file.
+-		trap1_3e((unsigned short)bios_handle);
++		/*
++			Existing file, or not found by Fattrib and no O_CREAT.
++			Device names ("CON:", "AUX:", "PRN:") have no attributes but can be opened,
++			and a missing file makes Fopen fail with "file not found".
++		*/
++		bios_handle = trap1_3d(bios_path, bios_mode);
++	}
++	if (bios_handle < 0)
++	{
++		gem_error_to_errno(bios_handle);
+ 		return -1;
+ 	}
+ 
+-	if (bios_handle >= 0 && append)
++	if (append)
+ 	{
+ 		// Seek to end.
+ 		int new_file_pos = trap1_42(0, (unsigned short)bios_handle, 2);
+ 		if (new_file_pos < 0)
+ 		{
+-			gem_error_to_errno(new_file_pos);
+-			// Close file.
+-			trap1_3e((unsigned short)bios_handle);
+-			return -1;
++			return close_and_fail(bios_handle, new_file_pos);
+ 		}
+ 	}
+ 
+-	if (bios_handle < 0)
++	int fmode = flags & (O_TEXT | O_BINARY);
++	if (fmode == 0)
+ 	{
+-		gem_error_to_errno(bios_handle);
+-		bios_handle = -1;
++		// Initializes the correct default mode.
++		atari_get_fmode(&fmode);
+ 	}
+-	else
++	if (atari_setmode((short)bios_handle, fmode) == -1)
+ 	{
+-		int fmode = flags & (O_TEXT | O_BINARY);
+-		if (fmode == 0)
+-		{
+-			// Initializes the correct default mode.
+-			atari_get_fmode(&fmode);
+-		}
+-		if (atari_setmode((short)bios_handle, fmode) == -1)
+-		{
+-			// Close file. errno is alredy set.
+-			trap1_3e((unsigned short)bios_handle);
+-			return -1;
+-		}
++		// Close file. errno is already set.
++		trap1_3e((unsigned short)bios_handle);
++		return -1;
+ 	}
+ 	/*
+ 		If bios_handle is positive, then the low word is the gemdos handle, and the high word is zero.
+diff --git a/libgloss/m68k/atari/atari-traps.c b/libgloss/m68k/atari/atari-traps.c
+index 0ba1110bb..01c93da09 100644
+--- a/libgloss/m68k/atari/atari-traps.c
++++ b/libgloss/m68k/atari/atari-traps.c
+@@ -250,6 +250,21 @@ int trap1_42(unsigned int file_position, unsigned short bios_handle, unsigned sh
+ 	return new_position;
+ }
+ 
++int trap1_43(const char* bios_path, unsigned short wflag, unsigned short attrib)
++{
++	register int result asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.w		%3, %%a7@-\n\t"
++		"move.w		%2, %%a7@-\n\t"
++		"move.l		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x43)
++		: "=r" (result)
++		: "r" (bios_path), "r" (wflag), "r" (attrib)
++		: CLOBBER_REG, "memory");
++	return result;
++}
++
+ int trap1_47(char* buf, unsigned short bios_drive)
+ {
+ 	register int result asm ("d0") = -1;
+diff --git a/libgloss/m68k/atari/atari-traps.h b/libgloss/m68k/atari/atari-traps.h
+index 826157c7e..0c494c11b 100644
+--- a/libgloss/m68k/atari/atari-traps.h
++++ b/libgloss/m68k/atari/atari-traps.h
+@@ -65,6 +65,11 @@ int trap1_41(const char* bios_path);
+ 
+ int trap1_42(unsigned int file_position, unsigned short bios_handle, unsigned short bios_mode);
+ 
++// Fattrib
++#define FATTRIB_GET	0
++#define FATTRIB_SET	1
++int trap1_43(const char* bios_path, unsigned short wflag, unsigned short attrib);
++
+ // bios_drive 0 is default drive, and 1 and upwards is A...
+ int trap1_47(char* buf, unsigned short bios_drive);
+ 
+-- 
+2.53.0
+

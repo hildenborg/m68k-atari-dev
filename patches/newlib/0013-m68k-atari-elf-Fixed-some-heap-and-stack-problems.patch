@@ -1,0 +1,123 @@
+From c6d9a32abefdeb920a5e716a562519a9fd3ac0c7 Mon Sep 17 00:00:00 2001
+From: Mikael <micael@hildenborg.com>
+Date: Wed, 18 Nov 2026 20:14:59 +0100
+Subject: [PATCH 13/17] m68k-atari-elf: Fixed some heap and stack problems.
+
+---
+ libgloss/m68k/atari/README       |  2 +
+ libgloss/m68k/atari/atari-crti.S |  4 +-
+ libgloss/m68k/atari/atari-sbrk.c | 63 ++++++++++++++++++++++----------
+ 3 files changed, 47 insertions(+), 22 deletions(-)
+
+diff --git a/libgloss/m68k/atari/README b/libgloss/m68k/atari/README
+index 20283dd44..f177e2c1d 100644
+--- a/libgloss/m68k/atari/README
++++ b/libgloss/m68k/atari/README
+@@ -17,6 +17,8 @@ The symbol: "_stksize" defines how much memory that is reserved for stack and he
+    * SIZE < -1, then -SIZE memory is reserved (for mintlib compatibillity).
+ The heap starts at the bottom of the shared memory and the stack starts at the top, and they grow towards eachother.
+ A safety check for memory allocations is done to make sure that memory is not allocated and overwriting the stack.
++The heap is not allowed to come closer than 4KB to the current stack pointer, leaving room for the stack to grow.
++That margin can be changed with: `int _sbrk_stack_margin = SIZE;`
+ 
+ Program base page:
+ A pointer to the program base page is stored at: _BasePage
+diff --git a/libgloss/m68k/atari/atari-crti.S b/libgloss/m68k/atari/atari-crti.S
+index 0d5919f07..72b2d3c2c 100644
+--- a/libgloss/m68k/atari/atari-crti.S
++++ b/libgloss/m68k/atari/atari-crti.S
+@@ -91,8 +91,8 @@ stksize_above_three:
+ 	move.l	d0, d1
+ stksize_selected:
+ 
+-	| adjust for memory needed for environment and arguments
+-	add.l	d7, d1
++	| d1 is the stack and heap size. The environment and arguments (d7 bytes) are
++	| already below a2, so they are not added again. Limit to the free memory.
+ 	cmp.l	d1, d6
+ 	jpl		1f
+ 	move.l	d6, d1
+diff --git a/libgloss/m68k/atari/atari-sbrk.c b/libgloss/m68k/atari/atari-sbrk.c
+index 535395f3e..d0d1f25e7 100644
+--- a/libgloss/m68k/atari/atari-sbrk.c
++++ b/libgloss/m68k/atari/atari-sbrk.c
+@@ -4,33 +4,56 @@
+ */
+ 
+ #include <errno.h>
++#include <stddef.h>
++#include <unistd.h>
+ #include <_ansi.h>
+ 
+ extern char *_HeapPtr;
+ extern char *_heapbase;
+ 
+-char *sbrk(int nbytes)
+-{
+-	char *newheap = _HeapPtr + nbytes;
++/*
++	The heap grows up from _heapbase and the stack grows down towards it (see atari-crti.S).
++	The heap is not allowed to come closer to the current stack pointer than
++	_sbrk_stack_margin bytes, so that the stack can still grow (deeper calls, interrupt
++	and exception frames) without overwriting the newest heap memory.
++	The default margin can be changed by defining it in the program, for example:
++		int _sbrk_stack_margin = 16384;
++*/
++int _sbrk_stack_margin __attribute__((weak)) = 4096;
+ 
+-	/*
+-		The user stack pointer is the top heap.
+-		The behaviour is undefined if we are in supervisor mode.
+-		But memory allocations in supervisor mode feels like a bad idea anyway.
+-	*/
+-	char *heaptop;
+-	__asm__ volatile (
+-		"move.l	%%a7, %0\n\t"
+-		: "=g" (heaptop)
+-		:
+-		:);
++void *sbrk(ptrdiff_t nbytes)
++{
++	char *heap = _HeapPtr;
++	if (nbytes > 0)
++	{
++		/*
++			The user stack pointer is the top of the heap.
++			The behaviour is undefined if we are in supervisor mode.
++			But memory allocations in supervisor mode feels like a bad idea anyway.
++		*/
++		char *sp;
++		__asm__ volatile (
++			"move.l	%%a7, %0\n\t"
++			: "=g" (sp)
++			:
++			:);
+ 
+-	if (newheap > heaptop)
++		ptrdiff_t room = (sp - heap) - _sbrk_stack_margin;
++		if (nbytes > room)
++		{
++			errno = ENOMEM;
++			return (void *)-1;
++		}
++	}
++	else if (nbytes < 0)
+ 	{
+-		errno = ENOMEM;
+-		return ((char *)-1);
++		if (nbytes < _heapbase - heap)
++		{
++			// Would shrink below the start of the heap.
++			errno = EINVAL;
++			return (void *)-1;
++		}
+ 	}
+-	char *retptr = _HeapPtr;
+-	_HeapPtr = newheap;
+-	return retptr;
++	_HeapPtr = heap + nbytes;
++	return heap;
+ }
+-- 
+2.53.0
+

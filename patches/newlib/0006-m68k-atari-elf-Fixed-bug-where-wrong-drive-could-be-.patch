@@ -1,0 +1,118 @@
+From 110e25367d28d4d237dc4d5d898d7d7ad5e819c8 Mon Sep 17 00:00:00 2001
+From: Mikael <micael@hildenborg.com>
+Date: Wed, 18 Nov 2026 19:34:02 +0100
+Subject: [PATCH 06/17] m68k-atari-elf: Fixed bug where wrong drive could be
+ selected.
+
+---
+ libgloss/m68k/atari/atari-chdir.c | 75 +++++++++++++++++++++----------
+ 1 file changed, 52 insertions(+), 23 deletions(-)
+
+diff --git a/libgloss/m68k/atari/atari-chdir.c b/libgloss/m68k/atari/atari-chdir.c
+index edb7a70d8..6c81f130b 100644
+--- a/libgloss/m68k/atari/atari-chdir.c
++++ b/libgloss/m68k/atari/atari-chdir.c
+@@ -3,47 +3,76 @@
+ 	SPDX-License-Identifier: BSD-2-Clause
+ */
+ 
++#include <errno.h>
+ #include <_ansi.h>
+ #include "atari-gem_errno.h"
+ #include "atari-traps.h"
+ 
++/*
++	GEMDOS keeps a current path per drive, and Dsetpath sets it for the current drive.
++	So a path with a drive letter ("C:\DIR") is done by switching to that drive and
++	setting the path there. If setting the path fails, the previous drive is restored,
++	so a failed chdir changes nothing.
++	"C:" alone switches to drive C: and keeps its current path.
++*/
+ int chdir(const char *path)
+ {
++	if (path == 0)
++	{
++		errno = EFAULT;
++		return -1;
++	}
++	if (path[0] == 0)
++	{
++		errno = ENOENT;
++		return -1;
++	}
++
+ 	int err = GEM_E_OK;
+-	if (path != 0)
++	unsigned short old_drive = trap1_19();
++	unsigned short drive = old_drive;
++	if (path[1] == ':')
+ 	{
+-		if (path[1] == ':')
++		char d = path[0];
++		if (d >= 'a' && d <= 'z')
+ 		{
+-			unsigned int drives = 0;
+-			unsigned short drive = 0;
+-			if (path[0] >= 'A' && path[0] <= 'Z')
+-			{
+-				drive = (unsigned short)(path[0] - 'A');
+-			}
+-			else if (path[0] >= 'a' && path[0] <= 'z')
+-			{
+-				drive = (unsigned short)(path[0] - 'a');
+-			}
+-			drives = trap1_e(drive);
+-			if ((drives & (1 << drive)) == 0)
+-			{
+-				err = GEM_EDRIVE;
+-			}
+-			path += 2;
++			drive = (unsigned short)(d - 'a');
+ 		}
+-		if (err == GEM_E_OK)
++		else if (d >= 'A' && d <= 'Z')
+ 		{
+-			err = trap1_3b(path);
++			drive = (unsigned short)(d - 'A');
+ 		}
++		else
++		{
++			gem_error_to_errno(GEM_EDRIVE);
++			return -1;
++		}
++		// Setting the current drive to itself only returns the map of mounted drives.
++		unsigned int drives = trap1_e(old_drive);
++		if ((drives & (1u << drive)) == 0)
++		{
++			gem_error_to_errno(GEM_EDRIVE);
++			return -1;
++		}
++		path += 2;
+ 	}
+-	else
++
++	if (drive != old_drive)
+ 	{
+-		err = GEM_EPTHNF;
++		trap1_e(drive);
++	}
++	if (path[0] != 0)
++	{
++		err = trap1_3b(path);
+ 	}
+ 	if (err < 0)
+ 	{
++		if (drive != old_drive)
++		{
++			trap1_e(old_drive);
++		}
+ 		gem_error_to_errno(err);
+ 		return -1;
+ 	}
+ 	return 0;
+-}
+\ No newline at end of file
++}
+-- 
+2.53.0
+

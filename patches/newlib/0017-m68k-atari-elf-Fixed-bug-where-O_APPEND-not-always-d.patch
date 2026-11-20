@@ -1,0 +1,155 @@
+From f96565e068809ac3c6cdb18e20486cef61954c59 Mon Sep 17 00:00:00 2001
+From: Mikael <micael@hildenborg.com>
+Date: Wed, 18 Nov 2026 20:37:51 +0100
+Subject: [PATCH 17/17] m68k-atari-elf: Fixed bug where O_APPEND not always did
+ what it should do.
+
+---
+ libgloss/m68k/atari/atari-close.c  |  5 +++++
+ libgloss/m68k/atari/atari-handle.c | 28 ++++++++++++++++++++++++++++
+ libgloss/m68k/atari/atari-handle.h |  9 +++++++++
+ libgloss/m68k/atari/atari-open.c   |  4 +++-
+ libgloss/m68k/atari/atari-write.c  | 12 +++++++++++-
+ 5 files changed, 56 insertions(+), 2 deletions(-)
+
+diff --git a/libgloss/m68k/atari/atari-close.c b/libgloss/m68k/atari/atari-close.c
+index a52049c1d..32b3640c4 100644
+--- a/libgloss/m68k/atari/atari-close.c
++++ b/libgloss/m68k/atari/atari-close.c
+@@ -6,6 +6,7 @@
+ #include <_ansi.h>
+ #include "atari-gem_errno.h"
+ #include "atari-traps.h"
++#include "atari-handle.h"
+ 
+ int close(int fd)
+ {
+@@ -13,6 +14,10 @@ int close(int fd)
+ 	if (fd >= 0)
+ 	{
+ 		err = trap1_3e((unsigned short)fd);
++		if (err >= 0)
++		{
++			atari_set_append(fd, 0);
++		}
+ 	}
+ 	if (err <  0)
+ 	{
+diff --git a/libgloss/m68k/atari/atari-handle.c b/libgloss/m68k/atari/atari-handle.c
+index 70feede2d..b774060bc 100644
+--- a/libgloss/m68k/atari/atari-handle.c
++++ b/libgloss/m68k/atari/atari-handle.c
+@@ -34,3 +34,31 @@ int atari_handle_is_chardev(unsigned short handle)
+ 	trap1_42((unsigned int)pos, handle, 0);	// SEEK_SET
+ 	return 0;
+ }
++
++static unsigned char append_flags[ATARI_MAX_APPEND_HANDLES / 8];
++
++void atari_set_append(int handle, int append)
++{
++	if (handle < 0 || handle >= ATARI_MAX_APPEND_HANDLES)
++	{
++		return;
++	}
++	unsigned char bit = (unsigned char)(1 << (handle & 7));
++	if (append)
++	{
++		append_flags[handle >> 3] |= bit;
++	}
++	else
++	{
++		append_flags[handle >> 3] &= (unsigned char)~bit;
++	}
++}
++
++int atari_is_append(int handle)
++{
++	if (handle < 0 || handle >= ATARI_MAX_APPEND_HANDLES)
++	{
++		return 0;
++	}
++	return (append_flags[handle >> 3] >> (handle & 7)) & 1;
++}
+diff --git a/libgloss/m68k/atari/atari-handle.h b/libgloss/m68k/atari/atari-handle.h
+index 4ef61fbd1..ce7182585 100644
+--- a/libgloss/m68k/atari/atari-handle.h
++++ b/libgloss/m68k/atari/atari-handle.h
+@@ -23,6 +23,15 @@ unsigned short atari_fd_to_handle(int fd);
+ */
+ int atari_handle_is_chardev(unsigned short handle);
+ 
++/*
++	Remember if a handle was opened with O_APPEND (set by open, cleared by close),
++	so that write() can seek to the end before each write.
++	Handles outside the table (>= ATARI_MAX_APPEND_HANDLES) are never in append mode.
++*/
++#define ATARI_MAX_APPEND_HANDLES	256
++void atari_set_append(int handle, int append);
++int atari_is_append(int handle);
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/libgloss/m68k/atari/atari-open.c b/libgloss/m68k/atari/atari-open.c
+index 31f1e563a..3995a355c 100644
+--- a/libgloss/m68k/atari/atari-open.c
++++ b/libgloss/m68k/atari/atari-open.c
+@@ -11,6 +11,7 @@
+ #include "atari-gem_errno.h"
+ #include "atari-gem_basepage.h"
+ #include "atari-traps.h"
++#include "atari-handle.h"
+ 
+ extern int atari_get_fmode(int* mode);
+ extern int atari_setmode(short f, int mode);
+@@ -24,7 +25,7 @@ extern int atari_setmode(short f, int mode);
+ 	Fcreate may return a write only handle, so for O_RDONLY and O_RDWR the file is
+ 	reopened with Fopen and the requested mode.
+ 	The permission bits in the optional mode argument are not supported by GEMDOS and are ignored.
+-	O_APPEND seeks to the end when the file is opened (stdio seeks to the end before each write).
++	O_APPEND is remembered for the handle, and write() seeks to the end before each write.
+ */
+ 
+ static int close_and_fail(int bios_handle, int gem_error)
+@@ -126,6 +127,7 @@ int open(const char *buf, int flags, ...)
+ 		trap1_3e((unsigned short)bios_handle);
+ 		return -1;
+ 	}
++	atari_set_append(bios_handle, append);
+ 	/*
+ 		If bios_handle is positive, then the low word is the gemdos handle, and the high word is zero.
+ 	*/
+diff --git a/libgloss/m68k/atari/atari-write.c b/libgloss/m68k/atari/atari-write.c
+index eba45038b..4b563b3fa 100644
+--- a/libgloss/m68k/atari/atari-write.c
++++ b/libgloss/m68k/atari/atari-write.c
+@@ -7,6 +7,7 @@
+ #include <_ansi.h>
+ #include "atari-gem_errno.h"
+ #include "atari-traps.h"
++#include "atari-handle.h"
+ 
+ _READ_WRITE_RETURN_TYPE write(int fd, const void *buf, size_t nbytes)
+ {
+@@ -17,7 +18,16 @@ _READ_WRITE_RETURN_TYPE write(int fd, const void *buf, size_t nbytes)
+ 		{
+ 			fd = GSH_CONOUT; // Use console out for stderr.
+ 		}
+-		numWritten = trap1_40((unsigned short)fd, nbytes, buf);
++		numWritten = GEM_E_OK;
++		if (atari_is_append(fd))
++		{
++			// O_APPEND: every write goes to the end of the file.
++			numWritten = trap1_42(0, (unsigned short)fd, 2);	// SEEK_END
++		}
++		if (numWritten >= 0)
++		{
++			numWritten = trap1_40((unsigned short)fd, nbytes, buf);
++		}
+ 	}
+ 	if (numWritten < 0)
+ 	{
+-- 
+2.53.0
+

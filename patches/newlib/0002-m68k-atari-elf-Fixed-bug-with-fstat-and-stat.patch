@@ -1,0 +1,533 @@
+From 8291f274fbad407fcb30e9c3273ad837eee32d6c Mon Sep 17 00:00:00 2001
+From: Mikael <micael@hildenborg.com>
+Date: Wed, 18 Nov 2026 19:15:47 +0100
+Subject: [PATCH 02/17] m68k-atari-elf: Fixed bug with fstat and stat.
+
+---
+ libgloss/m68k/Makefile.in           |   2 +-
+ libgloss/m68k/atari/atari-dostime.c |  42 +++++++
+ libgloss/m68k/atari/atari-dostime.h |  26 ++++
+ libgloss/m68k/atari/atari-fstat.c   |  77 ++++++++----
+ libgloss/m68k/atari/atari-stat.c    | 178 ++++++++++++++++++++++++++--
+ libgloss/m68k/atari/atari-traps.c   |  45 ++++++-
+ libgloss/m68k/atari/atari-traps.h   |  19 ++-
+ 7 files changed, 351 insertions(+), 38 deletions(-)
+ create mode 100644 libgloss/m68k/atari/atari-dostime.c
+ create mode 100644 libgloss/m68k/atari/atari-dostime.h
+
+diff --git a/libgloss/m68k/Makefile.in b/libgloss/m68k/Makefile.in
+index 43d716a2f..30ff09613 100644
+--- a/libgloss/m68k/Makefile.in
++++ b/libgloss/m68k/Makefile.in
+@@ -216,7 +216,7 @@ ATARI_SRC_LIBGLOSS := atari-environ.c atari-execve.c atari-link.c atari-times.c
+ 	atari-sbrk.c atari-stat.c atari-unlink.c atari-write.c \
+ 	atari-chown.c atari-fork.c atari-getentropy.c atari-gettod.c atari-readlink.c \
+ 	atari-symlink.c atari-chdir.c atari-getcwd.c atari-mkdir.c atari-rmdir.c \
+-	atari-rename.c atari-setmode.c
++	atari-rename.c atari-setmode.c atari-dostime.c
+ 
+ ATARI_OBJS_LIBGLOSS := $(foreach source,$(ATARI_SRC_LIBGLOSS),$(basename $(source)).o)
+ 
+diff --git a/libgloss/m68k/atari/atari-dostime.c b/libgloss/m68k/atari/atari-dostime.c
+new file mode 100644
+index 000000000..65aeb3c66
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-dostime.c
+@@ -0,0 +1,42 @@
++/*
++	Copyright (C) 2026 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
++#include "atari-dostime.h"
++
++#define SECONDS_IN_A_DAY (24 * 60 * 60)
++
++static const short month_to_day[] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
++
++// Number of leap years in the range [1, year].
++static int leap_years_up_to(int year)
++{
++	return year / 4 - year / 100 + year / 400;
++}
++
++time_t atari_dostime_to_time_t(unsigned short date, unsigned short time)
++{
++	int year = 1980 + ((date >> 9) & 0x7f);
++	int month = (date >> 5) & 0xf;	// 1..12
++	int day = date & 0x1f;			// 1..31
++	int hour = (time >> 11) & 0x1f;
++	int min = (time >> 5) & 0x3f;
++	int sec = (time & 0x1f) * 2;
++
++	// Guard against invalid (e.g. all zero) date words.
++	if (month < 1) {month = 1;}
++	if (month > 12) {month = 12;}
++	if (day < 1) {day = 1;}
++
++	time_t days = (time_t)(year - 1970) * 365
++		+ (leap_years_up_to(year - 1) - leap_years_up_to(1969))
++		+ month_to_day[month - 1]
++		+ (day - 1);
++	int is_leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
++	if (is_leap && month > 2)
++	{
++		++days;
++	}
++	return days * SECONDS_IN_A_DAY + hour * 3600 + min * 60 + sec;
++}
+diff --git a/libgloss/m68k/atari/atari-dostime.h b/libgloss/m68k/atari/atari-dostime.h
+new file mode 100644
+index 000000000..44e4ea2f1
+--- /dev/null
++++ b/libgloss/m68k/atari/atari-dostime.h
+@@ -0,0 +1,26 @@
++/*
++	Copyright (C) 2026 Mikael Hildenborg
++	SPDX-License-Identifier: BSD-2-Clause
++*/
++
++#ifndef ATARI_DOSTIME_H
++#define ATARI_DOSTIME_H
++
++#include <time.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/*
++	Convert a GEMDOS date and time word (as returned by Tgetdate/Tgettime,
++	Fdatime and found in the DTA) to seconds since 1970-01-01 00:00:00.
++	GEMDOS has no notion of time zones, so the date/time is treated as UTC.
++*/
++time_t atari_dostime_to_time_t(unsigned short date, unsigned short time);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif // ATARI_DOSTIME_H
+diff --git a/libgloss/m68k/atari/atari-fstat.c b/libgloss/m68k/atari/atari-fstat.c
+index a48a00930..d0a5e8253 100644
+--- a/libgloss/m68k/atari/atari-fstat.c
++++ b/libgloss/m68k/atari/atari-fstat.c
+@@ -4,47 +4,80 @@
+ */
+ 
+ #include <sys/stat.h>
++#include <string.h>
+ #include <_ansi.h>
+ #include "atari-gem_errno.h"
+ #include "atari-traps.h"
+-#include "atari-gem_basepage.h"
++#include "atari-dostime.h"
+ 
+ /*
+ 	From man page:
+ 	"only the st_uid, st_gid, st_size, and st_mode fields,
+ 	and only the S_IRUSR, S_IWUSR, S_IRGRP, S_IWGRP, S_IROTH, and S_IWOTH file permission bits need be valid."
++
++	GEMDOS has no call that returns information about an open handle, so:
++	- The size is found by seeking to the end and back.
++	- The modification time is read with Fdatime.
++	- Handles 0-5 are the standard (character device) handles.
++	- The read-only attribute cannot be read from a handle, so files are reported as writable.
+ */
+ 
++#define FIRST_FILE_HANDLE	6
++
+ int fstat(int fd, struct stat *buf)
+ {
+-	struct DTA *dta = (struct DTA *)GEM_EIHNDL;
+-	// For now, we just support files.
+-	if (fd >= 6)
++	int err = GEM_E_OK;
++	memset(buf, 0, sizeof(*buf));
++	buf->st_nlink = 1;
++	buf->st_blksize = 512;
++
++	if (fd < 0)
++	{
++		err = GEM_EIHNDL;
++	}
++	else if (fd < FIRST_FILE_HANDLE)
+ 	{
+-		buf->st_mode = S_IRUSR | S_IRGRP | S_IROTH;
+-		// files
+-		dta = trap1_2f((unsigned int)fd);
+-		if ((int)dta >= 0)
++		buf->st_mode = S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
++	}
++	else
++	{
++		unsigned short handle = (unsigned short)fd;
++		int pos = trap1_42(0, handle, 1);	// SEEK_CUR
++		if (pos < 0)
++		{
++			err = pos;
++		}
++		else
+ 		{
+-			// Attribs
+-			buf->st_mode |= (dta->d_attrib & FA_DIR) ? S_IFDIR : S_IFREG;
+-			if ((dta->d_attrib & FA_READONLY) != 0)
++			int size = trap1_42(0, handle, 2);	// SEEK_END
++			int restored = trap1_42((unsigned int)pos, handle, 0);	// SEEK_SET
++			if (size < 0)
++			{
++				err = size;
++			}
++			else if (restored < 0)
+ 			{
+-				buf->st_mode |= S_IWUSR | S_IWGRP | S_IWOTH;
++				err = restored;
++			}
++			else
++			{
++				buf->st_mode = S_IFREG | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
++				buf->st_size = size;
++				buf->st_blocks = (size + 511) / 512;
++
++				struct DOSTIME dt;
++				if (trap1_57(&dt, handle, FDATIME_GET) >= 0)
++				{
++					buf->st_mtime = atari_dostime_to_time_t(dt.date, dt.time);
++					buf->st_atime = buf->st_mtime;
++					buf->st_ctime = buf->st_mtime;
++				}
+ 			}
+-			buf->st_size = dta->d_length;
+-			// st_uid, st_gid have no meaning for the st, so we ignore them.
+ 		}
+ 	}
+-	else
+-	{
+-		// unsupported, fake something.
+-		buf->st_mode = S_IFCHR;
+-		buf->st_blksize = 0;
+-	}
+-	if ((int)dta < 0)
++	if (err < 0)
+ 	{
+-		gem_error_to_errno((int)dta);
++		gem_error_to_errno(err);
+ 		return -1;
+ 	}
+ 	return 0;
+diff --git a/libgloss/m68k/atari/atari-stat.c b/libgloss/m68k/atari/atari-stat.c
+index a08273204..1e1c5c7d1 100644
+--- a/libgloss/m68k/atari/atari-stat.c
++++ b/libgloss/m68k/atari/atari-stat.c
+@@ -4,26 +4,182 @@
+ */
+ 
+ #include <sys/stat.h>
+-#include <unistd.h>
++#include <string.h>
+ #include <_ansi.h>
+ #include "atari-gem_errno.h"
++#include "atari-traps.h"
++#include "atari-gem_basepage.h"
++#include "atari-dostime.h"
+ 
+-// I don't like this extern declaration here...
+-extern int open(const char *buf, int flags, int mode);
++/*
++	stat is implemented with Fsfirst, which works for both files and
++	directories without opening them.
++	Fsfirst cannot find root directories ("C:\", "\", "C:") or "." and ".."
++	in a root directory, so those are handled separately.
++*/
++
++#define STAT_ATTRIBS	(FA_READONLY | FA_HIDDEN | FA_SYSTEM | FA_DIR | FA_ARCHIVE)
++#define MAX_PATH		256
++
++static int is_separator(char c)
++{
++	return c == '\\' || c == '/';
++}
++
++// Drive number (0 = A) for path, and the path with any drive prefix removed.
++static int path_drive(const char *path, const char **rest)
++{
++	if (path[0] != 0 && path[1] == ':')
++	{
++		*rest = path + 2;
++		char d = path[0];
++		if (d >= 'a' && d <= 'z') {return d - 'a';}
++		if (d >= 'A' && d <= 'Z') {return d - 'A';}
++		return -1;
++	}
++	*rest = path;
++	return (int)trap1_19();
++}
++
++// True if the last path component is "." or "..".
++static int ends_in_dot_entry(const char *path, int len)
++{
++	int start = len;
++	while (start > 0 && !is_separator(path[start - 1]) && path[start - 1] != ':')
++	{
++		--start;
++	}
++	int n = len - start;
++	return (n == 1 && path[start] == '.') || (n == 2 && path[start] == '.' && path[start + 1] == '.');
++}
++
++static void fill_dir(struct stat *buf)
++{
++	buf->st_mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH;
++}
+ 
+ int stat(const char *path, struct stat *buf)
+ {
+-	int handle = open(path, 0, 0); // read only
+-	if (handle >= 0)
++	int err = GEM_E_OK;
++	memset(buf, 0, sizeof(*buf));
++	buf->st_nlink = 1;
++	buf->st_blksize = 512;
++
++	if (path == 0 || path[0] == 0)
++	{
++		gem_error_to_errno(GEM_EFILNF);
++		return -1;
++	}
++
++	const char *rest;
++	int drive = path_drive(path, &rest);
++	if (drive < 0)
+ 	{
+-		int err = fstat(handle, buf);
+-		close(handle);
+-		handle = err;
++		gem_error_to_errno(GEM_EDRIVE);
++		return -1;
+ 	}
+-	if (handle < 0)
++	buf->st_dev = drive;
++
++	// Wildcards would make Fsfirst match other files.
++	for (const char *p = rest; *p != 0; ++p)
+ 	{
+-		gem_error_to_errno(handle);
++		if (*p == '*' || *p == '?')
++		{
++			gem_error_to_errno(GEM_EFILNF);
++			return -1;
++		}
++	}
++
++	// Copy the path without trailing separators (Fsfirst does not accept "C:\DIR\").
++	int len = strlen(path);
++	int had_trailing_sep = 0;
++	while (len > (int)(rest - path) && is_separator(path[len - 1]))
++	{
++		--len;
++		had_trailing_sep = 1;
++	}
++	if (len >= MAX_PATH)
++	{
++		gem_error_to_errno(GEM_ENAMETOOLONG);
+ 		return -1;
+ 	}
+-	return 0;
++
++	if (len == (int)(rest - path))
++	{
++		// Root directory ("\", "C:\") or current directory of a drive ("C:").
++		unsigned int drives = trap1_e(trap1_19());	// Set current drive to itself to get the drive map.
++		if ((drives & (1u << drive)) == 0)
++		{
++			gem_error_to_errno(GEM_EDRIVE);
++			return -1;
++		}
++		fill_dir(buf);
++		return 0;
++	}
++
++	char fpath[MAX_PATH];
++	memcpy(fpath, path, len);
++	fpath[len] = 0;
++
++	struct DTA dta;
++	struct DTA *old_dta = trap1_2f();
++	trap1_1a(&dta);
++	err = trap1_4e(fpath, STAT_ATTRIBS);
++	trap1_1a(old_dta);
++
++	if (err >= 0)
++	{
++		if (dta.d_attrib & FA_DIR)
++		{
++			fill_dir(buf);
++		}
++		else if (had_trailing_sep)
++		{
++			// "file\" is not valid for a regular file.
++			gem_error_to_errno(GEM_EPTHNF);
++			return -1;
++		}
++		else
++		{
++			buf->st_mode = S_IFREG | S_IRUSR | S_IRGRP | S_IROTH;
++			buf->st_size = dta.d_length;
++			buf->st_blocks = (dta.d_length + 511) / 512;
++		}
++		if ((dta.d_attrib & FA_READONLY) != 0)
++		{
++			buf->st_mode &= ~(S_IWUSR | S_IWGRP | S_IWOTH);
++		}
++		else
++		{
++			buf->st_mode |= S_IWUSR | S_IWGRP | S_IWOTH;
++		}
++		buf->st_mtime = atari_dostime_to_time_t(dta.d_date, dta.d_time);
++		buf->st_atime = buf->st_mtime;
++		buf->st_ctime = buf->st_mtime;
++		return 0;
++	}
++
++	if (ends_in_dot_entry(fpath, len))
++	{
++		/*
++			"." and ".." have no directory entries in a root directory.
++			Verify that the directory exists by looking for anything in it.
++		*/
++		if (len + 4 < MAX_PATH)
++		{
++			memcpy(fpath + len, "\\*.*", 5);
++			trap1_1a(&dta);
++			int err2 = trap1_4e(fpath, STAT_ATTRIBS);
++			trap1_1a(old_dta);
++			if (err2 >= 0 || err2 == GEM_EFILNF || err2 == GEM_ENMFIL)
++			{
++				// Directory exists (possibly empty).
++				fill_dir(buf);
++				return 0;
++			}
++		}
++	}
++
++	gem_error_to_errno(err);
++	return -1;
+ }
+diff --git a/libgloss/m68k/atari/atari-traps.c b/libgloss/m68k/atari/atari-traps.c
+index c387ff144..0ba1110bb 100644
+--- a/libgloss/m68k/atari/atari-traps.c
++++ b/libgloss/m68k/atari/atari-traps.c
+@@ -88,15 +88,25 @@ int trap1_2d(unsigned short time)
+ }
+ 
+ 
+-struct DTA* trap1_2f(unsigned short bios_handle)
++void trap1_1a(struct DTA* dta)
++{
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.l		%0, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x1a)
++		:
++		: "r" (dta)
++		: "d0", CLOBBER_REG, "memory");
++}
++
++struct DTA* trap1_2f(void)
+ {
+ 	register struct DTA* result asm ("d0") = (struct DTA*)-1;
+ 	__asm__ volatile (
+ 		TRAP_BEGIN
+-		"move.w		%1, %%a7@-\n\t"
+ 		TRAP_FUNC(1, 0x2f)
+ 		: "=r" (result)
+-		: "r" (bios_handle)
++		:
+ 		: CLOBBER_REG);
+ 	return result;
+ }
+@@ -270,6 +280,20 @@ int trap1_4b(unsigned short mode, const char* file_name, const char* cmdline, co
+ 	return result;
+ }
+ 
++int trap1_4e(const char* bios_path, unsigned short bios_attrib)
++{
++	register int result asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.w		%2, %%a7@-\n\t"
++		"move.l		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x4e)
++		: "=r" (result)
++		: "r" (bios_path), "r" (bios_attrib)
++		: CLOBBER_REG, "memory");
++	return result;
++}
++
+ int trap1_56(const char* oldname, const char* newname)
+ {
+ 	register int result asm ("d0") = -1;
+@@ -285,6 +309,21 @@ int trap1_56(const char* oldname, const char* newname)
+ 	return result;
+ }
+ 
++int trap1_57(struct DOSTIME* timeptr, unsigned short bios_handle, unsigned short wflag)
++{
++	register int result asm ("d0") = -1;
++	__asm__ volatile (
++		TRAP_BEGIN
++		"move.w		%3, %%a7@-\n\t"
++		"move.w		%2, %%a7@-\n\t"
++		"move.l		%1, %%a7@-\n\t"
++		TRAP_FUNC(1, 0x57)
++		: "=r" (result)
++		: "r" (timeptr), "r" (bios_handle), "r" (wflag)
++		: CLOBBER_REG, "memory");
++	return result;
++}
++
+ unsigned int trap14_11(void)
+ {
+ 	register unsigned int result asm ("d0") = -1;
+diff --git a/libgloss/m68k/atari/atari-traps.h b/libgloss/m68k/atari/atari-traps.h
+index 01edb7062..826157c7e 100644
+--- a/libgloss/m68k/atari/atari-traps.h
++++ b/libgloss/m68k/atari/atari-traps.h
+@@ -29,7 +29,11 @@ unsigned short trap1_2c(void);
+ 
+ int trap1_2d(unsigned short time);
+ 
+-struct DTA* trap1_2f(unsigned short bios_handle);
++// Fsetdta
++void trap1_1a(struct DTA* dta);
++
++// Fgetdta
++struct DTA* trap1_2f(void);
+ 
+ int trap1_39(const char* bios_path);
+ 
+@@ -71,8 +75,21 @@ int trap1_47(char* buf, unsigned short bios_drive);
+ #define PE_GOTHENFREE	6
+ int trap1_4b(unsigned short mode, const char* file_name, const char* cmdline, const char* envstring);
+ 
++// Fsfirst
++int trap1_4e(const char* bios_path, unsigned short bios_attrib);
++
+ int trap1_56(const char* oldname, const char* newname);
+ 
++// Fdatime
++struct DOSTIME
++{
++	unsigned short time;
++	unsigned short date;
++};
++#define FDATIME_GET	0
++#define FDATIME_SET	1
++int trap1_57(struct DOSTIME* timeptr, unsigned short bios_handle, unsigned short wflag);
++
+ unsigned int trap14_11(void);
+ 
+ int trap14_26(int (*callback)(void));
+-- 
+2.53.0
+

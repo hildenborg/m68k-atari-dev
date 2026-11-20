@@ -1,0 +1,96 @@
+From d60750a2e867f41cf62b658ede637b6c6f03f9c0 Mon Sep 17 00:00:00 2001
+From: Mikael <micael@hildenborg.com>
+Date: Wed, 18 Nov 2026 20:26:52 +0100
+Subject: [PATCH 16/17] m68k-atari-elf: Kill is properly implemented for a
+ single process system.
+
+---
+ libgloss/m68k/atari/atari-kill.c | 67 +++++++++++++++++++++++++++++++-
+ 1 file changed, 65 insertions(+), 2 deletions(-)
+
+diff --git a/libgloss/m68k/atari/atari-kill.c b/libgloss/m68k/atari/atari-kill.c
+index cd1d16065..dadc08c48 100644
+--- a/libgloss/m68k/atari/atari-kill.c
++++ b/libgloss/m68k/atari/atari-kill.c
+@@ -4,13 +4,76 @@
+ */
+ 
+ #include <unistd.h>
++#include <signal.h>
++#include <errno.h>
+ #include <_ansi.h>
+ 
+ /*
+- * kill -- go out via exit...
+- */
++	TOS is single tasking, so the only process that can be signalled is the program itself.
++	newlib's raise() calls kill() for signals with the default action (SIG_DFL),
++	so this implements the default actions:
++	- Signals that are ignored by default, and stop/continue signals (there is no job
++	  control on TOS), do nothing.
++	- All other signals terminate the program at once with the signal number as exit code
++	  (no atexit handlers, destructors or stdio flushing, as for abnormal termination).
++	Signal 0 only checks that the process exists.
++*/
++
++static int is_self(int pid)
++{
++	// pid 0 is the own process group, -1 is all processes that may be signalled.
++	return pid == getpid() || pid == 0 || pid == -1;
++}
++
++static int ignored_by_default(int sig)
++{
++	switch (sig)
++	{
++#ifdef SIGCHLD
++	case SIGCHLD:
++#endif
++#ifdef SIGURG
++	case SIGURG:
++#endif
++#ifdef SIGWINCH
++	case SIGWINCH:
++#endif
++#ifdef SIGCONT
++	case SIGCONT:
++#endif
++#ifdef SIGSTOP
++	case SIGSTOP:
++#endif
++#ifdef SIGTSTP
++	case SIGTSTP:
++#endif
++#ifdef SIGTTIN
++	case SIGTTIN:
++#endif
++#ifdef SIGTTOU
++	case SIGTTOU:
++#endif
++		return 1;
++	}
++	return 0;
++}
++
+ int kill(int pid, int sig)
+ {
++	if (sig < 0 || sig >= NSIG)
++	{
++		errno = EINVAL;
++		return -1;
++	}
++	if (!is_self(pid))
++	{
++		errno = ESRCH;
++		return -1;
++	}
++	if (sig == 0 || ignored_by_default(sig))
++	{
++		return 0;
++	}
+ 	_exit(sig);
+ 	return 0;
+ }
+-- 
+2.53.0
+

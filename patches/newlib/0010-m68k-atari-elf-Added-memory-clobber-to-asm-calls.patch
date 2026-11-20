@@ -1,0 +1,63 @@
+From a2eaed7e02b7f95f6d7c61e4edfac4d3e60838e9 Mon Sep 17 00:00:00 2001
+From: Mikael <micael@hildenborg.com>
+Date: Wed, 18 Nov 2026 19:45:06 +0100
+Subject: [PATCH 10/17] m68k-atari-elf: Added memory clobber to asm calls.
+
+---
+ libgloss/m68k/atari/atari-traps.c | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/libgloss/m68k/atari/atari-traps.c b/libgloss/m68k/atari/atari-traps.c
+index 01c93da09..237d3f6e0 100644
+--- a/libgloss/m68k/atari/atari-traps.c
++++ b/libgloss/m68k/atari/atari-traps.c
+@@ -10,7 +10,9 @@
+ // Make trap call and then restore the stack pointer from the stored value in a3
+ #define TRAP_FUNC(num, func) "move.w		#" #func ", %%a7@-\n\ttrap		#" #num "\n\tmove.l		%%a3, %%a7\n\t"
+ // Registers d1,d2 and a0, a1, a2 may be affected by trap #1 calls. Register a3 is used to store/restore a7
+-#define CLOBBER_REG "d1", "d2", "a0", "a1", "a2", "a3"
++// "memory": the trap reads and writes memory through pointer arguments (paths, buffers, DTA...) that the
++// compiler cannot see in the asm operands, so memory must be up to date before and reloaded after the call.
++#define CLOBBER_REG "d1", "d2", "a0", "a1", "a2", "a3", "memory"
+ 
+ unsigned int trap1_e(unsigned short bios_drive)
+ {
+@@ -96,7 +98,7 @@ void trap1_1a(struct DTA* dta)
+ 		TRAP_FUNC(1, 0x1a)
+ 		:
+ 		: "r" (dta)
+-		: "d0", CLOBBER_REG, "memory");
++		: "d0", CLOBBER_REG);
+ }
+ 
+ struct DTA* trap1_2f(void)
+@@ -261,7 +263,7 @@ int trap1_43(const char* bios_path, unsigned short wflag, unsigned short attrib)
+ 		TRAP_FUNC(1, 0x43)
+ 		: "=r" (result)
+ 		: "r" (bios_path), "r" (wflag), "r" (attrib)
+-		: CLOBBER_REG, "memory");
++		: CLOBBER_REG);
+ 	return result;
+ }
+ 
+@@ -305,7 +307,7 @@ int trap1_4e(const char* bios_path, unsigned short bios_attrib)
+ 		TRAP_FUNC(1, 0x4e)
+ 		: "=r" (result)
+ 		: "r" (bios_path), "r" (bios_attrib)
+-		: CLOBBER_REG, "memory");
++		: CLOBBER_REG);
+ 	return result;
+ }
+ 
+@@ -335,7 +337,7 @@ int trap1_57(struct DOSTIME* timeptr, unsigned short bios_handle, unsigned short
+ 		TRAP_FUNC(1, 0x57)
+ 		: "=r" (result)
+ 		: "r" (timeptr), "r" (bios_handle), "r" (wflag)
+-		: CLOBBER_REG, "memory");
++		: CLOBBER_REG);
+ 	return result;
+ }
+ 
+-- 
+2.53.0
+

@@ -1,0 +1,216 @@
+From 3ce6873a613fd592576c5d3c4304fc59732cc2fd Mon Sep 17 00:00:00 2001
+From: Mikael <micael@hildenborg.com>
+Date: Wed, 18 Nov 2026 19:43:32 +0100
+Subject: [PATCH 09/17] m68k-atari-elf: GEM error codes is more properly mapped
+ to POSIX error codes.
+
+---
+ libgloss/m68k/atari/atari-gem_errno.c | 106 +++++++++++++-------------
+ libgloss/m68k/atari/atari-gem_errno.h |  10 ++-
+ libgloss/m68k/atari/atari-stat.c      |   3 +-
+ 3 files changed, 62 insertions(+), 57 deletions(-)
+
+diff --git a/libgloss/m68k/atari/atari-gem_errno.c b/libgloss/m68k/atari/atari-gem_errno.c
+index 641a0b212..9df0af7b0 100644
+--- a/libgloss/m68k/atari/atari-gem_errno.c
++++ b/libgloss/m68k/atari/atari-gem_errno.c
+@@ -8,88 +8,88 @@
+ #include <_ansi.h>
+ 
+ /*
+-	The conversion between gem errors and errno is not a one to one match,
+-	so the goal has been to try and report errors to errno in such way that
+-	code depending on this will run as expected.
+-	This remains to be proven correct.
++	The GEMDOS/BIOS errors do not map one to one to errno, so each error is mapped
++	to the errno that POSIX code expects in the same situation.
++	Hardware and media errors are reported as EIO.
++	(MiNT uses errno values equal to the negated GEMDOS codes, but newlib's errno
++	values are different, so the codes must be translated.)
+ */
+ void gem_error_to_errno(int gem_error)
+ {
+-	errno = ENOSYS; // Use this as default error code.
++	if (gem_error >= 0)
++	{
++		return;
++	}
+ 	switch (gem_error)
+ 	{
+-	case GEM_EDRVNR:
+-	case GEM_EMEDIA:
+-	case GEM_EPAPER:
+-		errno = EIO;
+-		break;
+-	case GEM_EBADRQ:
++	case GEM_EBADRQ:		// Bad request
++	case GEM_EUNCMD:		// Unknown command
++	case GEM_ERANGE:		// Range error (e.g. seek outside file)
+ 		errno = EINVAL;
+ 		break;
+-	case GEM_E_SEEK:
+-		errno = ESPIPE;
+-		break;
+-	case GEM_ESECNF:
+-	case GEM_EWRITF:
+-	case GEM_EREADF:
+-		errno = EIO;
+-		break;
+-	case GEM_EWRPRO:
++	case GEM_EWRPRO:		// Write protected
+ 		errno = EROFS;
+ 		break;
+-	case GEM_EUNDEV:
+-	case GEM_EDRIVE:
++	case GEM_EUNDEV:		// Unknown device
++	case GEM_EDRIVE:		// Invalid drive
+ 		errno = ENODEV;
+ 		break;
+-	case GEM_EFILNF:
+-	case GEM_EPTHNF:
+-	case GEM_EMOUNT:
++	case GEM_EINVFN:		// Invalid function
++		errno = ENOSYS;
++		break;
++	case GEM_EFILNF:		// File not found
++	case GEM_EPTHNF:		// Path not found
++	case GEM_ENMFIL:		// No more files
++	case GEM_EMOUNT:		// Mount point crossed
+ 		errno = ENOENT;
+ 		break;
+-	case GEM_ENHNDL:
+-	case GEM_ENMFIL:
++	case GEM_ENHNDL:		// No more handles
+ 		errno = EMFILE;
+ 		break;
+-	case GEM_EACCDN:
++	case GEM_EACCDN:		// Access denied
+ 		errno = EACCES;
+ 		break;
+-	case GEM_EIHNDL:
++	case GEM_EIHNDL:		// Invalid handle
+ 		errno = EBADF;
+ 		break;
+-	case GEM_ENSMEM:
+-	case GEM_EGSBF:
++	case GEM_ENSMEM:		// Insufficient memory
++	case GEM_EGSBF:			// Memory block growth failure
+ 		errno = ENOMEM;
+ 		break;
+-	case GEM_EIMBA:
+-		errno = EADDRNOTAVAIL;
++	case GEM_EIMBA:			// Invalid memory block address
++		errno = EFAULT;
+ 		break;
+-	case GEM_ENSAME:
++	case GEM_ENSAME:		// Cross device rename
+ 		errno = EXDEV;
+ 		break;
+-	case GEM_ELOCKED:
+-	case GEM_ENSLOCK:
+-		errno = ENOLCK;
++	case GEM_ELOCKED:		// Record is already locked
++		errno = EAGAIN;
+ 		break;
+-	case GEM_ENAMETOOLONG:
+-		errno = ENAMETOOLONG;
++	case GEM_ENSLOCK:		// Invalid lock removal
++		errno = ENOLCK;
+ 		break;
+-	case GEM_EPLFMT:
++	case GEM_EPLFMT:		// Invalid program load format
+ 		errno = ENOEXEC;
+ 		break;
+-	case GEM_ELOOP:
+-		errno = EMLINK;
+-		break;
+-	case GEM_E_OK:
+-	case GEM_ERROR:
+-	case GEM_EUNCMD:
+-	case GEM_E_CRC:
+-	case GEM_E_CHNG:
+-	case GEM_EBADSF:
+-	case GEM_EOTHER:
+-	case GEM_EINVFN:
+-	case GEM_EINTRN:
++	case GEM_ELOOP:			// Too many symbolic links
++		errno = ELOOP;
++		break;
++	case GEM_ERROR:			// Generic error
++	case GEM_EDRVNR:		// Drive not ready
++	case GEM_E_CRC:			// CRC error
++	case GEM_E_SEEK:		// Seek error (disk hardware, not a file seek)
++	case GEM_EMEDIA:		// Unknown media
++	case GEM_ESECNF:		// Sector not found
++	case GEM_EPAPER:		// Out of paper
++	case GEM_EWRITF:		// Write fault
++	case GEM_EREADF:		// Read fault
++	case GEM_EGENRL:		// General error
++	case GEM_E_CHNG:		// Media change
++	case GEM_EBADSF:		// Bad sectors on format
++	case GEM_EOTHER:		// Insert other disk
++	case GEM_EINTRN:		// Internal error
+ 	default:
+-		errno = -gem_error;
++		errno = EIO;
+ 		break;
+ 	}
+ }
+diff --git a/libgloss/m68k/atari/atari-gem_errno.h b/libgloss/m68k/atari/atari-gem_errno.h
+index c61478dba..e5e4bb4dc 100644
+--- a/libgloss/m68k/atari/atari-gem_errno.h
++++ b/libgloss/m68k/atari/atari-gem_errno.h
+@@ -22,7 +22,8 @@ extern "C" {
+ #define GEM_EPAPER			-9		// Out of paper
+ #define GEM_EWRITF			-10		// Write fault
+ #define GEM_EREADF			-11		// Read fault
+-#define GEM_EWRPRO			-12		// Device is write protected
++#define GEM_EGENRL			-12		// General error
++#define GEM_EWRPRO			-13		// Device is write protected
+ #define GEM_E_CHNG			-14		// Media change detected
+ #define GEM_EUNDEV			-15		// Unknown device
+ #define GEM_EBADSF			-16		// Bad sectors on format
+@@ -40,14 +41,17 @@ extern "C" {
+ #define GEM_ENMFIL			-49		// No more files
+ #define GEM_ELOCKED			-58		// Record is already locked
+ #define GEM_ENSLOCK			-59		// Invalid lock removal request
+-#define GEM_ERANGE			-64		// Range error
+-#define GEM_ENAMETOOLONG	-64		// Range error
++#define GEM_ERANGE			-64		// Range error (e.g. seek outside file)
+ #define GEM_EINTRN			-65		// Internal error
+ #define GEM_EPLFMT			-66		// Invalid program load format
+ #define GEM_EGSBF			-67		// Memory block growth failure
+ #define GEM_ELOOP			-80		// Too many symbolic links
+ #define GEM_EMOUNT			-200	// Mount point crossed (indicator)
+ 
++/*
++	Set errno from a negative GEMDOS/BIOS error code.
++	Values >= 0 are not errors, and leave errno unchanged.
++*/
+ void gem_error_to_errno(int gem_error);
+ 
+ #ifdef __cplusplus
+diff --git a/libgloss/m68k/atari/atari-stat.c b/libgloss/m68k/atari/atari-stat.c
+index 1e1c5c7d1..ea99c67ab 100644
+--- a/libgloss/m68k/atari/atari-stat.c
++++ b/libgloss/m68k/atari/atari-stat.c
+@@ -4,6 +4,7 @@
+ */
+ 
+ #include <sys/stat.h>
++#include <errno.h>
+ #include <string.h>
+ #include <_ansi.h>
+ #include "atari-gem_errno.h"
+@@ -100,7 +101,7 @@ int stat(const char *path, struct stat *buf)
+ 	}
+ 	if (len >= MAX_PATH)
+ 	{
+-		gem_error_to_errno(GEM_ENAMETOOLONG);
++		errno = ENAMETOOLONG;
+ 		return -1;
+ 	}
+ 
+-- 
+2.53.0
+
