@@ -26,8 +26,8 @@ CONF_DEFAULT_CPU=68000
 CONF_INSTALL=$HOME/toolchain
 
 # Versions to download and build.
-BINUTIL_VERSION="2.46.1"
-GCC_VERSION="16.1.0"
+BINUTIL_VERSION="2.47"
+GCC_VERSION="16.2.0"
 #NEWLIB_VERSION="4.6.0.20260123"
 NEWLIB_HASH="041b6410bfa86f8da4c3251f1df66c4a28a9b929"
 ATARI_LIB_HASH="29c2d2f9379fe6114eacebcd0a5ac4578df3741f"
@@ -93,8 +93,9 @@ if [ ! -d gcc-$GCC_VERSION ]; then
 	cd gcc-$GCC_VERSION
 	echo "Downloading: gcc prerequisites"
 	./contrib/download_prerequisites
+	echo "Patching: gcc"
+	patch -p1 < $PATCHES/gcc/0001-m68k-Reject-moves-where-the-auto-inc-source-register.patch
 	if [ "$CONF_COLDFIRE" == "disable" ]; then
-		echo "Patching: gcc"
 		yes | cp -rf $PATCHES/gcc/t-atari gcc/config/m68k/t-atari
 		patch gcc/config.gcc $PATCHES/gcc/config.gcc.diff
 	fi

@@ -1,0 +1,177 @@
+m68k: Reject moves where the auto-inc source register is in the destination
+
+At -O2, late-combine can create insns like this:
+
+  [a0 + d0] = [a0++]
+
+In RTL, the destination uses the original value of a0. But the move patterns
+output it as "move (%a0)+,(%a0,%d0.l)", where the CPU uses the updated value.
+Seen with GCC 16.1.0 and 16.2.0.
+See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=123853
+
+--- a/gcc/config/m68k/m68k-protos.h
++++ b/gcc/config/m68k/m68k-protos.h
+@@ -27,6 +27,7 @@
+ 
+ extern bool valid_mov3q_const (HOST_WIDE_INT);
+ extern const char *output_move_simode (rtx *);
++extern bool m68k_move_autoinc_ok (rtx *);
+ extern const char *output_move_himode (rtx *);
+ extern const char *output_move_qimode (rtx *);
+ extern const char *output_move_stricthi (rtx *);
+--- a/gcc/config/m68k/m68k.cc
++++ b/gcc/config/m68k/m68k.cc
+@@ -3286,6 +3286,26 @@
+   return "move%.l %1,%0";
+ }
+ 
++/* Return false if OPERANDS of a move insn can't be moved by the CPU, because
++   the source is auto-incremented or auto-decremented and the destination
++   address uses the same register.  RTL specifies that the destination uses
++   the original value of the register, but the CPU updates the register
++   before it calculates the destination address.  */
++
++bool
++m68k_move_autoinc_ok (rtx *operands)
++{
++  rtx src = operands[1];
++  if (!MEM_P (src) || !MEM_P (operands[0]))
++    return true;
++
++  rtx addr = XEXP (src, 0);
++  if (GET_CODE (addr) != POST_INC && GET_CODE (addr) != PRE_DEC)
++    return true;
++
++  return !reg_overlap_mentioned_p (XEXP (addr, 0), operands[0]);
++}
++
+ const char *
+ output_move_himode (rtx *operands)
+ {
+--- a/gcc/config/m68k/m68k.md
++++ b/gcc/config/m68k/m68k.md
+@@ -993,7 +993,7 @@
+   ;; We don't allow f-regs since fixed point cannot go in them.
+   [(set (match_operand:SI 0 "nonimmediate_operand" "=g,d,a<")
+         (match_operand:SI 1 "general_src_operand" "damSnT,n,i"))]
+-  "!TARGET_COLDFIRE && reload_completed"
++  "!TARGET_COLDFIRE && reload_completed && m68k_move_autoinc_ok (operands)"
+ {
+   return output_move_simode (operands);
+ }
+@@ -1006,7 +1006,7 @@
+   [(set (match_operand:SI 0 "nonimmediate_operand" "=g,d,a<")
+         (match_operand:SI 1 "general_src_operand" "damSKT,n,i"))]
+ 
+-  "!TARGET_COLDFIRE"
++  "!TARGET_COLDFIRE && m68k_move_autoinc_ok (operands)"
+ {
+   return output_move_simode (operands);
+ }
+@@ -1016,7 +1016,7 @@
+ (define_insn "*movsi_cf"
+   [(set (match_operand:SI 0 "nonimmediate_operand" "=g,d, d, d, d, d, a,Ap,  a,  r<Q>,g,    U")
+ 	(match_operand:SI 1 "general_operand"      " R,CQ,CW,CZ,CS,Ci,J,J Cs,Cs, g,   Rr<Q>,U"))]
+-  "TARGET_COLDFIRE"
++  "TARGET_COLDFIRE && m68k_move_autoinc_ok (operands)"
+ {
+   switch (which_alternative)
+     {
+@@ -1085,7 +1085,7 @@
+ (define_insn ""
+   [(set (match_operand:HI 0 "nonimmediate_operand" "=g")
+         (match_operand:HI 1 "general_src_operand" "gS"))]
+-  "!TARGET_COLDFIRE"
++  "!TARGET_COLDFIRE && m68k_move_autoinc_ok (operands)"
+   "* return output_move_himode (operands);"
+   [(set (attr "flags_valid")
+ 	(if_then_else (match_operand 0 "address_reg_operand")
+@@ -1095,7 +1095,7 @@
+ (define_insn ""
+   [(set (match_operand:HI 0 "nonimmediate_operand" "=r<Q>,g,U")
+ 	(match_operand:HI 1 "general_operand" "g,r<Q>,U"))]
+-  "TARGET_COLDFIRE"
++  "TARGET_COLDFIRE && m68k_move_autoinc_ok (operands)"
+   "* return output_move_himode (operands);"
+   [(set (attr "flags_valid")
+ 	(if_then_else (match_operand 0 "address_reg_operand")
+@@ -1131,14 +1131,14 @@
+ (define_insn ""
+   [(set (match_operand:QI 0 "nonimmediate_operand" "=d,*a,m")
+ 	(match_operand:QI 1 "general_src_operand" "dmSi*a,di*a,dmSi"))]
+-  "!TARGET_COLDFIRE"
++  "!TARGET_COLDFIRE && m68k_move_autoinc_ok (operands)"
+   "* return output_move_qimode (operands);"
+   [(set_attr "flags_valid" "set")])
+ 
+ (define_insn ""
+   [(set (match_operand:QI 0 "nonimmediate_operand" "=d<Q>,dm,U,d*a")
+ 	(match_operand:QI 1 "general_src_operand" "dmi,d<Q>,U,di*a"))]
+-  "TARGET_COLDFIRE"
++  "TARGET_COLDFIRE && m68k_move_autoinc_ok (operands)"
+   "* return output_move_qimode (operands);"
+   [(set_attr "flags_valid" "set")])
+ 
+@@ -1210,7 +1210,7 @@
+ (define_insn ""
+   [(set (match_operand:SF 0 "nonimmediate_operand" "=rmf")
+ 	(match_operand:SF 1 "general_operand" "rmfF"))]
+-  "!TARGET_COLDFIRE"
++  "!TARGET_COLDFIRE && m68k_move_autoinc_ok (operands)"
+ {
+   if (FP_REG_P (operands[0]))
+     {
+@@ -1253,7 +1253,7 @@
+ (define_insn "movsf_cf_soft"
+   [(set (match_operand:SF 0 "nonimmediate_operand" "=r<Q>,g,U")
+ 	(match_operand:SF 1 "general_operand" "g,r<Q>,U"))]
+-  "TARGET_COLDFIRE && !TARGET_COLDFIRE_FPU"
++  "TARGET_COLDFIRE && !TARGET_COLDFIRE_FPU && m68k_move_autoinc_ok (operands)"
+   "move%.l %1,%0"
+   [(set_attr "type" "move_l")])
+ 
+@@ -1264,7 +1264,7 @@
+ ,m")
+         (match_operand:SF 1 "general_operand"      " f,     r<Q>U,f,rm,F,F,   m
+ ,f"))]
+-  "TARGET_COLDFIRE_FPU"
++  "TARGET_COLDFIRE_FPU && m68k_move_autoinc_ok (operands)"
+ {
+   if (which_alternative == 4 || which_alternative == 5) {
+     rtx xoperands[2];
+@@ -1358,7 +1358,7 @@
+ 	(match_operand:DF 1 "general_operand" "*rf,m,0,*rfE<>,*rofE<>"))]
+ ;  [(set (match_operand:DF 0 "nonimmediate_operand" "=rm,&rf,&rof<>")
+ ;	(match_operand:DF 1 "general_operand" "rf,m,rofF<>"))]
+-  "!TARGET_COLDFIRE"
++  "!TARGET_COLDFIRE && m68k_move_autoinc_ok (operands)"
+ {
+   if (FP_REG_P (operands[0]))
+     {
+@@ -1476,7 +1476,7 @@
+ (define_insn ""
+   [(set (match_operand:XF 0 "nonimmediate_operand" "=f,m,f,!r,!f,!r,m,!r")
+ 	(match_operand:XF 1 "nonimmediate_operand" "m,f,f,f,r,!r,!r,m"))]
+-  "TARGET_68881"
++  "TARGET_68881 && m68k_move_autoinc_ok (operands)"
+ {
+   if (FP_REG_P (operands[0]))
+     {
+@@ -1516,7 +1516,7 @@
+ (define_insn ""
+   [(set (match_operand:XF 0 "nonimmediate_operand" "=rm,rf,&rof<>,&rf<>")
+ 	(match_operand:XF 1 "nonimmediate_operand" "rf,m,rf<>,rof<>"))]
+-  "! TARGET_68881 && ! TARGET_COLDFIRE"
++  "! TARGET_68881 && ! TARGET_COLDFIRE && m68k_move_autoinc_ok (operands)"
+ {
+   if (FP_REG_P (operands[0]))
+     {
+@@ -1574,7 +1574,7 @@
+ ;	(match_operand:DI 1 "general_operand" "r,m,roi<>,fF"))]
+ ;  [(set (match_operand:DI 0 "nonimmediate_operand" "=rm,&rf,&ro<>,!&rm,!&f")
+ ;	(match_operand:DI 1 "general_operand" "r,m,roi<>,fF,rfF"))]
+-  "!TARGET_COLDFIRE"
++  "!TARGET_COLDFIRE && m68k_move_autoinc_ok (operands)"
+ {
+   if (FP_REG_P (operands[0]))
+     {
