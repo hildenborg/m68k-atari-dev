@@ -249,6 +249,10 @@ fi
 
 # build gcc
 if [ ! -d b-gcc ]; then
+	# b-binutils may exist even though the install dir has been removed since it was built.
+	if [ ! -x "$PREFIX/bin/$TARGET-as" ] || [ ! -x "$PREFIX/bin/$TARGET-ld" ]; then
+		die "binutils is not installed in $PREFIX. Delete build/b-binutils and run build.sh again."
+	fi
 	begin_step "Building: gcc" "b-gcc"
 	mkdir -p b-gcc
 	cd b-gcc
