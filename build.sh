@@ -40,6 +40,75 @@ PATCHES="$PWD/patches"
 #NEWLIB_PATH="$PWD/build/newlib-$NEWLIB_VERSION"
 NEWLIB_PATH="$PWD/build/newlib-cygwin"
 
+# Error handling.
+# Any failing command stops the script. If that happens while a folder is being populated, the folder
+# is renamed to "*.failed", so that the next run redoes that step instead of skipping it.
+set -eE -o pipefail
+STEP="Setup"
+STEP_DIR=
+FAILED_LINE=
+FAILED_COMMAND=
+
+# begin_step <description> [folder created by the step]
+begin_step() {
+	STEP="$1"
+	STEP_DIR=
+	echo "$STEP"
+	if [ -n "$2" ]; then
+		STEP_DIR="$PWD/$2"
+		rm -rf "$STEP_DIR.failed"
+	fi
+}
+
+end_step() {
+	STEP="Between steps"
+	STEP_DIR=
+}
+
+# Print an error message and exit.
+die() {
+	echo "ERROR: $*" >&2
+	exit 1
+}
+
+on_exit() {
+	local status=$?
+	trap - ERR EXIT
+	set +e
+	if [ $status -eq 0 ]; then
+		return
+	fi
+	echo >&2
+	echo "ERROR: Build stopped (exit code $status) during step: $STEP" >&2
+	if [ -n "$FAILED_LINE" ]; then
+		echo "  build.sh line $FAILED_LINE: $FAILED_COMMAND" >&2
+	fi
+	if [ -n "$STEP_DIR" ] && [ -d "$STEP_DIR" ]; then
+		cd "$(dirname "$STEP_DIR")"
+		if mv "$STEP_DIR" "$STEP_DIR.failed"; then
+			echo "  The incomplete folder was kept for inspection as: $STEP_DIR.failed" >&2
+		else
+			echo "  Delete this incomplete folder before running build.sh again: $STEP_DIR" >&2
+		fi
+	fi
+	exit $status
+}
+
+trap 'FAILED_LINE=$LINENO; FAILED_COMMAND=$BASH_COMMAND' ERR
+trap on_exit EXIT
+trap 'STEP="$STEP (interrupted)"; exit 130' INT
+trap 'STEP="$STEP (terminated)"; exit 143' TERM
+
+# Check prerequisites.
+if [ ! -d "$PATCHES" ]; then
+	die "Folder not found: $PATCHES. Run build.sh from the m68k-atari-dev folder."
+fi
+for tool in curl git make patch tar gcc g++ python3; do
+	if ! command -v $tool > /dev/null; then
+		die "Required tool not found: $tool"
+	fi
+done
+
 
 # Detect system
 unameOut="$(uname -s)"
@@ -78,16 +147,17 @@ cd build
 
 # Get binutils sources
 if [ ! -d binutils-$BINUTIL_VERSION ]; then
-	echo "Downloading: binutils"
-	curl --output binutils-$BINUTIL_VERSION.tar.bz2 "https://ftp.gnu.org/gnu/binutils/binutils-$BINUTIL_VERSION.tar.bz2"
+	begin_step "Downloading: binutils" "binutils-$BINUTIL_VERSION"
+	curl --fail --location --output binutils-$BINUTIL_VERSION.tar.bz2 "https://ftp.gnu.org/gnu/binutils/binutils-$BINUTIL_VERSION.tar.bz2"
 	echo "Extracting: binutils"
 	tar -xmf binutils-$BINUTIL_VERSION.tar.bz2
+	end_step
 fi
 
 # Get gcc sources
 if [ ! -d gcc-$GCC_VERSION ]; then
-	echo "Downloading: gcc"
-	curl --output gcc-$GCC_VERSION.tar.gz "https://ftp.gnu.org/gnu/gcc/gcc-$GCC_VERSION/gcc-$GCC_VERSION.tar.gz"
+	begin_step "Downloading: gcc" "gcc-$GCC_VERSION"
+	curl --fail --location --output gcc-$GCC_VERSION.tar.gz "https://ftp.gnu.org/gnu/gcc/gcc-$GCC_VERSION/gcc-$GCC_VERSION.tar.gz"
 	echo "Extracting: gcc"
 	tar -xmf gcc-$GCC_VERSION.tar.gz
 	cd gcc-$GCC_VERSION
@@ -96,10 +166,11 @@ if [ ! -d gcc-$GCC_VERSION ]; then
 	echo "Patching: gcc"
 	patch -p1 < $PATCHES/gcc/0001-m68k-Reject-moves-where-the-auto-inc-source-register.patch
 	if [ "$CONF_COLDFIRE" == "disable" ]; then
-		yes | cp -rf $PATCHES/gcc/t-atari gcc/config/m68k/t-atari
+		cp -f $PATCHES/gcc/t-atari gcc/config/m68k/t-atari
 		patch gcc/config.gcc $PATCHES/gcc/config.gcc.diff
 	fi
 	cd ..
+	end_step
 fi
 
 # Get newlib sources
@@ -114,7 +185,7 @@ fi
 #	cd ..
 #fi
 if [ ! -d newlib-cygwin ]; then
-	echo "Downloading: newlib"
+	begin_step "Downloading: newlib" "newlib-cygwin"
 	git clone https://sourceware.org/git/newlib-cygwin.git
 	cd newlib-cygwin
 	echo "Checking out: newlib hash $NEWLIB_HASH"
@@ -138,26 +209,30 @@ if [ ! -d newlib-cygwin ]; then
 	git apply $PATCHES/newlib/0016-m68k-atari-elf-Kill-is-properly-implemented-for-a-si.patch
 	git apply $PATCHES/newlib/0017-m68k-atari-elf-Fixed-bug-where-O_APPEND-not-always-d.patch
 	cd ..
+	end_step
 fi
 
 # Get atari-libs sources
 if [ ! -d atari-libs ]; then
-	echo "Downloading: atari-libs"
+	begin_step "Downloading: atari-libs" "atari-libs"
 	git clone https://github.com/hildenborg/atari-libs.git
 	# We checkout the specific stable commit.
 	cd atari-libs
 	#echo "Checking out: atari-libs hash $ATARI_LIB_HASH"
 	#git checkout $ATARI_LIB_HASH
 	cd ..
+	end_step
 fi
 
 if [ "$machine" == "Mac" ]; then
-	../macos-additionals.sh $PREFIX $TARGET
+	begin_step "Building: macos additionals"
+	bash -e ../macos-additionals.sh $PREFIX $TARGET
+	end_step
 fi
 
 # build binutils
 if [ ! -d b-binutils ]; then
-	echo "Building: binutils"
+	begin_step "Building: binutils" "b-binutils"
 	mkdir -p b-binutils
 	cd b-binutils
 	../binutils-$BINUTIL_VERSION/configure --prefix=$PREFIX --target=$TARGET \
@@ -169,11 +244,12 @@ if [ ! -d b-binutils ]; then
 	make MAKEINFO=true
 	make install-strip MAKEINFO=true
 	cd ..
+	end_step
 fi
 
 # build gcc
 if [ ! -d b-gcc ]; then
-	echo "Building: gcc"
+	begin_step "Building: gcc" "b-gcc"
 	mkdir -p b-gcc
 	cd b-gcc
 	../gcc-$GCC_VERSION/configure --prefix=$PREFIX --target=$TARGET \
@@ -183,7 +259,7 @@ if [ ! -d b-gcc ]; then
 	--enable-languages=c,c++ \
 	--with-newlib \
 	--disable-shared \
-	--disable-thread \
+	--disable-threads \
 	$CONF_LTO \
 	$CONF_MULTILIB \
 	--enable-target-optspace \
@@ -198,15 +274,16 @@ if [ ! -d b-gcc ]; then
 	# Check if we have built for lto (check if lto plugin exists).
 	if [ -f $PREFIX/libexec/gcc/$TARGET/$GCC_VERSION/liblto_plugin.$SHARED_EXT ]; then
 		# For some reason the lto plugin is not installed in all the correct places, so we fix that.	
-		yes | cp -rf $PREFIX/libexec/gcc/$TARGET/$GCC_VERSION/liblto_plugin.$SHARED_EXT $PREFIX/lib/bfd-plugins/liblto_plugin.$SHARED_EXT
+		cp -f $PREFIX/libexec/gcc/$TARGET/$GCC_VERSION/liblto_plugin.$SHARED_EXT $PREFIX/lib/bfd-plugins/liblto_plugin.$SHARED_EXT
 	fi
 
 	cd ..
+	end_step
 fi
 
 # build newlib
 if [ ! -d b-newlib ]; then
-	echo "Building: newlib"
+	begin_step "Building: newlib" "b-newlib"
 	mkdir -p b-newlib
 	cd b-newlib
 #	../newlib-$NEWLIB_VERSION/configure --prefix=$PREFIX --target=$TARGET \
@@ -223,39 +300,52 @@ if [ ! -d b-newlib ]; then
 	make install
 	cd ..
 	# We override the specs file with one that uses stuff outside of newlib.
-	yes | cp -rf $PATCHES/newlib/$SPECS_FILE $PREFIX/lib/gcc/$TARGET/specs
+	cp -f $PATCHES/newlib/$SPECS_FILE $PREFIX/lib/gcc/$TARGET/specs
+	end_step
 fi
 
 # build atari-libs
 if [ ! -d b-atari-libs ]; then
-	echo "Building: atari-libs"
+	begin_step "Building: atari-libs" "b-atari-libs"
 	mkdir -p b-atari-libs
 	cd atari-libs
 	./build.sh $PREFIX $TARGET ../b-atari-libs $BUILD_THREADS
 	cd ..
+	end_step
 fi
 
 # Build m68k-atari-elf-prg (elf to prg converter)
 if [ ! -d b-elf-prg ]; then
-	echo "Building: elf to prg converter."
+	begin_step "Building: elf to prg converter." "b-elf-prg"
 	mkdir -p b-elf-prg
 	cd b-elf-prg
 	make -f ../../elf-prg/makefile -j$BUILD_THREADS M68K_TOOLKIT=$PREFIX all
 	make -f ../../elf-prg/makefile M68K_TOOLKIT=$PREFIX install
+	# The makefile does not report if the copying fails.
+	if [ ! -f "$PREFIX/bin/m68k-atari-elf-prg" ]; then
+		die "Not installed: $PREFIX/bin/m68k-atari-elf-prg"
+	fi
 	cd ..
+	end_step
 fi
 
 # Build gdbserver
 if [ ! -d b-gdbserver ]; then
-	echo "Building: gdbserver."
+	begin_step "Building: gdbserver." "b-gdbserver"
 	mkdir -p b-gdbserver
 	cd b-gdbserver
 	make -f ../../gdbserver/makefile -j$BUILD_THREADS TOOLKIT=$PREFIX all
 	make -f ../../gdbserver/makefile TOOLKIT=$PREFIX install
+	# The makefile does not report if the copying fails.
+	if [ ! -f "$PREFIX/bin/gdbsrv.ttp" ]; then
+		die "Not installed: $PREFIX/bin/gdbsrv.ttp"
+	fi
 	cd ..
+	end_step
 fi
 
 cd ..
 
 # Done!
+echo "Build finished: $PREFIX"
 
